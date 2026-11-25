@@ -12,7 +12,7 @@ struct CreatorImportView: View {
     @State private var found: [Cand] = []
     @State private var busy = false
 
-    struct Cand: Identifiable, Hashable { let id = UUID(); var name: String; var link: String; var on: Bool }
+    struct Cand: Identifiable, Hashable { let id = UUID(); var name: String; var link: String; var on: Bool; var avatar: Data? = nil }
 
     var body: some View {
         NavigationStack {
@@ -50,6 +50,7 @@ struct CreatorImportView: View {
                                 Image(systemName: c.on ? "checkmark.circle.fill" : "circle")
                                     .foregroundStyle(c.on ? Brand.pink : .secondary)
                                     .onTapGesture { c.on.toggle() }
+                                CreatorAvatar(c: Creator(name: c.name, link: c.link, avatar: c.avatar), size: 34)
                                 TextField("名字", text: $c.name)
                                 if c.link != c.name {
                                     Text(c.link.hasPrefix("http") ? "链接" : c.link).font(.caption).foregroundStyle(.secondary).lineLimit(1)
@@ -86,7 +87,7 @@ struct CreatorImportView: View {
         for c in found where c.on {
             let n = c.name.trimmingCharacters(in: .whitespaces)
             guard !n.isEmpty, !have.contains(n) else { continue }
-            cs.list.append(Creator(name: n, link: c.link.isEmpty ? n : c.link)); have.insert(n)
+            cs.list.append(Creator(name: n, link: c.link.isEmpty ? n : c.link, avatar: c.avatar)); have.insert(n)
         }
         Haptic.success(); dismiss()
     }
@@ -122,12 +123,13 @@ struct CreatorImportView: View {
         for it in items {
             guard let d = try? await it.loadTransferable(type: Data.self), let cg = UIImage(data: d)?.cgImage else { continue }
             let names = await Task.detached { Self.ocrNames(cg) }.value
-            all += names.map { Cand(name: $0, link: $0, on: true) }
+            all += names.map { Cand(name: $0.0, link: $0.0, on: true, avatar: $0.1) }
         }
         found = merge(all)
     }
 
-    nonisolated static func ocrNames(_ cg: CGImage) -> [String] {
+    // 返回 (名字, 头像 JPEG)。名字是每一行最上面那行字；紧贴在下面的是简介，跳过
+    nonisolated static func ocrNames(_ cg: CGImage) -> [(String, Data?)] {
         let req = VNRecognizeTextRequest()
         req.recognitionLevel = .accurate
         req.recognitionLanguages = ["zh-Hans", "en-US"]
@@ -137,16 +139,30 @@ struct CreatorImportView: View {
             guard let s = o.topCandidates(1).first?.string else { return nil }
             return (s.trimmingCharacters(in: .whitespaces), o.boundingBox)
         }
-        let skip = ["关注", "粉丝", "作品", "获赞", "互相", "已关注", "回关", "搜索", "推荐", "私信", "朋友", "我的", "排序", "综合", "最近", "取消", "更多", "直播中"]
-        // 名字一般在头像右边、字比简介大
-        let cands = obs.filter { s, b in
-            s.count >= 2 && s.count <= 20 && b.minX > 0.12 && b.minX < 0.5 && b.minY > 0.05 && b.maxY < 0.93
-                && !skip.contains(where: { s.contains($0) })
-                && s.range(of: #"^[\d:：.\s%]+$"#, options: .regularExpression) == nil
+        // 只看头像右边那一列文字（去掉标题、按钮、底部提示）
+        let col = obs.filter { _, b in b.minX > 0.1 && b.minX < 0.3 && b.maxY < 0.88 && b.minY > 0.03 }
+            .sorted { $0.1.maxY > $1.1.maxY }            // 从上往下
+        let skip = ["已关注", "互相关注", "回关", "暂时没有更多"]
+        let W = CGFloat(cg.width), H = CGFloat(cg.height)
+        var out: [(String, Data?)] = []
+        var prevBottom: CGFloat = 2
+        for (i, (s, b)) in col.enumerated() {
+            let gap = prevBottom - b.maxY
+            prevBottom = b.minY
+            if gap < 0.02 { continue }                    // 紧贴上一行 = 简介
+            guard s.count >= 1, s.count <= 30, !skip.contains(where: { s.contains($0) }) else { continue }
+            // 头像中心：名字和简介中间；没有简介就往下挪一点
+            var cy = b.midY - b.height * 0.8
+            if i + 1 < col.count, b.minY - col[i + 1].1.maxY < 0.02 { cy = (b.midY + col[i + 1].1.midY) / 2 }
+            let side = W * 0.11
+            let cx = b.minX * W - W * 0.083
+            let rect = CGRect(x: cx - side / 2, y: (1 - cy) * H - side / 2, width: side, height: side).integral
+            var avatar: Data? = nil
+            if rect.minX >= 0, rect.minY >= 0, rect.maxX <= W, rect.maxY <= H, let crop = cg.cropping(to: rect) {
+                avatar = heroJPEG(UIImage(cgImage: crop), width: 160)
+            }
+            out.append((s, avatar))
         }
-        guard !cands.isEmpty else { return [] }
-        let hs = cands.map(\.1.height).sorted()
-        let cut = hs[hs.count / 2] * 0.95
-        return cands.filter { $0.1.height >= cut }.sorted { $0.1.minY > $1.1.minY }.map(\.0)
+        return out
     }
 }

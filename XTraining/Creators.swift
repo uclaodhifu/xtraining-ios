@@ -6,6 +6,7 @@ struct Creator: Codable, Identifiable, Hashable {
     var name: String
     var note: String = ""
     var link: String
+    var avatar: Data? = nil     // 从用户自己的关注列表截图里裁的头像，只存本机
 }
 
 @MainActor
@@ -54,9 +55,7 @@ struct CreatorsView: View {
             }
             ForEach(cs.list) { c in
                 HStack(spacing: 12) {
-                    Text(String(c.name.prefix(1)))
-                        .font(.headline).foregroundStyle(.white)
-                        .frame(width: 42, height: 42).background(Brand.gradient, in: Circle())
+                    CreatorAvatar(c: c, size: 42)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(c.name).font(.body.bold())
                         if !c.note.isEmpty { Text(c.note).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
@@ -159,5 +158,18 @@ struct CreatorEditor: View {
         let p = CreatorStore.parse(t)
         if let l = p.link { link = l }
         if let n = p.name, name.isEmpty { name = n }
+    }
+}
+
+struct CreatorAvatar: View {
+    let c: Creator
+    var size: CGFloat = 42
+    var body: some View {
+        if let d = c.avatar, let ui = UIImage(data: d) {
+            Image(uiImage: ui).resizable().scaledToFill().frame(width: size, height: size).clipShape(Circle())
+        } else {
+            Text(String(c.name.prefix(1))).font(.headline).foregroundStyle(.white)
+                .frame(width: size, height: size).background(Brand.gradient, in: Circle())
+        }
     }
 }
