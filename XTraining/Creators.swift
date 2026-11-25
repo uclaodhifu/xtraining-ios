@@ -38,6 +38,7 @@ struct CreatorsView: View {
     @Environment(\.openURL) private var openURL
     @State private var editing: Creator?
     @State private var adding = false
+    @State private var importing = false
 
     var body: some View {
         List {
@@ -45,7 +46,7 @@ struct CreatorsView: View {
                 VStack(spacing: 10) {
                     Image(systemName: "person.2.fill").font(.system(size: 36)).foregroundStyle(.secondary)
                     Text("还没有博主").font(.headline)
-                    Text("在抖音打开博主主页 → 右上角“…” → 复制链接，回来点右上角＋粘贴。")
+                    Text("在抖音打开博主主页 → 右上角“…” → 复制链接，回来点右上角＋粘贴。也可以＋ → 批量导入，截关注列表的图自动识别。")
                         .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
                 }
                 .frame(maxWidth: .infinity).padding(.vertical, 30)
@@ -78,10 +79,16 @@ struct CreatorsView: View {
         }
         .navigationTitle("健身博主")
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) { Button { adding = true } label: { Image(systemName: "plus") } }
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button { adding = true } label: { Label("添加一个", systemImage: "plus") }
+                    Button { importing = true } label: { Label("批量导入", systemImage: "square.and.arrow.down.on.square") }
+                } label: { Image(systemName: "plus") }
+            }
             if !cs.list.isEmpty { ToolbarItem(placement: .topBarTrailing) { EditButton() } }
         }
         .sheet(isPresented: $adding) { CreatorEditor(c: nil) }
+        .sheet(isPresented: $importing) { CreatorImportView() }
         .sheet(item: $editing) { CreatorEditor(c: $0) }
     }
 
