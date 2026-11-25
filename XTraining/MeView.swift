@@ -70,20 +70,14 @@ struct MeView: View {
             }
             .navigationTitle("我")
             .sheet(isPresented: $syncing) { SyncRestoreView() }
-            .fileImporter(isPresented: $importing, allowedContentTypes: [.json, .plainText, .data]) { result in
-                switch result {
-                case .success(let url):
-                    let ok = url.startAccessingSecurityScopedResource()
-                    defer { if ok { url.stopAccessingSecurityScopedResource() } }
-                    do {
-                        let data = try Data(contentsOf: url)
-                        run(data)
-                    } catch {
-                        message = "文件打不开：\(error.localizedDescription)\n如果文件在 iCloud 里，先在「文件」App 里点一下让它下载好再导入。"
-                    }
-                case .failure:
-                    message = "没能打开文件"
+            .sheet(isPresented: $importing) {
+                DocPicker { url in
+                    importing = false
+                    guard let url else { return }
+                    do { run(try Data(contentsOf: url)) }
+                    catch { message = "文件打不开：\(error.localizedDescription)" }
                 }
+                .ignoresSafeArea()
             }
             .alert(message ?? "", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
                 Button("好") { message = nil }
@@ -118,5 +112,24 @@ struct BackupFile: Transferable {
     static var transferRepresentation: some TransferRepresentation {
         DataRepresentation(exportedContentType: .json) { $0.data }
             .suggestedFileName("XTraining-backup.json")
+    }
+}
+
+// 系统的“选文件”窗口（复制一份到 App 里再读，iCloud 里的文件也能选）
+struct DocPicker: UIViewControllerRepresentable {
+    let done: (URL?) -> Void
+    func makeCoordinator() -> Coord { Coord(done: done) }
+    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
+        let p = UIDocumentPickerViewController(forOpeningContentTypes: [.json, .text, .data, .item], asCopy: true)
+        p.allowsMultipleSelection = false
+        p.delegate = context.coordinator
+        return p
+    }
+    func updateUIViewController(_ vc: UIDocumentPickerViewController, context: Context) {}
+    final class Coord: NSObject, UIDocumentPickerDelegate {
+        let done: (URL?) -> Void
+        init(done: @escaping (URL?) -> Void) { self.done = done }
+        func documentPicker(_ c: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) { done(urls.first) }
+        func documentPickerWasCancelled(_ c: UIDocumentPickerViewController) { done(nil) }
     }
 }
