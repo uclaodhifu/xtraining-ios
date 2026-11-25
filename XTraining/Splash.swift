@@ -5,9 +5,10 @@ struct SplashHost: View {
     @State private var done = false
     var body: some View {
         ZStack {
-            RootView()
-                .scaleEffect(done ? 1 : 0.94)
-                .opacity(done ? 1 : 0)
+            // 动画结束再放出首页，首页卡片的浮现动画正好接上
+            if done {
+                RootView().transition(.scale(scale: 0.94).combined(with: .opacity))
+            }
             if !done {
                 SplashView { withAnimation(.spring(response: 0.6, dampingFraction: 0.85)) { done = true } }
                     .transition(.opacity.combined(with: .scale(scale: 1.6)))
