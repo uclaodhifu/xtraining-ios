@@ -34,6 +34,17 @@ final class CreatorStore: ObservableObject {
     }
 }
 
+// 推荐关注：手工整理的知名健身博主，只存名字和方向，点开按名字在抖音搜索（不内置任何人的照片）
+struct RecCreator: Hashable { let name: String; let tag: String }
+let recommendedCreators: [RecCreator] = [
+    RecCreator(name: "刘畊宏", tag: "跟练 · 燃脂"),
+    RecCreator(name: "周六野Zoey", tag: "女生塑形 · 体态"),
+    RecCreator(name: "凯圣王", tag: "健身科普 · 增肌"),
+    RecCreator(name: "仰望尾迹云", tag: "训练科普 · 增肌"),
+    RecCreator(name: "吕小军", tag: "举重 · 力量"),
+    RecCreator(name: "钱吉成", tag: "健美 · 备赛"),
+]
+
 struct CreatorsView: View {
     @ObservedObject private var cs = CreatorStore.shared
     @Environment(\.openURL) private var openURL
@@ -75,6 +86,36 @@ struct CreatorsView: View {
             }
             .onDelete { cs.list.remove(atOffsets: $0) }
             .onMove { cs.list.move(fromOffsets: $0, toOffset: $1) }
+            let recs = recommendedCreators.filter { r in !cs.list.contains { $0.name == r.name } }
+            if !recs.isEmpty {
+                Section {
+                    ForEach(recs, id: \.self) { r in
+                        HStack(spacing: 12) {
+                            CreatorAvatar(c: Creator(name: r.name, link: r.name), size: 42)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(r.name).font(.body.bold())
+                                Text(r.tag).font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Button { Haptic.tap(); open(r.name) } label: {
+                                Image(systemName: "play.rectangle.fill").font(.subheadline)
+                                    .frame(width: 34, height: 34).background(Color.primary.opacity(0.08), in: Circle())
+                            }
+                            .buttonStyle(.plain)
+                            Button {
+                                Haptic.tap(.medium)
+                                withAnimation { cs.list.append(Creator(name: r.name, note: r.tag, link: r.name)) }
+                            } label: {
+                                Text("＋ 关注").font(.footnote.bold()).padding(.horizontal, 12).padding(.vertical, 7)
+                                    .background(Brand.gradient, in: Capsule()).foregroundStyle(.white)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                } header: { Text("推荐关注") } footer: {
+                    Text("点 ▶ 会在抖音按名字搜索，确认是本人再关注。")
+                }
+            }
         }
         .navigationTitle("健身博主")
         .toolbar {
