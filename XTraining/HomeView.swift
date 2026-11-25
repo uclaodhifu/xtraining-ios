@@ -27,7 +27,7 @@ struct HomeView: View {
                     header.rise(0)
                     RaceAlert().rise(1)
                     planCard.rise(2)
-                    statsCard.rise(3)
+                    DataWall { showWeight = true }.rise(3)
                     historySection.rise(4)
                 }
                 .padding(.horizontal, 16)
@@ -217,20 +217,6 @@ struct HomeView: View {
                 }
             }
         }
-    }
-
-    // MARK: 统计
-    private var statsCard: some View {
-        HStack {
-            StatTile(value: "\(store.streak)", label: "连续天数")
-            StatTile(value: "\(store.weekCount)", label: "本周次数")
-            StatTile(value: "\(store.sets7)", label: "近7天组数")
-            Button { showWeight = true } label: {
-                StatTile(value: store.weights.last.map { fmtNum($0.kg) } ?? "—", label: "体重 kg")
-            }
-            .buttonStyle(.plain)
-        }
-        .card()
     }
 
     // MARK: 训练日志（替换原来的“我的训练”）
