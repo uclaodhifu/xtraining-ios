@@ -225,39 +225,9 @@ struct HomeView: View {
         .card()
     }
 
-    // MARK: 我的训练
-    @ViewBuilder private var historySection: some View {
-        let all = store.sorted
-        let found = query.trimmingCharacters(in: .whitespaces).isEmpty ? nil : all.filter { matches($0, query) }
-        let list = found ?? (showAll ? all : Array(all.prefix(6)))
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("我的训练").font(.title3.bold())
-                if let f = found { Text("找到 \(f.count) 条").font(.caption).foregroundStyle(.secondary) }
-            }
-            if !all.isEmpty {
-                HStack {
-                    Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                    TextField("搜动作、部位、日期，如 卧推 11月", text: $query)
-                    if !query.isEmpty { Button { query = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) } }
-                }
-                .padding(10)
-                .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
-            }
-            if all.isEmpty {
-                Text("还没有训练记录。点“开始训练”记一笔。").foregroundStyle(.secondary).frame(maxWidth: .infinity).padding(.vertical, 20)
-            }
-            ForEach(list) { w in
-                Button { editing = w } label: { WorkoutCard(w: w) }.buttonStyle(PressScale())
-                    .scrollTransition { c, phase in
-                        c.opacity(phase.isIdentity ? 1 : 0.4).scaleEffect(phase.isIdentity ? 1 : 0.92).blur(radius: phase.isIdentity ? 0 : 2)
-                    }
-            }
-            if found == nil && all.count > 6 {
-                Button(showAll ? "收起" : "查看更多（还有 \(all.count - 6) 条）") { withAnimation { showAll.toggle() } }
-                    .frame(maxWidth: .infinity)
-            }
-        }
+    // MARK: 训练日志（替换原来的“我的训练”）
+    private var historySection: some View {
+        HomeLog { w in editing = w }
     }
 
     private func matches(_ w: Workout, _ q: String) -> Bool {

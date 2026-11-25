@@ -49,7 +49,6 @@ struct PartProgress: View {
                     .frame(maxWidth: .infinity).padding(.vertical, 50).card()
                 } else {
                     sessionStrip
-                    logTable
                     tiles
                     setsChart
                     ForEach(Array(charts.enumerated()), id: \.offset) { i, name in
@@ -67,98 +66,6 @@ struct PartProgress: View {
             .frame(maxWidth: 720).frame(maxWidth: .infinity)
         }
         .sheet(item: $editing) { w in EntryView(workout: w) }
-    }
-
-    // 训练日志表：横着是每次训练的日期，竖着是动作，格子里是 重量×次数，比上次进步标绿色箭头
-    @ViewBuilder private var logTable: some View {
-        let cols = sessions
-        let rows = Array(names.prefix(10))
-        let lineH: CGFloat = 15
-        let heights: [CGFloat] = rows.map { n in
-            let m = cols.map { w in w.exercises(of: part).first { $0.name == n }?.sets.count ?? 0 }.max() ?? 1
-            return CGFloat(max(1, m)) * lineH + 14
-        }
-        let nameW: CGFloat = 78, colW: CGFloat = 70, headH: CGFloat = 30
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("训练日志").font(.headline)
-                Spacer()
-                HStack(spacing: 3) { Image(systemName: "arrow.up").foregroundStyle(.green); Text("比上次进步") }
-                    .font(.caption2).foregroundStyle(.secondary)
-            }
-            HStack(alignment: .top, spacing: 0) {
-                VStack(alignment: .leading, spacing: 0) {
-                    Text("动作").font(.caption.bold()).foregroundStyle(.secondary)
-                        .frame(width: nameW, height: headH, alignment: .leading)
-                    ForEach(rows.indices, id: \.self) { i in
-                        Text(rows[i]).font(.caption.bold()).lineLimit(2).minimumScaleFactor(0.7)
-                            .frame(width: nameW, height: heights[i], alignment: .leading)
-                            .overlay(alignment: .top) { Rectangle().fill(Color.primary.opacity(0.08)).frame(height: 1) }
-                    }
-                }
-                ScrollViewReader { proxy in
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(alignment: .top, spacing: 0) {
-                            ForEach(Array(cols.enumerated()), id: \.element.id) { ci, w in
-                                VStack(spacing: 0) {
-                                    Text(slashDate(w.date)).font(.caption.bold()).monospacedDigit()
-                                        .foregroundStyle(picked == w.id ? Parts.color(part) : Color.primary)
-                                        .frame(width: colW, height: headH)
-                                    ForEach(rows.indices, id: \.self) { i in
-                                        logCell(rows[i], cols, ci, lineH)
-                                            .frame(width: colW, height: heights[i])
-                                            .overlay(alignment: .top) { Rectangle().fill(Color.primary.opacity(0.08)).frame(height: 1) }
-                                    }
-                                }
-                                .overlay(alignment: .leading) { Rectangle().fill(Color.primary.opacity(0.08)).frame(width: 1) }
-                                .background(picked == w.id ? Parts.color(part).opacity(0.08) : Color.clear)
-                                .contentShape(Rectangle())
-                                .onTapGesture { withAnimation(.snappy) { picked = picked == w.id ? nil : w.id } }
-                                .id(w.id)
-                            }
-                        }
-                    }
-                    .onAppear { if let last = cols.last { proxy.scrollTo(last.id, anchor: .trailing) } }
-                }
-            }
-            if names.count > rows.count {
-                Text("只列了最近练的 \(rows.count) 个动作").font(.caption2).foregroundStyle(.secondary)
-            }
-        }
-        .card()
-    }
-
-    @ViewBuilder private func logCell(_ name: String, _ cols: [Workout], _ ci: Int, _ lineH: CGFloat) -> some View {
-        if let x = cols[ci].exercises(of: part).first(where: { $0.name == name }) {
-            let prev = cols[..<ci].reversed().lazy.compactMap { $0.exercises(of: self.part).first { $0.name == name } }.first
-            let up = prev.map { better(x, than: $0) } ?? false
-            VStack(spacing: 0) {
-                ForEach(x.sets) { s in
-                    Text(s.w.isEmpty ? (s.r.isEmpty ? "—" : "\(s.r)次") : (s.r.isEmpty ? s.w : "\(s.w)×\(s.r)"))
-                        .font(.system(size: 11, design: .rounded)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.7)
-                        .frame(height: lineH)
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .overlay(alignment: .topTrailing) {
-                if up { Image(systemName: "arrow.up").font(.system(size: 9, weight: .heavy)).foregroundStyle(.green).padding(3) }
-            }
-            .foregroundStyle(up ? Color.green : Color.primary)
-        } else {
-            Color.clear
-        }
-    }
-
-    // 进步：最重的一组更重，或者同样重量做了更多次
-    private func better(_ a: Exercise, than b: Exercise) -> Bool {
-        let ab = a.best, bb = b.best
-        if ab > bb { return true }
-        if ab == bb, ab > 0 {
-            let ar = a.sets.filter { $0.weight == ab }.map(\.reps).max() ?? 0
-            let br = b.sets.filter { $0.weight == bb }.map(\.reps).max() ?? 0
-            return ar > br
-        }
-        return false
     }
 
     // 每次训练的日期框，左右滑，点开看那次练了什么
