@@ -31,6 +31,9 @@ struct MeView: View {
                     NavigationLink { ExerciseLibView() } label: {
                         Label("动作库 · 要领和练哪块肌肉", systemImage: "books.vertical.fill")
                     }
+                    NavigationLink { CreatorsView() } label: {
+                        Label("健身博主 · 我关注的抖音主页", systemImage: "person.2.fill")
+                    }
                 }
                 Section {
                     ActivityCard()
