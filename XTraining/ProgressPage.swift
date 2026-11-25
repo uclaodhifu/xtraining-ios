@@ -160,7 +160,7 @@ struct PartProgress: View {
         }
         let rows = byMonth.keys.sorted().suffix(8).map { k in Pt(id: k, v: Double(byMonth[k]!.0) / Double(max(1, byMonth[k]!.1))) }
         return VStack(alignment: .leading, spacing: 8) {
-            Text("平均组数").font(.headline)
+            Text("平均组数").font(.title3.bold())
             Text("每次练\(part)平均几组，按月").font(.caption).foregroundStyle(.secondary)
             Chart(rows) { r in
                 BarMark(x: .value("月", monthLabel(r.id)), y: .value("组", r.v))
@@ -176,7 +176,7 @@ struct PartProgress: View {
     // 每个动作：第一次 → 最近一次的最佳重量
     private var exerciseList: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("每个动作的进步").font(.headline)
+            Text("每个动作的进步").font(.title3.bold())
             ForEach(showAll ? names : Array(names.prefix(3)), id: \.self) { n in
                 let hist = sessions.compactMap { w in w.exercises(of: part).first { $0.name == n }.map { (w.date, $0.best) } }.filter { $0.1 > 0 }
                 if let first = hist.first, let last = hist.last {
@@ -268,7 +268,7 @@ struct LiftChart: View {
 
         return VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("动作重量").font(.headline)
+                Text("动作重量").font(.title3.bold())
                 Spacer()
                 Menu {
                     ForEach(options, id: \.self) { n in Button(n) { set(n) } }

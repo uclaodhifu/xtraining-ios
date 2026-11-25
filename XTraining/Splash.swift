@@ -58,6 +58,7 @@ struct SplashView: View {
             }
         }
         .task {
+            if Motion.reduce { xIn = true; ring = true; letters = word.count; try? await Task.sleep(for: .milliseconds(400)); finish(); return }
             withAnimation(.spring(response: 0.5, dampingFraction: 0.55)) { xIn = true; glow = true }
             withAnimation(.easeOut(duration: 1.1)) { ring = true }
             try? await Task.sleep(for: .milliseconds(350))

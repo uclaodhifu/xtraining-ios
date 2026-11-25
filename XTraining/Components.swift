@@ -18,6 +18,12 @@ struct CardStyle: ViewModifier {
     }
 }
 
+// 系统开了“减弱动态效果”或低电量模式时，动画收敛一点，也更省电
+enum Motion {
+    static var calm: Bool { UIAccessibility.isReduceMotionEnabled || ProcessInfo.processInfo.isLowPowerModeEnabled }
+    static var reduce: Bool { UIAccessibility.isReduceMotionEnabled }
+}
+
 // 出现时从下面浮上来，按顺序一个个出现
 struct Rise: ViewModifier {
     let index: Int
@@ -25,10 +31,11 @@ struct Rise: ViewModifier {
     func body(content: Content) -> some View {
         content
             .opacity(shown ? 1 : 0)
-            .offset(y: shown ? 0 : 18)
-            .blur(radius: shown ? 0 : 6)
-            .scaleEffect(shown ? 1 : 0.97, anchor: .top)
+            .offset(y: shown || Motion.reduce ? 0 : 18)
+            .blur(radius: shown || Motion.reduce ? 0 : 6)
+            .scaleEffect(shown || Motion.reduce ? 1 : 0.97, anchor: .top)
             .onAppear {
+                if Motion.reduce { withAnimation(.easeOut(duration: 0.2)) { shown = true }; return }
                 withAnimation(.spring(response: 0.55, dampingFraction: 0.82).delay(Double(index) * 0.06)) { shown = true }
             }
     }
@@ -97,7 +104,7 @@ struct BigButton: View {
         }
         .buttonStyle(PressScale())
         .onAppear {
-            guard gradient else { return }
+            guard gradient, !Motion.calm else { return }
             withAnimation(.easeInOut(duration: 2.2).delay(0.6).repeatForever(autoreverses: false)) { sweep = true }
         }
     }

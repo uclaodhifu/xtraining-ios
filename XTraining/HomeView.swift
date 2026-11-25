@@ -37,7 +37,7 @@ struct HomeView: View {
             }
             .background(background)
             .toolbar(.hidden, for: .navigationBar)
-            .overlay { if celebrate { Confetti() } }
+            .overlay { if celebrate && !Motion.reduce { Confetti() } }
             .sheet(isPresented: $editTitle) { TitleEditor() }
             .sheet(item: $editing) { w in EntryView(workout: w) }
             .sheet(isPresented: $showCycle) { CycleEditor() }
@@ -71,7 +71,7 @@ struct HomeView: View {
     // 淡淡的渐变光斑背景，跟着主题变色，慢慢飘
     private var background: some View {
         let b = Skin.current.blobs
-        return TimelineView(.animation(minimumInterval: 1 / 20)) { ctx in
+        return TimelineView(.animation(minimumInterval: 1 / 20, paused: Motion.calm)) { ctx in
             let t = ctx.date.timeIntervalSinceReferenceDate
             ZStack {
                 Color(.systemGroupedBackground)
@@ -132,7 +132,15 @@ struct HomeView: View {
                     Haptic.tap(.medium); editing = newWorkout(chosen.wrappedValue)
                 }
                 if !trained {
-                    BigButton(title: "😴 今天休息日", gradient: false) { store.setRest(true) }
+                    // 次要操作做小一点，不跟“开始训练”抢视线
+                    Button { Haptic.tap(); store.setRest(true) } label: {
+                        Label("今天休息", systemImage: "moon.zzz.fill").font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 16).padding(.vertical, 8)
+                            .background(Capsule().fill(Color(.tertiarySystemFill)))
+                    }
+                    .buttonStyle(PressScale())
+                    .frame(maxWidth: .infinity)
                 } else {
                     BigButton(title: "✓ 完成今天训练 · \(store.todays.reduce(0) { $0 + $1.setCount }) 组") { Haptic.success(); withAnimation(.spring) { store.setDone(true) }; celebrate = true
                         DispatchQueue.main.asyncAfter(deadline: .now() + 3) { celebrate = false } }
