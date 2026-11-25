@@ -146,6 +146,7 @@ struct TrainingLogTable: View {
 struct HomeLog: View {
     @EnvironmentObject var store: Store
     @State private var part = ""
+    @State private var full = false
     var onOpen: (Workout) -> Void
 
     private var defaultPart: String {
@@ -159,6 +160,13 @@ struct HomeLog: View {
                 Text("训练日志").font(.title3.bold())
                 Spacer()
                 Text("点日期可以修改").font(.caption2).foregroundStyle(.secondary)
+                Button { Haptic.tap(); full = true } label: {
+                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                        .font(.footnote.bold()).frame(width: 30, height: 30)
+                        .background(Circle().fill(Color(.tertiarySystemFill)))
+                }
+                .buttonStyle(PressScale())
+                .accessibilityLabel("横屏全屏查看")
             }
             Picker("部位", selection: Binding(get: { p }, set: { v in withAnimation(.snappy) { part = v } })) {
                 ForEach(Parts.strength, id: \.self) { Text($0).tag($0) }
@@ -169,5 +177,92 @@ struct HomeLog: View {
                 .transition(.opacity)
         }
         .card()
+        .fullScreenCover(isPresented: $full) { LogFullScreen(part: p) }
+    }
+}
+
+// 训练日志全屏：自动转横屏，显示全部动作
+struct LogFullScreen: View {
+    @EnvironmentObject var store: Store
+    @Environment(\.dismiss) private var dismiss
+    @State var part: String
+    @State private var editing: Workout? = nil
+
+    var body: some View {
+        NavigationStack {
+            ScrollView([.vertical]) {
+                TrainingLogTable(part: part, maxRows: 999) { w in editing = w }
+                    .id(part)
+                    .padding(.horizontal, 16).padding(.bottom, 20)
+            }
+            .background(Color(.systemGroupedBackground))
+            .navigationTitle("训练日志 · \(part)")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Picker("部位", selection: $part.animation(.snappy)) {
+                        ForEach(Parts.strength, id: \.self) { Text($0).tag($0) }
+                    }
+                    .pickerStyle(.segmented).frame(width: 300)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { dismiss() } label: { Image(systemName: "xmark.circle.fill").font(.title3).foregroundStyle(.secondary) }
+                }
+            }
+            .sheet(item: $editing) { w in EntryView(workout: w) }
+        }
+        .onAppear { Orientation.set(.landscape) }
+        .onDisappear { Orientation.set(.portrait) }
+    }
+}
+
+
+// 底栏“日志”页：完整训练日志，可以一键转横屏
+struct LogPage: View {
+    @EnvironmentObject var store: Store
+    @State private var part = ""
+    @State private var editing: Workout? = nil
+    @State private var landscape = false
+
+    private var defaultPart: String { store.sorted.first?.parts.first { $0 != "有氧" } ?? "胸" }
+
+    var body: some View {
+        let p = part.isEmpty ? defaultPart : part
+        NavigationStack {
+            VStack(spacing: 0) {
+                Picker("部位", selection: Binding(get: { p }, set: { v in withAnimation(.snappy) { part = v } })) {
+                    ForEach(Parts.strength, id: \.self) { Text($0).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, 16).padding(.bottom, 8)
+                TabView(selection: Binding(get: { p }, set: { part = $0 })) {
+                    ForEach(Parts.strength, id: \.self) { x in
+                        ScrollView {
+                            TrainingLogTable(part: x, maxRows: 999) { w in editing = w }
+                                .card()
+                                .padding(.horizontal, 16).padding(.bottom, 24)
+                                .frame(maxWidth: 1100).frame(maxWidth: .infinity)
+                        }
+                        .tag(x)
+                    }
+                }
+                .tabViewStyle(.page(indexDisplayMode: .never))
+            }
+            .background(Color(.systemGroupedBackground))
+            .navigationTitle("训练日志")
+            .navigationBarTitleDisplayMode(landscape ? .inline : .large)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        Haptic.tap(); landscape.toggle()
+                        Orientation.set(landscape ? .landscape : .portrait)
+                    } label: {
+                        Label(landscape ? "竖屏" : "横屏", systemImage: landscape ? "rectangle.portrait.rotate" : "rectangle.landscape.rotate")
+                    }
+                }
+            }
+            .sheet(item: $editing) { w in EntryView(workout: w) }
+            .onDisappear { if landscape { landscape = false; Orientation.set(.portrait) } }
+        }
     }
 }
