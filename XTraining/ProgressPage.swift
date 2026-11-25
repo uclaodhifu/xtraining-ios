@@ -30,6 +30,9 @@ struct ProgressPage: View {
 struct PartProgress: View {
     @EnvironmentObject var store: Store
     let part: String
+    @State private var picked: String? = nil
+    @State private var showAll = false
+    @State private var editing: Workout? = nil
 
     private var sessions: [Workout] { store.workouts.filter { $0.parts.contains(part) }.sorted { $0.date < $1.date } }
     private var month: String { String(Day.today.prefix(7)) }
@@ -45,6 +48,7 @@ struct PartProgress: View {
                     }
                     .frame(maxWidth: .infinity).padding(.vertical, 50).card()
                 } else {
+                    sessionStrip
                     tiles
                     setsChart
                     ForEach(Array(charts.enumerated()), id: \.offset) { i, name in
@@ -60,6 +64,64 @@ struct PartProgress: View {
             }
             .padding(.horizontal, 16).padding(.bottom, 30)
             .frame(maxWidth: 720).frame(maxWidth: .infinity)
+        }
+        .sheet(item: $editing) { w in EntryView(workout: w) }
+    }
+
+    // 每次训练的日期框，左右滑，点开看那次练了什么
+    @ViewBuilder private var sessionStrip: some View {
+        let list = sessions
+        VStack(alignment: .leading, spacing: 10) {
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(list) { w in
+                            let on = picked == w.id
+                            Button {
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) { picked = on ? nil : w.id }
+                                Haptic.tap()
+                            } label: {
+                                VStack(spacing: 3) {
+                                    Text(slashDate(w.date)).font(.headline).monospacedDigit()
+                                    Text(weekdayCN(w.date)).font(.caption2).opacity(0.7)
+                                }
+                                .foregroundStyle(on ? Color.white : (w.date == Day.today ? Parts.color(part) : Color.primary))
+                                .frame(minWidth: 60, minHeight: 56).padding(.horizontal, 4)
+                                .background(RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .fill(on ? AnyShapeStyle(Parts.color(part).gradient) : AnyShapeStyle(.regularMaterial)))
+                                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color.primary.opacity(0.08)))
+                                .scaleEffect(on ? 1.06 : 1)
+                            }
+                            .buttonStyle(.plain)
+                            .id(w.id)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+                .onAppear { if let last = list.last { proxy.scrollTo(last.id, anchor: .trailing) } }
+            }
+            if let id = picked, let w = list.first(where: { $0.id == id }) {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("\(Day.label(w.date)) · \(Day.ago(w.date))").font(.headline)
+                        Spacer()
+                        Button("修改") { editing = w }.font(.subheadline)
+                    }
+                    ForEach(w.exercises(of: part)) { x in
+                        HStack(alignment: .firstTextBaseline) {
+                            Text(x.name).font(.subheadline)
+                            Spacer()
+                            Text(setsText(x)).font(.caption.bold()).foregroundStyle(Parts.color(part)).lineLimit(1)
+                        }
+                    }
+                    let others = w.exercises.filter { (Parts.of($0.name) ?? w.parts.first ?? "") != part }
+                    if !others.isEmpty {
+                        Text("同一天还练了：" + others.map(\.name).joined(separator: "、")).font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                .card()
+                .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .top)))
+            }
         }
     }
 
@@ -115,7 +177,7 @@ struct PartProgress: View {
     private var exerciseList: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("每个动作的进步").font(.headline)
-            ForEach(names, id: \.self) { n in
+            ForEach(showAll ? names : Array(names.prefix(3)), id: \.self) { n in
                 let hist = sessions.compactMap { w in w.exercises(of: part).first { $0.name == n }.map { (w.date, $0.best) } }.filter { $0.1 > 0 }
                 if let first = hist.first, let last = hist.last {
                     let pct = first.1 > 0 ? (last.1 - first.1) / first.1 * 100 : 0
@@ -135,9 +197,33 @@ struct PartProgress: View {
                     Divider()
                 }
             }
+            if names.count > 3 {
+                Button {
+                    withAnimation(.snappy) { showAll.toggle() }
+                } label: {
+                    HStack {
+                        Text(showAll ? "收起" : "查看全部 \(names.count) 个动作")
+                        Spacer()
+                        Image(systemName: "chevron.right").rotationEffect(.degrees(showAll ? 90 : 0))
+                    }
+                    .font(.subheadline)
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 2)
+            }
         }
         .card()
     }
+}
+
+func weekdayCN(_ d: String) -> String {
+    ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][Calendar.current.component(.weekday, from: Day.date(d)) - 1]
+}
+func slashDate(_ d: String) -> String {
+    let p = d.split(separator: "-"); return p.count == 3 ? "\(Int(p[1]) ?? 0)/\(Int(p[2]) ?? 0)" : d
+}
+func monthCN(_ d: String) -> String {
+    let p = d.split(separator: "-"); return p.count == 3 ? "\(Int(p[1]) ?? 0)月" : ""
 }
 
 func monthLabel(_ ym: String) -> String {
@@ -157,26 +243,30 @@ struct LiftChart: View {
         if name == "__first" { return options.first ?? "" }
         return options.first { $0 == name } ?? options.first { $0.contains(name) } ?? name
     }
-    private var points: [(String, Double)] {
+    // 每次训练这个动作的 最重一组 和 平均每组重量
+    private var points: [(date: String, best: Double, mean: Double)] {
         store.workouts.filter { $0.parts.contains(part) }.sorted { $0.date < $1.date }.compactMap { w in
-            let best = w.exercises.filter { $0.name == resolved }.map(\.best).max() ?? 0
-            return best > 0 ? (w.date, best) : nil
+            let sets = w.exercises.filter { $0.name == resolved }.flatMap(\.sets).map(\.weight).filter { $0 > 0 }
+            guard let best = sets.max() else { return nil }
+            return (w.date, best, sets.reduce(0, +) / Double(sets.count))
         }
     }
 
     var body: some View {
         let pts = points
-        var byMonth: [String: Double] = [:]
-        for p in pts { byMonth[String(p.0.prefix(7)), default: 0] = max(byMonth[String(p.0.prefix(7))] ?? 0, p.1) }
-        let rows = byMonth.keys.sorted().suffix(8).map { Pt(id: $0, v: byMonth[$0]!) }
+        let shown = Array(pts.suffix(8))
+        let avgBest = shown.isEmpty ? 0 : shown.map(\.best).reduce(0, +) / Double(shown.count)
+        let latest = shown.last
+        let prev = shown.dropLast().last
         // 突破：比之前最重的更重
         var top = 0.0, breaks: [String] = []
-        for p in pts { if p.1 > top { if top > 0 { breaks.append(p.0) }; top = p.1 } }
+        for p in pts { if p.best > top { if top > 0 { breaks.append(p.date) }; top = p.best } }
         let gaps = zip(breaks.dropFirst(), breaks).map { Day.between($1, $0) }
         let avg = gaps.isEmpty ? nil : Double(gaps.reduce(0, +)) / Double(gaps.count)
         let since = breaks.last.map { Day.between($0, Day.today) }
+        let accent = Color.orange
 
-        return VStack(alignment: .leading, spacing: 8) {
+        return VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text("动作重量").font(.headline)
                 Spacer()
@@ -188,16 +278,53 @@ struct LiftChart: View {
                         .font(.subheadline.bold())
                 }
             }
-            if rows.isEmpty {
-                Text("还没有“\(resolved)”的重量记录").font(.subheadline).foregroundStyle(.secondary).padding(.vertical, 20)
-            } else {
-                Chart(rows) { r in
-                    BarMark(x: .value("月", monthLabel(r.id)), y: .value("kg", r.v))
-                        .foregroundStyle(Brand.gradient)
-                        .cornerRadius(6)
-                        .annotation(position: .top) { Text(fmtNum(r.v)).font(.caption2).foregroundStyle(.secondary) }
+            if let latest {
+                Text(verdict(latest.best, avgBest, prev?.best)).font(.subheadline.bold())
+                Divider()
+                HStack(alignment: .top, spacing: 28) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text("平均").font(.caption).foregroundStyle(.secondary)
+                        kg(avgBest).foregroundStyle(.secondary)
+                    }
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(latest.date == Day.today ? "今天" : "最近一次").font(.caption).foregroundStyle(accent)
+                        kg(latest.best).foregroundStyle(accent)
+                    }
+                    Spacer()
                 }
-                .frame(height: 170)
+                Chart {
+                    ForEach(Array(shown.enumerated()), id: \.offset) { i, p in
+                        let last = i == shown.count - 1
+                        BarMark(x: .value("次", "\(i)"), y: .value("最重", p.best), width: .ratio(0.62))
+                            .foregroundStyle(last ? accent.opacity(0.3) : Color.gray.opacity(0.22))
+                            .cornerRadius(7)
+                        BarMark(x: .value("次", "\(i)"), y: .value("平均", p.mean), width: .ratio(0.62))
+                            .foregroundStyle(last ? accent : Color.gray.opacity(0.55))
+                            .cornerRadius(7)
+                    }
+                    RuleMark(y: .value("平均", avgBest))
+                        .foregroundStyle(Color.gray.opacity(0.6))
+                        .lineStyle(StrokeStyle(lineWidth: 2))
+                        .annotation(position: .top, alignment: .trailing) { Text("平均").font(.caption2).foregroundStyle(.secondary) }
+                }
+                .chartXAxis {
+                    AxisMarks { v in
+                        AxisValueLabel {
+                            if let s = v.as(String.self), let i = Int(s), i < shown.count {
+                                Text(shortDate(shown[i].date)).font(.caption2)
+                                    .foregroundStyle(i == shown.count - 1 ? accent : Color.secondary)
+                            }
+                        }
+                    }
+                }
+                .chartYAxis(.hidden)
+                .frame(height: 190)
+                HStack(spacing: 14) {
+                    HStack(spacing: 4) { Circle().fill(Color.gray.opacity(0.25)).frame(width: 8); Text("最重一组") }
+                    HStack(spacing: 4) { Circle().fill(Color.gray.opacity(0.6)).frame(width: 8); Text("平均每组") }
+                }
+                .font(.caption2).foregroundStyle(.secondary)
+                Divider()
                 HStack {
                     StatTile(value: "\(breaks.count)", label: "突破次数")
                     StatTile(value: avg.map { "\(Int($0.rounded()))天" } ?? "—", label: "平均多久突破")
@@ -208,9 +335,29 @@ struct LiftChart: View {
                     }
                     .frame(maxWidth: .infinity)
                 }
+            } else {
+                Text("还没有“\(resolved)”的重量记录").font(.subheadline).foregroundStyle(.secondary).padding(.vertical, 20)
             }
         }
         .card()
+    }
+
+    private func kg(_ v: Double) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 1) {
+            Text(fmtNum(v)).font(.system(size: 30, weight: .bold, design: .rounded))
+                .contentTransition(.numericText()).animation(.snappy, value: v)
+            Text("kg").font(.subheadline.bold())
+        }
+    }
+    private func shortDate(_ d: String) -> String {
+        let p = d.split(separator: "-"); return p.count == 3 ? "\(Int(p[1]) ?? 0)/\(Int(p[2]) ?? 0)" : d
+    }
+    private func verdict(_ last: Double, _ avg: Double, _ prev: Double?) -> String {
+        let who = "最近一次"
+        if let prev, last > prev { return "\(who)比上次重 \(fmtNum(last - prev))kg，进步了 💪" }
+        if last > avg + 0.01 { return "\(who)比平均重 \(fmtNum(last - avg))kg，状态不错" }
+        if abs(last - avg) <= 0.01 { return "\(who)和平均持平，继续保持" }
+        return "\(who)比平均轻 \(fmtNum(avg - last))kg，下次加把劲"
     }
 
     private func current() -> [String] {
