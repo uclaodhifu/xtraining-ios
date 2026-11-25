@@ -207,11 +207,11 @@ struct CreatorEditor: View {
                     Button { if let t = UIPasteboard.general.string { raw = t } } label: {
                         Label("从剪贴板粘贴", systemImage: "doc.on.clipboard")
                     }
-                } footer: { Text("会自动取出里面的链接。没有链接的话，下面直接填抖音号也行。") }
+                } footer: { Text("会自动取出里面的链接。有链接点“抖音看”直接进主页；只填抖音号会打开抖音搜索。") }
                 Section {
                     TextField("名字", text: $name)
                     TextField("备注，比如：练背、备赛", text: $note)
-                    TextField("主页链接 或 抖音号", text: $link).textInputAutocapitalization(.never).autocorrectionDisabled()
+                    TextField("主页链接（直达主页）或 抖音号（打开搜索）", text: $link).textInputAutocapitalization(.never).autocorrectionDisabled()
                         .font(.footnote)
                 }
             }
