@@ -73,11 +73,55 @@ struct Race: Codable, Identifiable, Hashable {
         "新西兰": (Color(hex: 0x00247d), Color(hex: 0xcc142b), "NEW ZEALAND"), "沙特阿拉伯": (Color(hex: 0x006c35), Color(hex: 0x0b3d1f), "SAUDI"),
         "泰国": (Color(hex: 0x2d2a4a), Color(hex: 0xa51931), "THAILAND"), "中国台湾": (Color(hex: 0x0a84ff), Color(hex: 0x5e5ce6), "TAIWAN"),
     ]
-    static let all: [Race] = (try? JSONDecoder().decode([Race].self, from: Data(eventsJSON.utf8))) ?? []
+    // 比赛清单：优先用联网拉到的最新版，拉不到就用上次缓存，再不行用 App 自带的
+    static var all: [Race] { RaceFeed.shared.list }
     // 还没结束的比赛，按日期排
     static func upcoming(_ region: String? = nil) -> [Race] {
         all.filter { e in (e.date == nil || (e.end ?? e.date!) >= Day.today) && (region == nil || (e.region ?? "cn") == region) }
             .sorted { ($0.date ?? "9") < ($1.date ?? "9") }
+    }
+}
+
+// MARK: 比赛清单联网更新
+final class RaceFeed: ObservableObject {
+    static let shared = RaceFeed()
+    static let url = URL(string: "https://xtraining-events.vercel.app/events.json")!
+    private static let cacheKey = "xt.eventsCache"
+    @Published private(set) var list: [Race]
+    @Published private(set) var updated: String = ""
+    private struct Feed: Codable { var updated: String?; var events: [Race] }
+
+    private init() {
+        if let d = UserDefaults.standard.data(forKey: Self.cacheKey),
+           let f = try? JSONDecoder().decode(Feed.self, from: d), !f.events.isEmpty {
+            list = f.events; updated = f.updated ?? ""
+        } else {
+            list = (try? JSONDecoder().decode([Race].self, from: Data(eventsJSON.utf8))) ?? []
+        }
+    }
+
+    // 拉最新清单；追了的比赛改了时间就重新排提醒，取消了的比赛就撤掉提醒
+    func refresh(follow: [String]) async {
+        var req = URLRequest(url: Self.url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15)
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        guard let (data, resp) = try? await URLSession.shared.data(for: req),
+              (resp as? HTTPURLResponse)?.statusCode == 200,
+              let f = try? JSONDecoder().decode(Feed.self, from: data), !f.events.isEmpty else { return }
+        UserDefaults.standard.set(data, forKey: Self.cacheKey)
+        let old = Dictionary(list.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        let new = Dictionary(f.events.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        for id in follow {
+            switch (old[id], new[id]) {
+            case let (o?, n?) where o.startAt != n.startAt || o.hasTime != n.hasTime || o.name != n.name:
+                Reminders.cancel(o); Reminders.schedule(n)
+            case let (o?, nil):
+                Reminders.cancel(o)
+            case let (nil, n?):
+                Reminders.schedule(n)
+            default: break
+            }
+        }
+        await MainActor.run { self.list = f.events; self.updated = f.updated ?? "" }
     }
 }
 
@@ -132,6 +176,7 @@ struct RacesView: View {
 
 struct RaceList: View {
     @EnvironmentObject var store: Store
+    @ObservedObject private var feed = RaceFeed.shared
     var region: String? = nil
     var onlyFollowed = false
     @State private var open: String? = nil
@@ -193,10 +238,16 @@ struct RaceList: View {
                             }
                         }
                     }
-                    .padding(.horizontal, 16).padding(.bottom, 30)
+                    .padding(.horizontal, 16)
                     .frame(maxWidth: 720).frame(maxWidth: .infinity)
+                    if !feed.updated.isEmpty {
+                        Text("赛程更新于 \(feed.updated) · 下拉刷新").font(.caption2).foregroundStyle(.tertiary)
+                            .frame(maxWidth: .infinity).padding(.top, 14)
+                    }
+                    Color.clear.frame(height: 30)
                 }
             }
+            .refreshable { await feed.refresh(follow: store.follow) }
         }
     }
 
@@ -313,6 +364,7 @@ struct RaceCard: View {
 // 首页顶部：36 小时内开赛的提醒条
 struct RaceAlert: View {
     @EnvironmentObject var store: Store
+    @ObservedObject private var feed = RaceFeed.shared
     var body: some View {
         let soon = Race.upcoming().filter { e in
             guard store.follow.contains(e.id), let t = e.startAt else { return false }

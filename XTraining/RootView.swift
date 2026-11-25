@@ -2,6 +2,8 @@ import SwiftUI
 
 // 底部四个页面：首页 / 追赛 / 进步 / 我（iOS 26 以上是液态玻璃底栏，往下滑会自动收起）
 struct RootView: View {
+    @EnvironmentObject var store: Store
+    @Environment(\.scenePhase) private var phase
     @State private var tab = 0
     var body: some View {
         let tv = TabView(selection: $tab) {
@@ -15,6 +17,10 @@ struct RootView: View {
                 .tabItem { Label("我", systemImage: "person.crop.circle") }.tag(3)
         }
         .sensoryFeedback(.selection, trigger: tab)
+        // 每次打开/回到 App 都拉一下最新比赛清单
+        .task(id: phase) {
+            if phase == .active { await RaceFeed.shared.refresh(follow: store.follow) }
+        }
         if #available(iOS 26.0, *) {
             tv.tabBarMinimizeBehavior(.onScrollDown)
         } else {
