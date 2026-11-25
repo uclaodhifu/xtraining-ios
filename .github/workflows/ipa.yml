@@ -40,6 +40,8 @@ jobs:
           # 临时签名，把 HealthKit 权限写进去，Sideloadly 自签时会带上
           codesign -f -s - --entitlements XTraining/XTraining.entitlements Payload/XTraining.app
           codesign -d --entitlements - Payload/XTraining.app
+          echo '--- App Info.plist ---'; plutil -p Payload/XTraining.app/Info.plist
+          for x in Payload/XTraining.app/PlugIns/*.appex; do echo "--- $x ---"; plutil -p "$x/Info.plist"; codesign -d --entitlements - "$x"; done
           zip -qry XTraining.ipa Payload
       - uses: actions/upload-artifact@v4
         with:
