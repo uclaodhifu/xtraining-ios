@@ -66,6 +66,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           T=build-${{ github.run_number }}
+          gh release view "$T" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 || gh release create "$T" -R "$GITHUB_REPOSITORY" --title "X Training 测试版 ${{ github.run_number }}" --notes "未签名安装包，用 Sideloadly 或 爱思助手 自签安装。" || true
+          for i in 1 2 3 4 5; do
+            gh release upload "$T" XTraining.ipa -R "$GITHUB_REPOSITORY" --clobber && break
+            sleep 15
+          done
           for i in 1 2 3 4 5; do
             gh release edit "$T" -R "$GITHUB_REPOSITORY" --draft=false --latest && break
             sleep 15
