@@ -25,6 +25,11 @@ struct HomeView: View {
             ScrollView {
                 VStack(spacing: 14) {
                     header.rise(0)
+                    HeroCarousel(planTitle: heroTitle, planSub: why,
+                                 partColor: chosen.wrappedValue.first.map(Parts.color) ?? Brand.pink) {
+                        Haptic.tap(.medium); editing = newWorkout(chosen.wrappedValue)
+                    }
+                    .rise(1)
                     RaceAlert().rise(1)
                     planCard.rise(2)
                     DataWall { showWeight = true }.rise(3)
@@ -148,6 +153,13 @@ struct HomeView: View {
             }
             .card()
         }
+    }
+
+    private var heroTitle: String {
+        let c = chosen.wrappedValue
+        if store.restDays.contains(Day.today) && store.todays.isEmpty { return "今天休息" }
+        if store.doneDays.contains(Day.today) { return "今天练完了" }
+        return c.isEmpty ? "今天练什么？" : "今天练" + c.joined(separator: " + ")
     }
 
     private func todayParts(_ ws: [Workout]) -> String {

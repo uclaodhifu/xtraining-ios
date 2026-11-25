@@ -14,6 +14,7 @@ final class Store: ObservableObject {
     @Published var avatar: Data? = nil { didSet { ud.set(avatar, forKey: "xt.avatar") } }
     @Published var nickname: String = "" { didSet { ud.set(nickname, forKey: "xt.nickname") } }
     @Published var plateCfg: [String: PlateCfg] = [:] { didSet { save(plateCfg, "plateCfg") } }
+    @Published var hero: [HeroItem] = HeroItem.defaults { didSet { save(hero, "hero") } }
 
     private let ud = UserDefaults.standard
 
@@ -29,6 +30,7 @@ final class Store: ObservableObject {
         avatar = ud.data(forKey: "xt.avatar")
         nickname = ud.string(forKey: "xt.nickname") ?? ""
         plateCfg = load("plateCfg") ?? [:]
+        hero = load("hero") ?? HeroItem.defaults
     }
 
     private func save<T: Encodable>(_ v: T, _ key: String) {
