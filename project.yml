@@ -13,7 +13,9 @@ targets:
   XTraining:
     type: application
     platform: iOS
-    sources: [XTraining]
+    sources: [XTraining, Shared]
+    dependencies:
+      - target: XTrainingWidgets
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID)
@@ -47,3 +49,23 @@ targets:
         NSHealthShareUsageDescription: 读取你在 Apple 健康里的运动、消耗的卡路里和步数，显示在“我”的运动记录日历里。
         NSHealthUpdateUsageDescription: X Training 目前不会往 Apple 健康里写数据。
         LSApplicationCategoryType: public.app-category.healthcare-fitness
+        NSSupportsLiveActivities: true
+  XTrainingWidgets:
+    type: app-extension
+    platform: iOS
+    sources: [XTrainingWidgets, Shared]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID).widgets
+        PRODUCT_NAME: XTrainingWidgets
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SWIFT_VERSION: "5.0"
+        SKIP_INSTALL: YES
+    info:
+      path: XTrainingWidgets/Info.plist
+      properties:
+        CFBundleDisplayName: X Training
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension

@@ -43,6 +43,7 @@ struct EntryView: View {
                 .frame(maxWidth: 720).frame(maxWidth: .infinity)
             }
             .scrollDismissesKeyboard(.interactively)
+            .safeAreaInset(edge: .bottom) { RestBar(exercise: workout.exercises.last?.name ?? "") }
             .background(Color(.systemGroupedBackground))
             .navigationTitle(isNew ? "开始训练" : "修改训练")
             .navigationBarTitleDisplayMode(.inline)
