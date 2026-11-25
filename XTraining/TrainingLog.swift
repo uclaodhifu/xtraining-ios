@@ -26,7 +26,8 @@ func setLabel(_ s: SetRow) -> String {
 struct TrainingLogTable: View {
     @EnvironmentObject var store: Store
     let part: String
-    var maxRows = 10
+    var maxRows = 5
+    @State private var showAll = false
     var onOpen: (Workout) -> Void = { _ in }
 
     private var cols: [Workout] {
@@ -41,7 +42,7 @@ struct TrainingLogTable: View {
     var body: some View {
         let cols = self.cols
         let all = names
-        let rows = Array(all.prefix(maxRows))
+        let rows = showAll ? all : Array(all.prefix(maxRows))
         let lineH: CGFloat = 15
         let heights: [CGFloat] = rows.map { n in
             let m = cols.map { w in w.exercises(of: part).first { $0.name == n }?.sets.count ?? 0 }.max() ?? 1
@@ -101,7 +102,10 @@ struct TrainingLogTable: View {
                     legend("arrow.down", .red, "退步")
                     legend("equal", .primary, "持平")
                     Spacer()
-                    if all.count > rows.count { Text("最近 \(rows.count) 个动作").font(.caption2).foregroundStyle(.secondary) }
+                    if all.count > maxRows {
+                        Button(showAll ? "收起" : "查看全部 \(all.count) 个") { withAnimation(.snappy) { showAll.toggle() } }
+                            .font(.caption.bold()).tint(Brand.pink)
+                    }
                 }
                 .font(.caption2)
             }
