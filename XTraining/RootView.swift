@@ -6,6 +6,8 @@ struct RootView: View {
         TabView {
             HomeView()
                 .tabItem { Label("首页", systemImage: "house.fill") }
+            RacesView()
+                .tabItem { Label("追赛", systemImage: "trophy.fill") }
             ProgressPage()
                 .tabItem { Label("进步", systemImage: "chart.line.uptrend.xyaxis") }
             MeView()

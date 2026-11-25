@@ -41,10 +41,11 @@ enum Parts {
     static let moods = ["很累", "一般", "还行", "不错", "爆发"]
 }
 
+// 跟着当前配色主题走
 enum Brand {
-    static let pink = Color(hex: 0xd62976)
-    static let gradient = LinearGradient(colors: [Color(hex: 0xfeda75), Color(hex: 0xfa7e1e), Color(hex: 0xd62976), Color(hex: 0x962fbf), Color(hex: 0x4f5bd5)],
-                                         startPoint: .bottomLeading, endPoint: .topTrailing)
+    static var pink: Color { Skin.current.accent }
+    static var gradient: LinearGradient { Skin.current.swatch }
+    static var ink: Color { Skin.current.ink }
 }
 
 extension Color {

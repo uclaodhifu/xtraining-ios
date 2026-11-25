@@ -3,6 +3,9 @@ import SwiftUI
 struct HomeView: View {
     @EnvironmentObject var store: Store
     @AppStorage("brandTitle") private var brandTitle = ""
+    @AppStorage("brandEmo") private var brandEmo = ""
+    @State private var editTitle = false
+    @State private var celebrate = false
     @State private var picked: [String]? = nil
     @State private var editing: Workout? = nil
     @State private var showCycle = false
@@ -21,8 +24,9 @@ struct HomeView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 14) {
+                    header
+                    RaceAlert()
                     planCard
-                    FoodCard()
                     statsCard
                     historySection
                 }
@@ -32,25 +36,48 @@ struct HomeView: View {
                 .frame(maxWidth: .infinity)
             }
             .background(background)
-            .navigationTitle(brandTitle.isEmpty ? "X Training" : brandTitle)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { editing = newWorkout(chosen.wrappedValue) } label: { Image(systemName: "plus.circle.fill").font(.title2) }
-                }
-            }
+            .toolbar(.hidden, for: .navigationBar)
+            .overlay { if celebrate { Confetti() } }
+            .sheet(isPresented: $editTitle) { TitleEditor() }
             .sheet(item: $editing) { w in EntryView(workout: w) }
             .sheet(isPresented: $showCycle) { CycleEditor() }
             .sheet(isPresented: $showWeight) { WeightView() }
         }
     }
 
-    // 淡淡的 Ins 渐变光斑背景
+    // 顶部：大标题（点一下改字、换动画）+ 记一笔
+    private var header: some View {
+        HStack(spacing: 8) {
+            Button { editTitle = true } label: {
+                HStack(spacing: 6) {
+                    if brandTitle.isEmpty { XLogo() } else { Text(brandTitle).font(.system(size: 32, weight: .heavy)).lineLimit(1).minimumScaleFactor(0.6) }
+                    if !brandEmo.isEmpty { BadgeView(id: brandEmo, size: 24) }
+                }
+            }
+            .buttonStyle(.plain)
+            Spacer()
+            Button { Haptic.tap(.medium); editing = newWorkout(chosen.wrappedValue) } label: {
+                Image(systemName: "plus").font(.title3.bold()).foregroundStyle(Brand.ink)
+                    .frame(width: 44, height: 44)
+                    .background(Circle().fill(Brand.gradient))
+                    .shadow(color: Brand.pink.opacity(0.35), radius: 8, y: 4)
+            }
+            .buttonStyle(PressScale())
+        }
+        .padding(.top, 8)
+    }
+
+    // 淡淡的渐变光斑背景，跟着主题变色，慢慢飘
     private var background: some View {
-        ZStack {
-            Color(.systemGroupedBackground)
-            Circle().fill(Color(hex: 0xfa7e1e).opacity(0.18)).frame(width: 380).blur(radius: 90).offset(x: -160, y: -300)
-            Circle().fill(Color(hex: 0xd62976).opacity(0.16)).frame(width: 420).blur(radius: 100).offset(x: 170, y: 40)
-            Circle().fill(Color(hex: 0x962fbf).opacity(0.14)).frame(width: 360).blur(radius: 90).offset(x: -120, y: 420)
+        let b = Skin.current.blobs
+        return TimelineView(.animation(minimumInterval: 1 / 20)) { ctx in
+            let t = ctx.date.timeIntervalSinceReferenceDate
+            ZStack {
+                Color(.systemGroupedBackground)
+                Circle().fill(b[0].opacity(0.18)).frame(width: 380).blur(radius: 90).offset(x: -160 + sin(t / 6) * 30, y: -300 + cos(t / 7) * 20)
+                Circle().fill(b[1].opacity(0.16)).frame(width: 420).blur(radius: 100).offset(x: 170 + cos(t / 8) * 30, y: 40 + sin(t / 5) * 30)
+                Circle().fill(b[2].opacity(0.14)).frame(width: 360).blur(radius: 90).offset(x: -120 + sin(t / 9) * 25, y: 420 + cos(t / 6) * 25)
+            }
         }
         .ignoresSafeArea()
     }
@@ -106,7 +133,8 @@ struct HomeView: View {
                 if !trained {
                     BigButton(title: "😴 今天休息日", gradient: false) { store.setRest(true) }
                 } else {
-                    BigButton(title: "✓ 完成今天训练 · \(store.todays.reduce(0) { $0 + $1.setCount }) 组") { Haptic.success(); store.setDone(true) }
+                    BigButton(title: "✓ 完成今天训练 · \(store.todays.reduce(0) { $0 + $1.setCount }) 组") { Haptic.success(); withAnimation(.spring) { store.setDone(true) }; celebrate = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { celebrate = false } }
                 }
             }
             .card()
@@ -219,7 +247,10 @@ struct HomeView: View {
                 Text("还没有训练记录。点“开始训练”记一笔。").foregroundStyle(.secondary).frame(maxWidth: .infinity).padding(.vertical, 20)
             }
             ForEach(list) { w in
-                Button { editing = w } label: { WorkoutCard(w: w) }.buttonStyle(.plain)
+                Button { editing = w } label: { WorkoutCard(w: w) }.buttonStyle(PressScale())
+                    .scrollTransition { c, phase in
+                        c.opacity(phase.isIdentity ? 1 : 0.4).scaleEffect(phase.isIdentity ? 1 : 0.92).blur(radius: phase.isIdentity ? 0 : 2)
+                    }
             }
             if found == nil && all.count > 6 {
                 Button(showAll ? "收起" : "查看更多（还有 \(all.count - 6) 条）") { withAnimation { showAll.toggle() } }
@@ -246,5 +277,71 @@ struct FlowRow: View {
                 }
             }
         }
+    }
+}
+
+// 按下去缩一下
+struct PressScale: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.95 : 1)
+            .animation(.spring(response: 0.25, dampingFraction: 0.6), value: configuration.isPressed)
+    }
+}
+
+// 改首页标题 + 选后面的小动画
+struct TitleEditor: View {
+    @Environment(\.dismiss) private var dismiss
+    @AppStorage("brandTitle") private var brandTitle = ""
+    @AppStorage("brandEmo") private var brandEmo = ""
+    @State private var t = ""
+    @State private var emo = ""
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    HStack(spacing: 6) {
+                        if t.trimmingCharacters(in: .whitespaces).isEmpty { XLogo() } else { Text(t).font(.system(size: 30, weight: .heavy)) }
+                        if !emo.isEmpty { BadgeView(id: emo, size: 24) }
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 60)
+                }
+                Section("标题") {
+                    TextField("不填就用 X TRAINING", text: $t)
+                }
+                Section("标题后面的动画") {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 64), spacing: 10)], spacing: 10) {
+                        Button { emo = "" } label: { cell(Text("无").font(.headline).foregroundStyle(.secondary), "不要", emo.isEmpty) }
+                            .buttonStyle(.plain)
+                        ForEach(Badges.all) { b in
+                            Button { emo = b.id; Haptic.tap() } label: { cell(BadgeView(id: b.id, size: 26), b.label, emo == b.id) }
+                                .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.vertical, 6)
+                }
+            }
+            .navigationTitle("首页标题").navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("完成") {
+                        brandTitle = String(t.trimmingCharacters(in: .whitespaces).prefix(16)); brandEmo = emo; dismiss()
+                    }.bold()
+                }
+            }
+            .onAppear { t = brandTitle; emo = brandEmo }
+        }
+    }
+
+    private func cell<V: View>(_ v: V, _ label: String, _ on: Bool) -> some View {
+        VStack(spacing: 4) {
+            v.frame(height: 32)
+            Text(label).font(.caption2).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, minHeight: 64)
+        .background(RoundedRectangle(cornerRadius: 12).fill(on ? Brand.pink.opacity(0.15) : Color(.tertiarySystemFill)))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(on ? Brand.pink : .clear, lineWidth: 2))
     }
 }

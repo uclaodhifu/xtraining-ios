@@ -10,6 +10,7 @@ final class Store: ObservableObject {
     @Published var doneDays: [String] = [] { didSet { save(doneDays, "doneDays") } }
     @Published var cycle = Cycle() { didSet { save(cycle, "cycle") } }
     @Published var liftCharts: [String: [String]] = [:] { didSet { save(liftCharts, "liftCharts") } }
+    @Published var follow: [String] = [] { didSet { save(follow, "follow") } }
 
     private let ud = UserDefaults.standard
 
@@ -21,6 +22,7 @@ final class Store: ObservableObject {
         doneDays = load("doneDays") ?? []
         cycle = load("cycle") ?? Cycle()
         liftCharts = load("liftCharts") ?? [:]
+        follow = load("follow") ?? []
     }
 
     private func save<T: Encodable>(_ v: T, _ key: String) {
@@ -102,6 +104,12 @@ final class Store: ObservableObject {
     }
     func lastMeal(_ meal: String) -> (String, Meal)? {
         food.keys.filter { $0 < Day.today && !(food[$0]?[meal]?.t.isEmpty ?? true) }.max().flatMap { d in food[d]?[meal].map { (d, $0) } }
+    }
+
+    // MARK: 追赛
+    func toggleFollow(_ e: Race) {
+        if follow.contains(e.id) { follow.removeAll { $0 == e.id }; Reminders.cancel(e) }
+        else { follow.append(e.id); Reminders.schedule(e) }
     }
 
     // MARK: 从网页版备份导入

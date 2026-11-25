@@ -6,6 +6,7 @@ struct MeView: View {
     @EnvironmentObject var store: Store
     @AppStorage("theme") private var theme = "system"
     @AppStorage("brandTitle") private var brandTitle = ""
+    @AppStorage("skin") private var skin = "ins"
     @State private var importing = false
     @State private var message: String? = nil
 
@@ -16,7 +17,7 @@ struct MeView: View {
                     HStack(spacing: 14) {
                         ZStack {
                             Circle().fill(Brand.gradient).frame(width: 60, height: 60)
-                            Text("X").font(.system(size: 30, weight: .black)).italic().foregroundStyle(.white)
+                            Text("X").font(.system(size: 30, weight: .black)).italic().foregroundStyle(Brand.ink)
                         }
                         VStack(alignment: .leading, spacing: 4) {
                             Text(brandTitle.isEmpty ? "X Training" : brandTitle).font(.title3.bold())
@@ -25,6 +26,25 @@ struct MeView: View {
                     }
                     .padding(.vertical, 6)
                 }
+                Section("主题配色") {
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
+                        ForEach(Skin.allCases) { s in
+                            Button { withAnimation(.snappy) { skin = s.rawValue }; Haptic.tap() } label: {
+                                VStack(spacing: 6) {
+                                    Circle().fill(s.swatch).frame(width: 40, height: 40)
+                                        .overlay(Circle().strokeBorder(Color.primary.opacity(0.15)))
+                                    Text(s.name).font(.caption.bold())
+                                }
+                                .frame(maxWidth: .infinity).padding(.vertical, 10)
+                                .background(RoundedRectangle(cornerRadius: 14).fill(Color(.tertiarySystemFill)))
+                                .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(skin == s.rawValue ? s.accent : .clear, lineWidth: 2))
+                                .scaleEffect(skin == s.rawValue ? 1.04 : 1)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
                 Section("外观") {
                     Picker("白天 / 夜间", selection: $theme) {
                         Text("跟随系统").tag("system")
@@ -32,7 +52,6 @@ struct MeView: View {
                         Text("夜间").tag("dark")
                     }
                     .pickerStyle(.segmented)
-                    TextField("首页标题", text: $brandTitle, prompt: Text("X Training"))
                 }
                 Section {
                     Button { importing = true } label: { Label("导入网页版备份", systemImage: "square.and.arrow.down") }

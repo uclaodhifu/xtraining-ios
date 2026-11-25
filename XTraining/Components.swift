@@ -48,7 +48,7 @@ struct BigButton: View {
         Button(action: action) {
             Text(title).font(.headline)
                 .frame(maxWidth: .infinity, minHeight: 50)
-                .foregroundStyle(gradient ? Color.white : Color.primary)
+                .foregroundStyle(gradient ? Brand.ink : Color.primary)
                 .background {
                     if gradient { RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Brand.gradient) }
                     else { RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color(.tertiarySystemFill)) }
@@ -64,6 +64,8 @@ struct StatTile: View {
     var body: some View {
         VStack(spacing: 2) {
             Text(value).font(.title2.bold()).monospacedDigit()
+                .contentTransition(.numericText())
+                .animation(.snappy, value: value)
             Text(label).font(.caption).foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)

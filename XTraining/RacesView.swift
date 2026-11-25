@@ -1,0 +1,336 @@
+import SwiftUI
+import UserNotifications
+
+// MARK: 比赛
+struct Race: Codable, Identifiable, Hashable {
+    let id: String
+    var date: String?
+    var end: String?
+    var name: String
+    var en: String?
+    var city: String?
+    var country: String?
+    var org: String
+    var level: String
+    var divs: String?
+    var desc: String?
+    var dy: String?
+    var url: String?
+    var region: String?
+    var time: String?
+    var est: Bool?
+    var tz: Double?
+    var lt: String?
+
+    var isWorld: Bool { region == "world" }
+    // 开赛时刻：国内按北京时间；国外按当地时间 + 时区
+    var startAt: Date? {
+        guard let d = date else { return nil }
+        let p = d.split(separator: "-").compactMap { Int($0) }
+        guard p.count == 3 else { return nil }
+        var c = DateComponents(); c.year = p[0]; c.month = p[1]; c.day = p[2]
+        var cal = Calendar(identifier: .gregorian)
+        if let lt, let tz {
+            let hm = lt.split(separator: ":").compactMap { Int($0) }
+            c.hour = hm.first ?? 10; c.minute = hm.count > 1 ? hm[1] : 0
+            cal.timeZone = TimeZone(secondsFromGMT: Int(tz * 3600)) ?? .gmt
+        } else {
+            let hm = (time ?? "09:00").split(separator: ":").compactMap { Int($0) }
+            c.hour = hm.first ?? 9; c.minute = hm.count > 1 ? hm[1] : 0
+            cal.timeZone = TimeZone(identifier: "Asia/Shanghai") ?? .current
+        }
+        return cal.date(from: c)
+    }
+    var hasTime: Bool { time != nil || lt != nil }
+    var timeText: String {
+        guard let t = startAt else { return "日期待公布" }
+        let f = DateFormatter(); f.locale = Locale(identifier: "zh_CN")
+        f.timeZone = TimeZone(identifier: "Asia/Shanghai"); f.dateFormat = "M/d HH:mm"
+        var s = "北京 " + f.string(from: t)
+        if let lt { s += " · 当地 \(lt)" }
+        if est == true { s += " 预计" }
+        return s
+    }
+    var poster: (Color, Color, String) {
+        if isWorld, let c = country, let l = Race.land[c] { return l }
+        return Race.posters[org] ?? (Color(hex: 0x2c2c2e), Color(hex: 0xc41e3a), "PRO")
+    }
+    static let posters: [String: (Color, Color, String)] = [
+        "寰际": (Color(hex: 0xff9f0a), Color(hex: 0xd70015), "HUANJI"),
+        "环球": (Color(hex: 0x0a84ff), Color(hex: 0x30d0ff), "GLOBAL"),
+        "MEGA": (Color(hex: 0xbf5af2), Color(hex: 0xff2d92), "MEGA"),
+        "奥赛": (Color(hex: 0x1c1c1e), Color(hex: 0xa2845e), "OLYMPIA"),
+        "阿诺德": (Color(hex: 0x8e0000), Color(hex: 0xff6b00), "ARNOLD"),
+        "IFBB": (Color(hex: 0x2c2c2e), Color(hex: 0xc41e3a), "IFBB PRO"),
+    ]
+    // 按国家配色（只用颜色，不用官方图片）
+    static let land: [String: (Color, Color, String)] = [
+        "美国": (Color(hex: 0x0a3161), Color(hex: 0xb31942), "USA"), "科威特": (Color(hex: 0x007a3d), Color(hex: 0xce1126), "KUWAIT"),
+        "罗马尼亚": (Color(hex: 0x002b7f), Color(hex: 0xfcd116), "ROMANIA"), "巴西": (Color(hex: 0x009c3b), Color(hex: 0xffdf00), "BRASIL"),
+        "西班牙": (Color(hex: 0xaa151b), Color(hex: 0xf1bf00), "ESPAÑA"), "葡萄牙": (Color(hex: 0x006600), Color(hex: 0xff0000), "PORTUGAL"),
+        "印度": (Color(hex: 0xff9933), Color(hex: 0x138808), "INDIA"), "阿根廷": (Color(hex: 0x74acdf), Color(hex: 0x3a6ea5), "ARGENTINA"),
+        "南非": (Color(hex: 0x007749), Color(hex: 0xffb81c), "SOUTH AFRICA"), "奥地利": (Color(hex: 0xc8102e), Color(hex: 0x7a0019), "AUSTRIA"),
+        "新西兰": (Color(hex: 0x00247d), Color(hex: 0xcc142b), "NEW ZEALAND"), "沙特阿拉伯": (Color(hex: 0x006c35), Color(hex: 0x0b3d1f), "SAUDI"),
+        "泰国": (Color(hex: 0x2d2a4a), Color(hex: 0xa51931), "THAILAND"), "中国台湾": (Color(hex: 0x0a84ff), Color(hex: 0x5e5ce6), "TAIWAN"),
+    ]
+    static let all: [Race] = (try? JSONDecoder().decode([Race].self, from: Data(eventsJSON.utf8))) ?? []
+    // 还没结束的比赛，按日期排
+    static func upcoming(_ region: String? = nil) -> [Race] {
+        all.filter { e in (e.date == nil || (e.end ?? e.date!) >= Day.today) && (region == nil || (e.region ?? "cn") == region) }
+            .sorted { ($0.date ?? "9") < ($1.date ?? "9") }
+    }
+}
+
+// MARK: 提醒（开赛前 30 分钟 + 开赛时）
+enum Reminders {
+    static func schedule(_ e: Race) {
+        guard let t = e.startAt else { return }
+        let c = UNUserNotificationCenter.current()
+        c.requestAuthorization(options: [.alert, .sound, .badge]) { ok, _ in
+            guard ok else { return }
+            let items: [(String, Date, String)] = e.hasTime
+                ? [("0", t.addingTimeInterval(-1800), "30 分钟后开赛"), ("1", t, "开赛了")]
+                : [("1", t, "今天比赛")]
+            for (k, when, body) in items where when > Date() {
+                let n = UNMutableNotificationContent()
+                n.title = e.name; n.body = "\(body) · \(e.city ?? "")"; n.sound = .default
+                let comps = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: when)
+                c.add(UNNotificationRequest(identifier: "race-\(e.id)-\(k)", content: n,
+                                            trigger: UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)))
+            }
+        }
+    }
+    static func cancel(_ e: Race) {
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["race-\(e.id)-0", "race-\(e.id)-1"])
+    }
+}
+
+// MARK: 追赛页：国内 / 全球职业赛 / 我追的，左右滑动切换
+struct RacesView: View {
+    @State private var tab = 0
+    private let tabs = ["国内", "全球职业赛", "我追的"]
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                Picker("", selection: $tab.animation(.snappy)) {
+                    ForEach(tabs.indices, id: \.self) { Text(tabs[$0]).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, 16).padding(.bottom, 8)
+                TabView(selection: $tab) {
+                    RaceList(region: "cn").tag(0)
+                    RaceList(region: "world").tag(1)
+                    RaceList(onlyFollowed: true).tag(2)
+                }
+                .tabViewStyle(.page(indexDisplayMode: .never))
+            }
+            .background(Color(.systemGroupedBackground))
+            .navigationTitle("追赛")
+        }
+    }
+}
+
+struct RaceList: View {
+    @EnvironmentObject var store: Store
+    var region: String? = nil
+    var onlyFollowed = false
+    @State private var open: String? = nil
+
+    private var list: [Race] {
+        Race.upcoming(onlyFollowed ? nil : region).filter { !onlyFollowed || store.follow.contains($0.id) }
+    }
+
+    var body: some View {
+        let items = list
+        let dates = uniqueDates(items)
+        ScrollViewReader { proxy in
+            ScrollView {
+                if items.isEmpty {
+                    VStack(spacing: 10) {
+                        Image(systemName: "trophy").font(.system(size: 40)).foregroundStyle(Brand.gradient)
+                            .symbolEffect(.bounce, value: onlyFollowed)
+                        Text(onlyFollowed ? "还没追比赛" : "最近没有比赛").font(.headline)
+                        if onlyFollowed {
+                            Text("在“国内”或“全球职业赛”里点「追赛」，开赛前 30 分钟会提醒你").font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                        }
+                    }
+                    .frame(maxWidth: .infinity).padding(.vertical, 60).padding(.horizontal, 30)
+                } else {
+                    // 顶部一排比赛日期，点了跳过去
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(dates, id: \.self) { d in
+                                Button { withAnimation { proxy.scrollTo(d, anchor: .top) } } label: {
+                                    VStack(spacing: 2) {
+                                        Text(weekday(d)).font(.caption2).foregroundStyle(.secondary)
+                                        Text(md(d)).font(.subheadline.bold())
+                                    }
+                                    .padding(.horizontal, 12).padding(.vertical, 8)
+                                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                    }
+                    .padding(.bottom, 6)
+                    LazyVStack(alignment: .leading, spacing: 10) {
+                        ForEach(groups(items), id: \.0) { k, rs in
+                            HStack {
+                                Text(head(k)).font(.headline)
+                                Spacer()
+                                Text(left(k)).font(.caption.bold()).foregroundStyle(Brand.pink)
+                            }
+                            .padding(.top, 8)
+                            .id(k)
+                            ForEach(rs) { e in
+                                RaceCard(e: e, open: open == e.id) {
+                                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) { open = open == e.id ? nil : e.id }
+                                }
+                                .scrollTransition { c, phase in
+                                    c.opacity(phase.isIdentity ? 1 : 0.5).scaleEffect(phase.isIdentity ? 1 : 0.94)
+                                }
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 16).padding(.bottom, 30)
+                    .frame(maxWidth: 720).frame(maxWidth: .infinity)
+                }
+            }
+        }
+    }
+
+    private func uniqueDates(_ items: [Race]) -> [String] {
+        var seen = Set<String>(), out: [String] = []
+        for e in items { if let d = e.date, seen.insert(d).inserted { out.append(d) } }
+        return out
+    }
+    private func groups(_ items: [Race]) -> [(String, [Race])] {
+        var out: [(String, [Race])] = []
+        for e in items {
+            let k = e.date ?? "tbd"
+            if let i = out.firstIndex(where: { $0.0 == k }) { out[i].1.append(e) } else { out.append((k, [e])) }
+        }
+        return out
+    }
+    private func weekday(_ d: String) -> String {
+        ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][Calendar.current.component(.weekday, from: Day.date(d)) - 1]
+    }
+    private func md(_ d: String) -> String {
+        let p = d.split(separator: "-"); return p.count == 3 ? "\(Int(p[1]) ?? 0)/\(Int(p[2]) ?? 0)" : d
+    }
+    private func head(_ k: String) -> String {
+        if k == "tbd" { return "日期待公布" }
+        let n = Day.between(Day.today, k)
+        return (n == 0 ? "今天 · " : n == 1 ? "明天 · " : "") + "\(weekday(k)) \(md(k))"
+    }
+    private func left(_ k: String) -> String {
+        if k == "tbd" { return "" }
+        let n = Day.between(Day.today, k)
+        return n <= 0 ? "进行中" : "还有 \(n) 天"
+    }
+}
+
+struct RaceCard: View {
+    @EnvironmentObject var store: Store
+    @Environment(\.openURL) private var openURL
+    let e: Race
+    let open: Bool
+    let onTap: () -> Void
+
+    var body: some View {
+        let followed = store.follow.contains(e.id)
+        let p = e.poster
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 12) {
+                // 海报：只用颜色和文字
+                ZStack(alignment: .bottomLeading) {
+                    LinearGradient(colors: [p.0, p.1], startPoint: .topLeading, endPoint: .bottomTrailing)
+                    Text(p.2).font(.system(size: 13, weight: .black)).italic().foregroundStyle(.white)
+                        .lineLimit(2).minimumScaleFactor(0.6).padding(7)
+                }
+                .frame(width: 72, height: 96)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(e.name).font(.headline).lineLimit(2)
+                    Text([e.city, e.level].compactMap { $0 }.joined(separator: " · ")).font(.caption).foregroundStyle(.secondary)
+                    if let d = e.divs { Text(d).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
+                    Text(e.timeText).font(.caption2.bold()).foregroundStyle(Brand.pink)
+                }
+                Spacer(minLength: 0)
+            }
+            if open, let d = e.desc {
+                Text(d).font(.subheadline).foregroundStyle(.secondary)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+            HStack(spacing: 8) {
+                Button {
+                    store.toggleFollow(e)
+                    Haptic.tap(.medium)
+                } label: {
+                    Label(followed ? "已追" : "追赛", systemImage: followed ? "bell.fill" : "bell")
+                        .symbolEffect(.bounce, value: followed)
+                        .font(.subheadline.bold())
+                        .frame(maxWidth: .infinity, minHeight: 36)
+                        .foregroundStyle(followed ? Brand.ink : Color.primary)
+                        .background {
+                            if followed { Capsule().fill(Brand.gradient) } else { Capsule().fill(Color(.tertiarySystemFill)) }
+                        }
+                }
+                .buttonStyle(.plain)
+                if e.isWorld {
+                    if let u = e.url, let url = URL(string: u) {
+                        Button { openURL(url) } label: {
+                            Label("官网", systemImage: "globe").font(.subheadline.bold()).frame(maxWidth: .infinity, minHeight: 36)
+                                .foregroundStyle(.white).background(Capsule().fill(Color.blue))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                } else {
+                    Button { douyin() } label: {
+                        Label("抖音看", systemImage: "play.rectangle.fill").font(.subheadline.bold()).frame(maxWidth: .infinity, minHeight: 36)
+                            .foregroundStyle(.white).background(Capsule().fill(Color.black))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .card()
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onTap)
+    }
+
+    private func douyin() {
+        let kw = e.dy ?? e.name
+        let q = kw.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        guard let app = URL(string: "snssdk1128://search?keyword=\(q)") else { return }
+        openURL(app) { ok in
+            if !ok, let web = URL(string: "https://www.douyin.com/search/\(q)") { openURL(web) }
+        }
+    }
+}
+
+// 首页顶部：36 小时内开赛的提醒条
+struct RaceAlert: View {
+    @EnvironmentObject var store: Store
+    var body: some View {
+        let soon = Race.upcoming().filter { e in
+            guard store.follow.contains(e.id), let t = e.startAt else { return false }
+            let h = t.timeIntervalSinceNow / 3600
+            return h > -6 && h < 36
+        }
+        if let e = soon.first {
+            HStack(spacing: 10) {
+                Image(systemName: "bell.badge.fill").foregroundStyle(Brand.gradient)
+                    .symbolEffect(.bounce, options: .repeat(3), value: e.id)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(e.name).font(.subheadline.bold())
+                    Text(e.timeText).font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+            .card()
+            .transition(.move(edge: .top).combined(with: .opacity))
+        }
+    }
+}
