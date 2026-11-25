@@ -53,6 +53,7 @@ jobs:
           git tag -f build-${{ github.run_number }}
           git push -f origin build-${{ github.run_number }} || true
       - name: 发布到 Releases（方便直接下载）
+        continue-on-error: true
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
@@ -60,3 +61,17 @@ jobs:
           body: 未签名安装包，用 Sideloadly 或 爱思助手 自签安装。
           files: XTraining.ipa
           make_latest: true
+      - name: 确保版本已公开（GitHub 偶尔停在草稿）
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          T=build-${{ github.run_number }}
+          for i in 1 2 3 4 5; do
+            gh release edit "$T" -R "$GITHUB_REPOSITORY" --draft=false --latest && break
+            sleep 15
+          done
+          gh release view "$T" -R "$GITHUB_REPOSITORY" --json isDraft,assets --jq '{isDraft, assets: [.assets[].name]}'
+          # 清掉以前失败留下的草稿
+          gh release list -R "$GITHUB_REPOSITORY" --limit 30 --json tagName,isDraft --jq '.[] | select(.isDraft) | .tagName' | while read t; do
+            [ "$t" != "$T" ] && gh release delete "$t" -R "$GITHUB_REPOSITORY" -y || true
+          done
