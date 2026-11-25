@@ -226,7 +226,7 @@ struct CreatorEditor: View {
                         Label("识别主页二维码截图", systemImage: "qrcode.viewfinder")
                     }
                     if !qrMsg.isEmpty { Text(qrMsg).font(.footnote).foregroundStyle(.secondary) }
-                } footer: { Text("会自动取出里面的链接。有链接点“抖音看”直接进主页；只填抖音号会打开抖音搜索。") }
+                } footer: { Text("会自动取出里面的链接。有链接点“抖音看”直接进主页；只填抖音号会打开抖音搜索。主页二维码：博主主页右上角“…”里找二维码，截图后点上面识别。") }
                 Section {
                     TextField("名字", text: $name)
                     TextField("备注，比如：练背、备赛", text: $note)
