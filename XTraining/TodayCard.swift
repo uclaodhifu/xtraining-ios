@@ -22,27 +22,31 @@ struct HeroBanner<Trailing: View>: View {
     }
 
     var body: some View {
-        ZStack(alignment: .bottomLeading) {
-            HeroBG.image(bg).resizable().scaledToFill()
-                .frame(maxWidth: .infinity, maxHeight: .infinity).clipped()
-            LinearGradient(colors: [.clear, .black.opacity(0.6)], startPoint: .center, endPoint: .bottom)
-            VStack(alignment: .leading, spacing: 6) {
-                Text(tag).font(.footnote.bold()).foregroundStyle(.white.opacity(0.8))
-                Text(title).font(.system(size: 36, weight: .heavy)).foregroundStyle(.white)
-                    .lineLimit(2).minimumScaleFactor(0.6)
-                Text(sub).font(.subheadline).foregroundStyle(.white.opacity(0.85)).lineLimit(2)
-                if let button {
-                    Button(action: action) {
-                        Label(button, systemImage: "play.fill").font(.headline).foregroundStyle(.black)
-                            .padding(.horizontal, 26).padding(.vertical, 12)
-                            .background(Capsule().fill(.white))
-                    }
-                    .buttonStyle(PressScale()).padding(.top, 6)
+        // 文字决定高度，背景图铺在后面并裁掉多余部分，避免压到下面的内容
+        VStack(alignment: .leading, spacing: 6) {
+            Text(tag).font(.footnote.bold()).foregroundStyle(.white.opacity(0.8))
+            Text(title).font(.system(size: 36, weight: .heavy)).foregroundStyle(.white)
+                .lineLimit(2).minimumScaleFactor(0.6)
+            Text(sub).font(.subheadline).foregroundStyle(.white.opacity(0.85)).lineLimit(2)
+            if let button {
+                Button(action: action) {
+                    Label(button, systemImage: "play.fill").font(.headline).foregroundStyle(.black)
+                        .lineLimit(1).minimumScaleFactor(0.7)
+                        .padding(.horizontal, 26).padding(.vertical, 12)
+                        .background(Capsule().fill(.white))
                 }
+                .buttonStyle(PressScale()).padding(.top, 6)
             }
-            .padding(20)
         }
-        .frame(height: button == nil ? 220 : 280)
+        .padding(.horizontal, 20).padding(.top, 64).padding(.bottom, 20)
+        .frame(maxWidth: .infinity, minHeight: button == nil ? 220 : 280, alignment: .bottomLeading)
+        .background {
+            ZStack {
+                HeroBG.image(bg).resizable().scaledToFill()
+                LinearGradient(colors: [.clear, .black.opacity(0.6)], startPoint: .center, endPoint: .bottom)
+            }
+        }
+        .clipped()
         .overlay(alignment: .topTrailing) {
             HStack(spacing: 8) {
                 trailing()
