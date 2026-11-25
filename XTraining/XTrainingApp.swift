@@ -12,6 +12,7 @@ struct XTrainingApp: App {
                 .environmentObject(store)
                 .preferredColorScheme(theme == "light" ? .light : theme == "dark" ? .dark : nil)
                 .tint(Brand.pink)
+                .fontDesign(.rounded)
                 .id(skin)
         }
     }

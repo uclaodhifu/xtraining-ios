@@ -1,17 +1,42 @@
 import SwiftUI
 
-// 卡片：圆角 + 毛玻璃，白天/夜间都好看
+// 卡片：iOS 26 以上用液态玻璃，以下用毛玻璃
 struct CardStyle: ViewModifier {
     func body(content: Content) -> some View {
-        content
+        let shape = RoundedRectangle(cornerRadius: 24, style: .continuous)
+        let base = content
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(.white.opacity(0.15)))
+        if #available(iOS 26.0, *) {
+            base.glassEffect(.regular, in: shape)
+        } else {
+            base
+                .background(.regularMaterial, in: shape)
+                .overlay(shape.strokeBorder(LinearGradient(colors: [.white.opacity(0.35), .white.opacity(0.05)], startPoint: .top, endPoint: .bottom), lineWidth: 1))
+                .shadow(color: .black.opacity(0.06), radius: 12, y: 6)
+        }
     }
 }
+
+// 出现时从下面浮上来，按顺序一个个出现
+struct Rise: ViewModifier {
+    let index: Int
+    @State private var shown = false
+    func body(content: Content) -> some View {
+        content
+            .opacity(shown ? 1 : 0)
+            .offset(y: shown ? 0 : 18)
+            .blur(radius: shown ? 0 : 6)
+            .scaleEffect(shown ? 1 : 0.97, anchor: .top)
+            .onAppear {
+                withAnimation(.spring(response: 0.55, dampingFraction: 0.82).delay(Double(index) * 0.06)) { shown = true }
+            }
+    }
+}
+
 extension View {
     func card() -> some View { modifier(CardStyle()) }
+    func rise(_ i: Int) -> some View { modifier(Rise(index: i)) }
 }
 
 // 部位按钮（可多选）
@@ -39,22 +64,42 @@ struct PartChips: View {
     }
 }
 
-// 大按钮
+// 大按钮：渐变 + 一道光慢慢扫过，按下去会缩一下
 struct BigButton: View {
     let title: String
     var gradient = true
     let action: () -> Void
+    @State private var sweep = false
     var body: some View {
         Button(action: action) {
             Text(title).font(.headline)
-                .frame(maxWidth: .infinity, minHeight: 50)
+                .frame(maxWidth: .infinity, minHeight: 52)
                 .foregroundStyle(gradient ? Brand.ink : Color.primary)
                 .background {
-                    if gradient { RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Brand.gradient) }
-                    else { RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color(.tertiarySystemFill)) }
+                    let shape = RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    if gradient {
+                        shape.fill(Brand.gradient)
+                            .overlay {
+                                GeometryReader { g in
+                                    LinearGradient(colors: [.clear, .white.opacity(0.35), .clear], startPoint: .leading, endPoint: .trailing)
+                                        .frame(width: g.size.width * 0.35)
+                                        .rotationEffect(.degrees(18))
+                                        .offset(x: sweep ? g.size.width * 1.2 : -g.size.width * 0.5)
+                                }
+                                .clipShape(shape)
+                                .allowsHitTesting(false)
+                            }
+                            .shadow(color: Brand.pink.opacity(0.3), radius: 10, y: 5)
+                    } else {
+                        shape.fill(Color(.tertiarySystemFill))
+                    }
                 }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressScale())
+        .onAppear {
+            guard gradient else { return }
+            withAnimation(.easeInOut(duration: 2.2).delay(0.6).repeatForever(autoreverses: false)) { sweep = true }
+        }
     }
 }
 
@@ -63,7 +108,7 @@ struct StatTile: View {
     let label: String
     var body: some View {
         VStack(spacing: 2) {
-            Text(value).font(.title2.bold()).monospacedDigit()
+            Text(value).font(.system(size: 24, weight: .heavy, design: .rounded)).monospacedDigit()
                 .contentTransition(.numericText())
                 .animation(.snappy, value: value)
             Text(label).font(.caption).foregroundStyle(.secondary)

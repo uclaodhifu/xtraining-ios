@@ -24,11 +24,11 @@ struct HomeView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 14) {
-                    header
-                    RaceAlert()
-                    planCard
-                    statsCard
-                    historySection
+                    header.rise(0)
+                    RaceAlert().rise(1)
+                    planCard.rise(2)
+                    statsCard.rise(3)
+                    historySection.rise(4)
                 }
                 .padding(.horizontal, 16)
                 .padding(.bottom, 24)
