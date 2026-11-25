@@ -121,7 +121,7 @@ struct RestBar: View {
                         Button { t.begin(p, exercise: exercise) } label: {
                             Text(p % 60 == 0 ? "\(p / 60)分" : "\(p / 60):\(String(format: "%02d", p % 60))")
                                 .font(.subheadline.bold()).padding(.horizontal, 12).padding(.vertical, 8)
-                                .foregroundStyle(p == t.preset ? Color.white : .primary)
+                                .foregroundStyle(p == t.preset ? Brand.ink : Color.primary)
                                 .background(p == t.preset ? AnyShapeStyle(Brand.gradient) : AnyShapeStyle(Color.primary.opacity(0.08)), in: Capsule())
                         }
                         .buttonStyle(PressScale())
