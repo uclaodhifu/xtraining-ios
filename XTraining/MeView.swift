@@ -28,6 +28,11 @@ struct MeView: View {
                     }
                 }
                 Section {
+                    NavigationLink { ExerciseLibView() } label: {
+                        Label("动作库 · 要领和练哪块肌肉", systemImage: "books.vertical.fill")
+                    }
+                }
+                Section {
                     ActivityCard()
                         .padding(.vertical, 6)
                 }

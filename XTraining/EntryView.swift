@@ -9,6 +9,7 @@ struct EntryView: View {
     @State private var confirmDelete = false
     @State private var showMore = false
     @State private var plateFor: String? = nil
+    @State private var infoFor: LibEx? = nil
 
     init(workout: Workout) { _workout = State(initialValue: workout) }
 
@@ -53,6 +54,7 @@ struct EntryView: View {
                 }
                 ToolbarItemGroup(placement: .keyboard) { Spacer(); Button("完成") { hideKeyboard() } }
             }
+            .sheet(item: $infoFor) { ExerciseInfoSheet(ex: $0) }
             .sheet(item: Binding(get: { plateFor.map(StrID.init) }, set: { plateFor = $0?.id })) { m in
                 PlateSettings(name: m.id).presentationDetents([.medium])
             }
@@ -134,6 +136,10 @@ struct EntryView: View {
                 Text("\(i + 1)").font(.caption.bold()).foregroundStyle(.white)
                     .frame(width: 22, height: 22).background(Circle().fill(color))
                 TextField("动作名", text: x.name).font(.subheadline.bold())
+                if let lib = ExerciseLib.find(name) {
+                    Button { infoFor = lib } label: { Image(systemName: "info.circle").foregroundStyle(.secondary) }
+                        .buttonStyle(.plain)
+                }
                 if t == .up || t == .down {
                     Image(systemName: t == .up ? "arrow.up.circle.fill" : "arrow.down.circle.fill")
                         .foregroundStyle(trendColor(t)).transition(.scale.combined(with: .opacity))
