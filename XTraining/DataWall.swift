@@ -77,7 +77,7 @@ struct WeightTile: View {
     }
 }
 
-// 本周训练容量（重量 × 次数），和上周比
+// 本周组数（力量训练），和上周同期比
 struct VolumeTile: View {
     @EnvironmentObject var store: Store
     var body: some View {
@@ -85,24 +85,23 @@ struct VolumeTile: View {
         let start = cal.dateInterval(of: .weekOfYear, for: Date())?.start ?? Date()
         let mon = Day.str(start), lastMon = Day.add(mon, -7)
         let elapsed = max(0, Day.between(mon, Day.today))
-        let this = store.workouts.filter { $0.date >= mon }.reduce(0) { $0 + $1.volume }
+        let this = store.workouts.filter { $0.date >= mon }.reduce(0) { $0 + $1.setCount }
         // 上周同一时间段，比较才公平
-        let prev = store.workouts.filter { $0.date >= lastMon && $0.date <= Day.add(lastMon, elapsed) }.reduce(0) { $0 + $1.volume }
-        // 每天的柱子
-        let days = (0..<7).map { i -> Double in
-            let d = Day.add(mon, i); return store.workouts.filter { $0.date == d }.reduce(0) { $0 + $1.volume }
+        let prev = store.workouts.filter { $0.date >= lastMon && $0.date <= Day.add(lastMon, elapsed) }.reduce(0) { $0 + $1.setCount }
+        let days = (0..<7).map { i -> Int in
+            let d = Day.add(mon, i); return store.workouts.filter { $0.date == d }.reduce(0) { $0 + $1.setCount }
         }
         let top = max(days.max() ?? 0, 1)
-        Tile(title: "本周训练容量", icon: "flame.fill", tint: .orange) {
+        Tile(title: "本周组数", icon: "flame.fill", tint: .orange) {
             HStack(alignment: .firstTextBaseline, spacing: 3) {
-                Text(this >= 10000 ? fmtNum((this / 100).rounded() / 10) : fmtNum(this))
-                    .font(.system(size: 26, weight: .heavy, design: .rounded)).monospacedDigit()
-                Text(this >= 10000 ? "吨" : "kg").font(.caption).foregroundStyle(.secondary)
+                Text("\(this)").font(.system(size: 26, weight: .heavy, design: .rounded)).monospacedDigit()
+                    .contentTransition(.numericText())
+                Text("组").font(.caption).foregroundStyle(.secondary)
                 Spacer()
                 if prev > 0 {
-                    let pct = Int(((this - prev) / prev * 100).rounded())
-                    Text((pct > 0 ? "+" : "") + "\(pct)%").font(.caption.bold()).monospacedDigit()
-                        .foregroundStyle(pct >= 0 ? Color.green : Color.red)
+                    let d = this - prev
+                    Text((d > 0 ? "+" : "") + "\(d)").font(.caption.bold()).monospacedDigit()
+                        .foregroundStyle(d >= 0 ? Color.green : Color.red)
                 }
             }
             HStack(alignment: .bottom, spacing: 4) {
@@ -110,11 +109,11 @@ struct VolumeTile: View {
                     let isToday = Day.add(mon, i) == Day.today
                     RoundedRectangle(cornerRadius: 3, style: .continuous)
                         .fill(isToday ? Color.orange : Color.orange.opacity(days[i] > 0 ? 0.45 : 0.12))
-                        .frame(height: max(4, 30 * days[i] / top))
+                        .frame(height: max(4, 30 * CGFloat(days[i]) / CGFloat(top)))
                 }
             }
             .frame(height: 30, alignment: .bottom)
-            Text("近 7 天 \(store.sets7) 组").font(.caption2).foregroundStyle(.secondary)
+            Text(prev > 0 ? "上周同期 \(prev) 组" : "近 7 天 \(store.sets7) 组").font(.caption2).foregroundStyle(.secondary)
         }
     }
 }
