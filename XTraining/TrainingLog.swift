@@ -29,6 +29,7 @@ struct TrainingLogTable: View {
     var maxRows = 5
     @State private var showAll = false
     var onOpen: (Workout) -> Void = { _ in }
+    var onExpand: (() -> Void)? = nil
 
     private var cols: [Workout] {
         store.workouts.filter { $0.parts.contains(part) && !$0.exercises(of: part).isEmpty }.sorted { $0.date < $1.date }
@@ -102,7 +103,12 @@ struct TrainingLogTable: View {
                     legend("arrow.down", .red, "退步")
                     legend("equal", .primary, "持平")
                     Spacer()
-                    if all.count > maxRows {
+                    if let onExpand {
+                        Button { onExpand() } label: {
+                            Label(all.count > maxRows ? "展开全部 \(all.count) 个" : "展开横屏看", systemImage: "arrow.up.left.and.arrow.down.right")
+                        }
+                        .font(.caption.bold()).tint(Brand.pink)
+                    } else if all.count > maxRows {
                         Button(showAll ? "收起" : "查看全部 \(all.count) 个") { withAnimation(.snappy) { showAll.toggle() } }
                             .font(.caption.bold()).tint(Brand.pink)
                     }
@@ -172,7 +178,7 @@ struct HomeLog: View {
                 ForEach(Parts.strength, id: \.self) { Text($0).tag($0) }
             }
             .pickerStyle(.segmented)
-            TrainingLogTable(part: p, onOpen: onOpen)
+            TrainingLogTable(part: p, onOpen: onOpen, onExpand: { Haptic.tap(); full = true })
                 .id(p)
                 .transition(.opacity)
         }
@@ -181,29 +187,43 @@ struct HomeLog: View {
     }
 }
 
-// 训练日志全屏：自动转横屏，显示全部动作
+// 训练日志全屏：自动转横屏，按月显示每一天
 struct LogFullScreen: View {
     @EnvironmentObject var store: Store
     @Environment(\.dismiss) private var dismiss
     @State var part: String
+    @State private var month = String(Day.today.prefix(7))
     @State private var editing: Workout? = nil
+
+    private func shift(_ n: Int) {
+        let d = Calendar.current.date(byAdding: .month, value: n, to: Day.date(month + "-01")) ?? Date()
+        withAnimation(.snappy) { month = String(Day.str(d).prefix(7)) }
+    }
 
     var body: some View {
         NavigationStack {
-            ScrollView([.vertical]) {
-                TrainingLogTable(part: part, maxRows: 999) { w in editing = w }
-                    .id(part)
+            ScrollView(.vertical) {
+                MonthLogTable(part: part, month: month) { w in editing = w }
+                    .id(part + month)
+                    .card()
                     .padding(.horizontal, 16).padding(.bottom, 20)
             }
             .background(Color(.systemGroupedBackground))
-            .navigationTitle("训练日志 · \(part)")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    HStack(spacing: 4) {
+                        Button { shift(-1) } label: { Image(systemName: "chevron.left") }
+                        Text(monthText).font(.headline).monospacedDigit().frame(minWidth: 96)
+                        Button { shift(1) } label: { Image(systemName: "chevron.right") }
+                            .disabled(month >= String(Day.today.prefix(7)))
+                    }
+                }
                 ToolbarItem(placement: .principal) {
                     Picker("部位", selection: $part.animation(.snappy)) {
                         ForEach(Parts.strength, id: \.self) { Text($0).tag($0) }
                     }
-                    .pickerStyle(.segmented).frame(width: 300)
+                    .pickerStyle(.segmented).frame(width: 280)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { dismiss() } label: { Image(systemName: "xmark.circle.fill").font(.title3).foregroundStyle(.secondary) }
@@ -214,55 +234,8 @@ struct LogFullScreen: View {
         .onAppear { Orientation.set(.landscape) }
         .onDisappear { Orientation.set(.portrait) }
     }
-}
 
-
-// 底栏“日志”页：完整训练日志，可以一键转横屏
-struct LogPage: View {
-    @EnvironmentObject var store: Store
-    @State private var part = ""
-    @State private var editing: Workout? = nil
-    @State private var landscape = false
-
-    private var defaultPart: String { store.sorted.first?.parts.first { $0 != "有氧" } ?? "胸" }
-
-    var body: some View {
-        let p = part.isEmpty ? defaultPart : part
-        NavigationStack {
-            VStack(spacing: 0) {
-                Picker("部位", selection: Binding(get: { p }, set: { v in withAnimation(.snappy) { part = v } })) {
-                    ForEach(Parts.strength, id: \.self) { Text($0).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .padding(.horizontal, 16).padding(.bottom, 8)
-                TabView(selection: Binding(get: { p }, set: { part = $0 })) {
-                    ForEach(Parts.strength, id: \.self) { x in
-                        ScrollView {
-                            TrainingLogTable(part: x, maxRows: 999) { w in editing = w }
-                                .card()
-                                .padding(.horizontal, 16).padding(.bottom, 24)
-                                .frame(maxWidth: 1100).frame(maxWidth: .infinity)
-                        }
-                        .tag(x)
-                    }
-                }
-                .tabViewStyle(.page(indexDisplayMode: .never))
-            }
-            .background(Color(.systemGroupedBackground))
-            .navigationTitle("训练日志")
-            .navigationBarTitleDisplayMode(landscape ? .inline : .large)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        Haptic.tap(); landscape.toggle()
-                        Orientation.set(landscape ? .landscape : .portrait)
-                    } label: {
-                        Label(landscape ? "竖屏" : "横屏", systemImage: landscape ? "rectangle.portrait.rotate" : "rectangle.landscape.rotate")
-                    }
-                }
-            }
-            .sheet(item: $editing) { w in EntryView(workout: w) }
-            .onDisappear { if landscape { landscape = false; Orientation.set(.portrait) } }
-        }
+    private var monthText: String {
+        let p = month.split(separator: "-"); return p.count == 2 ? "\(p[0])年\(Int(p[1]) ?? 0)月" : month
     }
 }

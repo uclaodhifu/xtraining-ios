@@ -9,8 +9,6 @@ struct RootView: View {
         let tv = TabView(selection: $tab) {
             HomeView()
                 .tabItem { Label("首页", systemImage: "house.fill") }.tag(0)
-            LogPage()
-                .tabItem { Label("日志", systemImage: "tablecells") }.tag(4)
             RacesView()
                 .tabItem { Label("追赛", systemImage: "trophy.fill") }.tag(1)
             ProgressPage()
