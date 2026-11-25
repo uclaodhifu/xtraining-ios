@@ -56,6 +56,7 @@ struct HomeView: View {
             }
             .buttonStyle(.plain)
             Spacer()
+            AvatarView(size: 38)
             Button { Haptic.tap(.medium); editing = newWorkout(chosen.wrappedValue) } label: {
                 Image(systemName: "plus").font(.title3.bold()).foregroundStyle(Brand.ink)
                     .frame(width: 44, height: 44)

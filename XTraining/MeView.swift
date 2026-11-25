@@ -9,22 +9,23 @@ struct MeView: View {
     @AppStorage("skin") private var skin = "ins"
     @State private var importing = false
     @State private var message: String? = nil
+    @State private var syncing = false
 
     var body: some View {
         NavigationStack {
             Form {
                 Section {
                     HStack(spacing: 14) {
-                        ZStack {
-                            Circle().fill(Brand.gradient).frame(width: 60, height: 60)
-                            Text("X").font(.system(size: 30, weight: .black)).italic().foregroundStyle(Brand.ink)
-                        }
+                        AvatarPicker()
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(brandTitle.isEmpty ? "X Training" : brandTitle).font(.title3.bold())
+                            TextField("你的昵称", text: $store.nickname).font(.title3.bold())
                             Text("\(store.workouts.count) 次训练 · 连续 \(store.streak) 天").font(.subheadline).foregroundStyle(.secondary)
                         }
                     }
                     .padding(.vertical, 6)
+                    if store.avatar != nil {
+                        Button("删掉头像", role: .destructive) { withAnimation { store.avatar = nil } }
+                    }
                 }
                 Section("主题配色") {
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
@@ -54,18 +55,21 @@ struct MeView: View {
                     .pickerStyle(.segmented)
                 }
                 Section {
-                    Button { importing = true } label: { Label("导入网页版备份", systemImage: "square.and.arrow.down") }
+                    Button { importing = true } label: { Label("从文件导入备份", systemImage: "doc.badge.plus") }
+                    Button { syncing = true } label: { Label("用同步码找回（含头像）", systemImage: "arrow.triangle.2.circlepath") }
+                    Button { pasteImport() } label: { Label("粘贴备份内容", systemImage: "doc.on.clipboard") }
                     ShareLink(item: BackupFile(data: store.exportBackup()), preview: SharePreview("X Training 备份.json")) {
                         Label("导出备份", systemImage: "square.and.arrow.up")
                     }
                 } header: { Text("数据") } footer: {
-                    Text("在网页版“我 → 导出备份”存下 .json 文件，再在这里导入，训练和体重都会搬过来。数据只存在这台设备上。")
+                    Text("推荐「用同步码找回」：在网页版「我 → 同步码」点复制，回来填上网站密码就行，训练记录和头像都会搬过来。体重记录要用导出的 .json 文件导入。重复导入不会重复添加。")
                 }
                 Section {
                     LabeledContent("版本", value: "测试版 1.0")
                 }
             }
             .navigationTitle("我")
+            .sheet(isPresented: $syncing) { SyncRestoreView() }
             .fileImporter(isPresented: $importing, allowedContentTypes: [.json, .plainText, .data]) { result in
                 switch result {
                 case .success(let url):
@@ -73,11 +77,9 @@ struct MeView: View {
                     defer { if ok { url.stopAccessingSecurityScopedResource() } }
                     do {
                         let data = try Data(contentsOf: url)
-                        let n = try store.importBackup(data)
-                        message = "导入好了，新加了 \(n) 次训练"
-                        Haptic.success()
+                        run(data)
                     } catch {
-                        message = "这个文件读不了，请选网页版导出的备份 .json"
+                        message = "文件打不开：\(error.localizedDescription)\n如果文件在 iCloud 里，先在「文件」App 里点一下让它下载好再导入。"
                     }
                 case .failure:
                     message = "没能打开文件"
@@ -87,6 +89,27 @@ struct MeView: View {
                 Button("好") { message = nil }
             }
         }
+    }
+}
+
+extension MeView {
+    func run(_ data: Data) {
+        do {
+            let (n, w) = try store.importBackup(data)
+            message = "导入好了：新加 \(n) 次训练、\(w) 条体重"
+            Haptic.success()
+        } catch {
+            message = "导入失败：\(error.localizedDescription)"
+        }
+    }
+    func pasteImport() {
+        guard let s = UIPasteboard.general.string, !s.isEmpty else {
+            message = "剪贴板是空的。先把备份 .json 文件的内容复制下来，再回来点这里。"
+            return
+        }
+        // 复制的是同步码：走同步码找回
+        if s.count < 60, s.filter({ $0.isLetter || $0.isNumber }).count >= 16, !s.contains("{") { syncing = true; return }
+        run(Data(s.utf8))
     }
 }
 

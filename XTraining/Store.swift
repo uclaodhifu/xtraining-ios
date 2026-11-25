@@ -11,6 +11,8 @@ final class Store: ObservableObject {
     @Published var cycle = Cycle() { didSet { save(cycle, "cycle") } }
     @Published var liftCharts: [String: [String]] = [:] { didSet { save(liftCharts, "liftCharts") } }
     @Published var follow: [String] = [] { didSet { save(follow, "follow") } }
+    @Published var avatar: Data? = nil { didSet { ud.set(avatar, forKey: "xt.avatar") } }
+    @Published var nickname: String = "" { didSet { ud.set(nickname, forKey: "xt.nickname") } }
 
     private let ud = UserDefaults.standard
 
@@ -23,6 +25,8 @@ final class Store: ObservableObject {
         cycle = load("cycle") ?? Cycle()
         liftCharts = load("liftCharts") ?? [:]
         follow = load("follow") ?? []
+        avatar = ud.data(forKey: "xt.avatar")
+        nickname = ud.string(forKey: "xt.nickname") ?? ""
     }
 
     private func save<T: Encodable>(_ v: T, _ key: String) {
@@ -113,16 +117,54 @@ final class Store: ObservableObject {
     }
 
     // MARK: 从网页版备份导入
-    func importBackup(_ data: Data) throws -> Int {
-        let b = try JSONDecoder().decode(Backup.self, from: data)
+    // 宽松读取：整个备份 / 只有训练数组 都行；某一条读不了就跳过，不让整份失败
+    func importBackup(_ raw: Data) throws -> (Int, Int) {
+        var data = raw
+        // 去掉 UTF-8 BOM 和前后的空白
+        if data.starts(with: [0xEF, 0xBB, 0xBF]) { data = data.dropFirst(3) }
+        guard let text = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              let start = text.firstIndex(where: { $0 == "{" || $0 == "[" }) else { throw ImportError.notJSON }
+        let json = try JSONSerialization.jsonObject(with: Data(text[start...].utf8))
+        var entries: [Any] = [], weightsRaw: [Any] = []
+        if let arr = json as? [Any] { entries = arr }
+        else if let obj = json as? [String: Any] {
+            entries = obj["entries"] as? [Any] ?? []
+            weightsRaw = obj["weights"] as? [Any] ?? []
+        }
+        guard !entries.isEmpty || !weightsRaw.isEmpty else { throw ImportError.empty }
+        let dec = JSONDecoder()
+        func one<T: Decodable>(_ x: Any, _ t: T.Type) -> T? {
+            guard JSONSerialization.isValidJSONObject(x), let d = try? JSONSerialization.data(withJSONObject: x) else { return nil }
+            return try? dec.decode(T.self, from: d)
+        }
         let have = Set(workouts.map(\.id))
-        let fresh = (b.entries ?? []).filter { !have.contains($0.id) }
+        var fresh: [Workout] = []
+        for e in entries {
+            guard var w = one(e, Workout.self) else { continue }
+            // 备忘录导入的“体重”动作搬到体重记录
+            for x in w.exercises where ["体重", "称重", "晨重"].contains(x.name.replacingOccurrences(of: " ", with: "")) {
+                if let v = x.sets.compactMap({ Double($0.w) ?? Double($0.r) }).first, v > 20, v < 300 { logWeight(v, on: w.date) }
+            }
+            w.exercises.removeAll { ["体重", "称重", "晨重"].contains($0.name.replacingOccurrences(of: " ", with: "")) }
+            if !have.contains(w.id) && !fresh.contains(where: { $0.id == w.id }) { fresh.append(w) }
+        }
         workouts.append(contentsOf: fresh)
-        for w in b.weights ?? [] where w.kg > 0 { logWeight(w.kg, on: w.date) }
-        return fresh.count
+        var nw = 0
+        for x in weightsRaw { if let r = one(x, WeightRow.self), r.kg > 0 { logWeight(r.kg, on: r.date); nw += 1 } }
+        return (fresh.count, nw)
     }
     func exportBackup() -> Data {
         let enc = JSONEncoder(); enc.outputFormatting = [.prettyPrinted, .sortedKeys]
         return (try? enc.encode(Backup(entries: workouts, weights: weights))) ?? Data()
+    }
+}
+
+enum ImportError: LocalizedError {
+    case notJSON, empty
+    var errorDescription: String? {
+        switch self {
+        case .notJSON: return "这不是备份文件（里面没有 JSON 内容）"
+        case .empty: return "备份里没有找到训练或体重记录"
+        }
     }
 }
