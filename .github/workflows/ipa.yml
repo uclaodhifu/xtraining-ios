@@ -35,6 +35,9 @@ jobs:
         run: |
           mkdir -p Payload
           cp -R build/Build/Products/Release-iphoneos/XTraining.app Payload/
+          # 临时签名，把 HealthKit 权限写进去，Sideloadly 自签时会带上
+          codesign -f -s - --entitlements XTraining/XTraining.entitlements Payload/XTraining.app
+          codesign -d --entitlements - Payload/XTraining.app
           zip -qry XTraining.ipa Payload
       - uses: actions/upload-artifact@v4
         with:

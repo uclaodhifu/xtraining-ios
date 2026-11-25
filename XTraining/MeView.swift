@@ -27,6 +27,10 @@ struct MeView: View {
                         Button("删掉头像", role: .destructive) { withAnimation { store.avatar = nil } }
                     }
                 }
+                Section {
+                    ActivityCard()
+                        .padding(.vertical, 6)
+                }
                 Section("主题配色") {
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
                         ForEach(Skin.allCases) { s in

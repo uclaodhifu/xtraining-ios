@@ -21,6 +21,11 @@ targets:
         TARGETED_DEVICE_FAMILY: "1,2"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SWIFT_VERSION: "5.0"
+    entitlements:
+      path: XTraining/XTraining.entitlements
+      properties:
+        com.apple.developer.healthkit: true
+        com.apple.developer.healthkit.access: []
     info:
       path: XTraining/Info.plist
       properties:
@@ -36,4 +41,6 @@ targets:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
         ITSAppUsesNonExemptEncryption: false
+        NSHealthShareUsageDescription: 读取你在 Apple 健康里的运动、消耗的卡路里和步数，显示在“我”的运动记录日历里。
+        NSHealthUpdateUsageDescription: X Training 目前不会往 Apple 健康里写数据。
         LSApplicationCategoryType: public.app-category.healthcare-fitness

@@ -1,0 +1,253 @@
+import SwiftUI
+import HealthKit
+
+// 每天的运动（从 Apple 健康读）
+struct DayAct {
+    var minutes = 0.0
+    var kcal = 0.0
+    var steps = 0.0
+    var count = 0
+    var types: [String] = []
+}
+
+@MainActor
+final class Health: ObservableObject {
+    static let shared = Health()
+    let hk = HKHealthStore()
+    @Published var connected = UserDefaults.standard.bool(forKey: "xt.health")
+    @Published var days: [String: DayAct] = [:]
+    @Published var loading = false
+    var available: Bool { HKHealthStore.isHealthDataAvailable() }
+
+    func connect() async -> Bool {
+        guard available else { return false }
+        let read: Set<HKObjectType> = [HKObjectType.workoutType(), HKQuantityType(.activeEnergyBurned), HKQuantityType(.stepCount)]
+        do {
+            try await hk.requestAuthorization(toShare: [], read: read)
+            connected = true
+            UserDefaults.standard.set(true, forKey: "xt.health")
+            return true
+        } catch { return false }
+    }
+
+    func load(month: Date) async {
+        guard connected, available else { days = [:]; return }
+        let cal = Calendar.current
+        guard let start = cal.date(from: cal.dateComponents([.year, .month], from: month)),
+              let end = cal.date(byAdding: .month, value: 1, to: start) else { return }
+        loading = true
+        defer { loading = false }
+        var out: [String: DayAct] = [:]
+        let pred = HKQuery.predicateForSamples(withStart: start, end: end)
+        let wq = HKSampleQueryDescriptor(predicates: [.workout(pred)], sortDescriptors: [SortDescriptor(\.startDate)])
+        if let ws = try? await wq.result(for: hk) {
+            for w in ws {
+                let k = Day.str(w.startDate)
+                var a = out[k] ?? DayAct()
+                a.minutes += w.duration / 60
+                a.kcal += w.statistics(for: HKQuantityType(.activeEnergyBurned))?.sumQuantity()?.doubleValue(for: .kilocalorie()) ?? 0
+                a.types.append(Health.name(w.workoutActivityType))
+                a.count += 1
+                out[k] = a
+            }
+        }
+        let sq = HKStatisticsCollectionQueryDescriptor(
+            predicate: .quantitySample(type: HKQuantityType(.stepCount), predicate: pred),
+            options: .cumulativeSum, anchorDate: start, intervalComponents: DateComponents(day: 1))
+        if let coll = try? await sq.result(for: hk) {
+            coll.enumerateStatistics(from: start, to: end) { s, _ in
+                let n = s.sumQuantity()?.doubleValue(for: .count()) ?? 0
+                if n > 0 { out[Day.str(s.startDate), default: DayAct()].steps = n }
+            }
+        }
+        days = out
+    }
+
+    static func name(_ t: HKWorkoutActivityType) -> String {
+        switch t {
+        case .traditionalStrengthTraining, .functionalStrengthTraining: return "力量训练"
+        case .mixedCardio: return "混合有氧"
+        case .highIntensityIntervalTraining: return "HIIT"
+        case .walking: return "走路"
+        case .running: return "跑步"
+        case .cycling: return "骑行"
+        case .yoga: return "瑜伽"
+        case .swimming: return "游泳"
+        case .elliptical: return "椭圆机"
+        case .rowing: return "划船"
+        case .stairClimbing, .stairs: return "爬楼"
+        case .coreTraining: return "核心训练"
+        case .flexibility: return "拉伸"
+        case .hiking: return "徒步"
+        case .jumpRope: return "跳绳"
+        case .dance, .socialDance, .cardioDance: return "跳舞"
+        case .basketball: return "篮球"
+        case .badminton: return "羽毛球"
+        default: return "运动"
+        }
+    }
+}
+
+// 「我」页面的运动记录：本月统计 + 日历
+struct ActivityCard: View {
+    @EnvironmentObject var store: Store
+    @ObservedObject private var health = Health.shared
+    @State private var month = Date()
+    @State private var denied = false
+
+    private let cal: Calendar = { var c = Calendar(identifier: .gregorian); c.firstWeekday = 2; return c }()
+
+    private var monthDays: [String] {
+        guard let start = cal.date(from: cal.dateComponents([.year, .month], from: month)),
+              let range = cal.range(of: .day, in: .month, for: start) else { return [] }
+        return range.compactMap { cal.date(byAdding: .day, value: $0 - 1, to: start).map { Day.str($0) } }
+    }
+    private var lead: Int {
+        guard let first = monthDays.first else { return 0 }
+        return (cal.component(.weekday, from: Day.date(first)) + 5) % 7
+    }
+
+    var body: some View {
+        let days = monthDays
+        let stats = summary(days)
+        VStack(spacing: 14) {
+            HStack {
+                Button { shift(-1) } label: { Image(systemName: "chevron.left") }
+                Spacer()
+                Label(title, systemImage: "figure.run").font(.headline)
+                Spacer()
+                Button { shift(1) } label: { Image(systemName: "chevron.right") }
+                    .disabled(Day.str(month).prefix(7) >= Day.today.prefix(7))
+            }
+            .buttonStyle(.plain)
+            HStack {
+                big("\(stats.days)", "天", "运动天数")
+                big("\(stats.count)", "次", "运动次数")
+                big("\(Int(stats.minutes))", "分钟", "运动时长")
+            }
+            HStack(alignment: .center) {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(alignment: .firstTextBaseline, spacing: 3) {
+                        Text("\(Int(stats.kcal))").font(.system(size: 34, weight: .heavy, design: .rounded))
+                            .contentTransition(.numericText()).animation(.snappy, value: Int(stats.kcal))
+                        Text("kcal").font(.subheadline).foregroundStyle(.secondary)
+                    }
+                    Text("消耗卡路里").font(.caption).foregroundStyle(.secondary)
+                }
+                Text("≈").font(.title2.bold()).foregroundStyle(Brand.pink).padding(.horizontal, 6)
+                VStack(spacing: 4) {
+                    let bowls = Int((stats.kcal / 175).rounded())
+                    HStack(spacing: 2) {
+                        ForEach(0..<5, id: \.self) { i in
+                            Text("🍚").font(.title3).opacity(Double(i) < Double(bowls) / 8 ? 1 : 0.25)
+                        }
+                    }
+                    Text("热量约 \(bowls) 碗米饭").font(.caption).foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+            }
+            if !health.connected {
+                Button {
+                    Task { denied = !(await health.connect()); await health.load(month: month) }
+                } label: {
+                    Label("连接 Apple 健康", systemImage: "heart.fill")
+                        .font(.subheadline.bold()).frame(maxWidth: .infinity, minHeight: 40)
+                        .foregroundStyle(.white).background(Capsule().fill(Color.red.gradient))
+                }
+                .buttonStyle(.plain)
+                Text(denied ? "没能连接。去「设置 → 健康 → 数据访问与设备 → X Training」打开权限。" : "连接后，会自动读取 Apple 健康里的运动、卡路里和步数。没连接时只显示 App 里记的力量训练。")
+                    .font(.caption2).foregroundStyle(.secondary).multilineTextAlignment(.center)
+            }
+            // 日历
+            VStack(spacing: 6) {
+                HStack(spacing: 0) {
+                    ForEach(["周一", "周二", "周三", "周四", "周五", "周六", "周日"], id: \.self) { Text($0).font(.caption2).foregroundStyle(.secondary).frame(maxWidth: .infinity) }
+                }
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 3), count: 7), spacing: 8) {
+                    ForEach(0..<lead, id: \.self) { _ in Color.clear.frame(height: 1) }
+                    ForEach(days, id: \.self) { d in dayCell(d) }
+                }
+            }
+            .padding(10)
+            .background(RoundedRectangle(cornerRadius: 16).fill(Color(.secondarySystemGroupedBackground)))
+        }
+        .task(id: Day.str(month).prefix(7) + (health.connected ? "1" : "0")) { await health.load(month: month) }
+    }
+
+    private var title: String {
+        let p = Day.str(month).split(separator: "-")
+        return p.count == 3 ? "\(p[0])年\(Int(p[1]) ?? 0)月 运动记录" : "运动记录"
+    }
+    private func shift(_ n: Int) {
+        if let m = cal.date(byAdding: .month, value: n, to: month) { withAnimation(.snappy) { month = m } }
+    }
+    private func big(_ v: String, _ unit: String, _ label: String) -> some View {
+        VStack(spacing: 2) {
+            HStack(alignment: .firstTextBaseline, spacing: 2) {
+                Text(v).font(.system(size: 30, weight: .heavy, design: .rounded)).foregroundStyle(Brand.gradient)
+                    .contentTransition(.numericText()).animation(.snappy, value: v)
+                Text(unit).font(.caption).foregroundStyle(.secondary)
+            }
+            Text(label).font(.caption).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func summary(_ days: [String]) -> (days: Int, count: Int, minutes: Double, kcal: Double) {
+        var d = 0, c = 0, m = 0.0, k = 0.0
+        for day in days {
+            let h = health.days[day]
+            let app = store.workouts.filter { $0.date == day }
+            let hc = h?.count ?? 0
+            if hc > 0 || !app.isEmpty { d += 1 }
+            c += hc > 0 ? hc : app.count
+            m += h?.minutes ?? 0
+            k += h?.kcal ?? 0
+        }
+        return (d, c, m, k)
+    }
+
+    @ViewBuilder private func dayCell(_ d: String) -> some View {
+        let h = health.days[d]
+        let app = store.workouts.filter { $0.date == d }
+        let active = (h?.count ?? 0) > 0 || !app.isEmpty
+        let isToday = d == Day.today
+        VStack(spacing: 3) {
+            HStack(spacing: 1) {
+                Text("\(Int(d.suffix(2)) ?? 0)").font(.caption.bold())
+                    .foregroundStyle(isToday ? Brand.pink : Color.primary)
+                if active { Image(systemName: "flame.fill").font(.system(size: 9)).foregroundStyle(.red) }
+            }
+            if let h, h.count > 0 {
+                chip("\(Int(h.kcal))kcal", .orange)
+                chip("\(Int(h.minutes.rounded()))分钟", .blue)
+                chip(mainType(h.types), .blue)
+            } else if !app.isEmpty {
+                chip("\(app.reduce(0) { $0 + $1.setCount })组", .orange)
+                chip(Array(Set(app.flatMap(\.parts))).sorted { (Parts.all.firstIndex(of: $0) ?? 9) < (Parts.all.firstIndex(of: $1) ?? 9) }.joined(separator: "+").ifEmpty("训练"), .blue)
+                chip("力量训练", .blue)
+            } else if let s = h?.steps, s >= 3000 {
+                chip("\(Int(s))步", .green)
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 34, alignment: .top)
+    }
+
+    private func mainType(_ ts: [String]) -> String {
+        if ts.contains("力量训练") { return "力量训练" }
+        var c: [String: Int] = [:]
+        for t in ts { c[t, default: 0] += 1 }
+        return c.max { $0.value < $1.value }?.key ?? "运动"
+    }
+
+    private func chip(_ t: String, _ color: Color) -> some View {
+        Text(t).font(.system(size: 9, weight: .medium)).lineLimit(1).minimumScaleFactor(0.6)
+            .foregroundStyle(color)
+            .frame(maxWidth: .infinity).padding(.vertical, 3)
+            .background(RoundedRectangle(cornerRadius: 5).fill(color.opacity(0.12)))
+    }
+}
+
+extension String {
+    func ifEmpty(_ s: String) -> String { isEmpty ? s : self }
+}
