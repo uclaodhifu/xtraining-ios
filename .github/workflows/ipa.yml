@@ -48,6 +48,10 @@ jobs:
           name: XTraining-ipa
           path: XTraining.ipa
           retention-days: 30
+      - name: 先推标签（GitHub 偶尔建标签时报 500）
+        run: |
+          git tag -f build-${{ github.run_number }}
+          git push -f origin build-${{ github.run_number }} || true
       - name: 发布到 Releases（方便直接下载）
         uses: softprops/action-gh-release@v2
         with:
