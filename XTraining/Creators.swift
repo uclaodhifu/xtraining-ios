@@ -1,4 +1,6 @@
 import SwiftUI
+import PhotosUI
+import Vision
 
 // 我关注的健身博主：粘贴抖音主页分享链接，点一下跳到抖音看
 struct Creator: Codable, Identifiable, Hashable {
@@ -135,6 +137,17 @@ struct CreatorsView: View {
     private func open(_ s: String) { openCreator(s, openURL) }
 }
 
+// 从截图里读二维码，返回里面的链接（抖音主页二维码里就是主页链接）
+func readQR(_ cg: CGImage) -> String? {
+    let req = VNDetectBarcodesRequest()
+    req.symbologies = [.qr]
+    try? VNImageRequestHandler(cgImage: cg).perform([req])
+    for o in req.results ?? [] {
+        if let s = o.payloadStringValue, let r = s.range(of: #"https?://\S+"#, options: .regularExpression) { return String(s[r]) }
+    }
+    return nil
+}
+
 // 链接就直接打开；填的是抖音号或名字就拉起抖音搜索
 func openCreator(_ s: String, _ openURL: OpenURLAction) {
     let t = s.trimmingCharacters(in: .whitespaces)
@@ -197,6 +210,8 @@ struct CreatorEditor: View {
     @State private var note = ""
     @State private var link = ""
     @State private var raw = ""
+    @State private var qrPick: PhotosPickerItem? = nil
+    @State private var qrMsg = ""
 
     var body: some View {
         NavigationStack {
@@ -207,6 +222,10 @@ struct CreatorEditor: View {
                     Button { if let t = UIPasteboard.general.string { raw = t } } label: {
                         Label("从剪贴板粘贴", systemImage: "doc.on.clipboard")
                     }
+                    PhotosPicker(selection: $qrPick, matching: .images) {
+                        Label("识别主页二维码截图", systemImage: "qrcode.viewfinder")
+                    }
+                    if !qrMsg.isEmpty { Text(qrMsg).font(.footnote).foregroundStyle(.secondary) }
                 } footer: { Text("会自动取出里面的链接。有链接点“抖音看”直接进主页；只填抖音号会打开抖音搜索。") }
                 Section {
                     TextField("名字", text: $name)
@@ -231,6 +250,15 @@ struct CreatorEditor: View {
                     }
                     .bold()
                     .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || link.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+            .onChange(of: qrPick) { _, p in
+                Task {
+                    guard let d = try? await p?.loadTransferable(type: Data.self), let cg = UIImage(data: d)?.cgImage else { return }
+                    let found = await Task.detached { readQR(cg) }.value
+                    if let u = found { link = u; qrMsg = "识别成功，点“抖音看”会直接进主页" }
+                    else { qrMsg = "没识别到二维码，换一张清楚点的截图试试" }
+                    qrPick = nil
                 }
             }
             .onAppear {
