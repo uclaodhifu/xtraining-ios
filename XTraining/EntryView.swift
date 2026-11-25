@@ -24,7 +24,7 @@ struct EntryView: View {
         return Array(store.sorted.filter { $0.id != workout.id && $0.date <= workout.date && !ps.isDisjoint(with: $0.parts) }.prefix(2).reversed())
     }
     private let labelW: CGFloat = 40
-    private let histW: CGFloat = 62
+    private let histW: CGFloat = 68
 
     var body: some View {
         NavigationStack {
@@ -182,9 +182,10 @@ struct EntryView: View {
                         ForEach(hist) { w in
                             let hs = w.exercises.first { $0.name == name }?.sets
                             Text(hs.flatMap { si < $0.count ? setLabel($0[si]) : nil } ?? "")
-                                .font(.system(size: 12, design: .rounded)).monospacedDigit().foregroundStyle(.secondary)
-                                .lineLimit(1).minimumScaleFactor(0.7)
-                                .frame(width: histW, height: 38)
+                                .font(.system(size: 16, weight: .semibold, design: .rounded)).monospacedDigit()
+                                .foregroundStyle(Color.primary.opacity(0.8))
+                                .lineLimit(1).minimumScaleFactor(0.6)
+                                .frame(width: histW, height: 46)
                                 .overlay(alignment: .leading) { vline }
                         }
                         HStack(spacing: 4) {
@@ -198,7 +199,7 @@ struct EntryView: View {
                                 .frame(maxWidth: store.plateCfg[name] != nil ? 56 : .infinity)
                         }
                         .padding(.horizontal, 6)
-                        .frame(maxWidth: .infinity, minHeight: 38)
+                        .frame(maxWidth: .infinity, minHeight: 50)
                         .overlay(alignment: .leading) { vline }
                     }
                     .padding(.leading, 6)
@@ -269,11 +270,12 @@ struct EntryView: View {
     }
 
     private func cellField(_ hint: String, _ text: Binding<String>, _ kb: UIKeyboardType, _ t: Trend) -> some View {
-        TextField(hint, text: text)
+        // 没填时显示上次的数字（亮一点的灰），填了按进步/退步变色，字号大，一眼能读
+        TextField(text: text, prompt: Text(hint).foregroundStyle(Color.primary.opacity(0.42))) { EmptyView() }
             .keyboardType(kb).multilineTextAlignment(.center)
-            .font(.system(size: 15, weight: .semibold, design: .rounded)).monospacedDigit()
+            .font(.system(size: 22, weight: .bold, design: .rounded)).monospacedDigit()
             .foregroundStyle(trendColor(t))
-            .padding(.vertical, 6)
+            .padding(.vertical, 8)
             .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color(.tertiarySystemFill)))
     }
 
@@ -368,7 +370,7 @@ struct EntryView: View {
         guard !n.isEmpty else { return }
         let cardio = Parts.of(n) == "有氧"
         withAnimation {
-            workout.exercises.append(Exercise(name: n, sets: Array(repeating: SetRow(), count: cardio ? 1 : max(1, sets))))
+            workout.exercises.append(Exercise(name: n, sets: (0..<(cardio ? 1 : max(1, sets))).map { _ in SetRow() }))
         }
         Haptic.tap()
     }
