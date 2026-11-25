@@ -7,6 +7,7 @@ struct MeView: View {
     @AppStorage("theme") private var theme = "system"
     @AppStorage("brandTitle") private var brandTitle = ""
     @AppStorage("skin") private var skin = "ins"
+    @State private var notesImport = false
     @State private var importing = false
     @State private var message: String? = nil
     @State private var syncing = false
@@ -67,6 +68,7 @@ struct MeView: View {
                     .pickerStyle(.segmented)
                 }
                 Section {
+                    Button { notesImport = true } label: { Label("从备忘录导入训练记录（自动纠错）", systemImage: "note.text.badge.plus") }
                     Button { importing = true } label: { Label("从文件导入备份", systemImage: "doc.badge.plus") }
                     Button { syncing = true } label: { Label("用同步码找回（含头像）", systemImage: "arrow.triangle.2.circlepath") }
                     Button { pasteImport() } label: { Label("粘贴备份内容", systemImage: "doc.on.clipboard") }
@@ -80,6 +82,7 @@ struct MeView: View {
                     LabeledContent("版本", value: "测试版 1.0")
                 }
             }
+            .sheet(isPresented: $notesImport) { NotesImportView() }
             .navigationTitle("我")
             .sheet(isPresented: $syncing) { SyncRestoreView() }
             .sheet(isPresented: $importing) {
