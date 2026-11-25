@@ -62,7 +62,7 @@ struct CreatorsView: View {
                     }
                     Spacer()
                     Button {
-                        if let u = URL(string: c.link) { Haptic.tap(); openURL(u) }
+                        Haptic.tap(); open(c.link)
                     } label: {
                         Label("抖音看", systemImage: "play.rectangle.fill").font(.footnote.bold())
                             .padding(.horizontal, 12).padding(.vertical, 7)
@@ -84,6 +84,17 @@ struct CreatorsView: View {
         .sheet(isPresented: $adding) { CreatorEditor(c: nil) }
         .sheet(item: $editing) { CreatorEditor(c: $0) }
     }
+
+    // 链接就直接打开；填的是抖音号就拉起抖音搜这个号
+    private func open(_ s: String) {
+        let t = s.trimmingCharacters(in: .whitespaces)
+        if t.hasPrefix("http"), let u = URL(string: t) { openURL(u); return }
+        let q = t.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        guard let app = URL(string: "snssdk1128://search?keyword=\(q)") else { return }
+        openURL(app) { ok in
+            if !ok, let web = URL(string: "https://www.douyin.com/search/\(q)") { openURL(web) }
+        }
+    }
 }
 
 struct CreatorEditor: View {
@@ -104,11 +115,11 @@ struct CreatorEditor: View {
                     Button { if let t = UIPasteboard.general.string { raw = t } } label: {
                         Label("从剪贴板粘贴", systemImage: "doc.on.clipboard")
                     }
-                } footer: { Text("会自动取出里面的链接。") }
+                } footer: { Text("会自动取出里面的链接。没有链接的话，下面直接填抖音号也行。") }
                 Section {
                     TextField("名字", text: $name)
                     TextField("备注，比如：练背、备赛", text: $note)
-                    TextField("主页链接", text: $link).textInputAutocapitalization(.never).autocorrectionDisabled()
+                    TextField("主页链接 或 抖音号", text: $link).textInputAutocapitalization(.never).autocorrectionDisabled()
                         .font(.footnote)
                 }
             }
@@ -127,7 +138,7 @@ struct CreatorEditor: View {
                         Haptic.success(); dismiss()
                     }
                     .bold()
-                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || URL(string: link)?.scheme == nil)
+                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || link.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
             .onAppear {
