@@ -25,13 +25,9 @@ struct HomeView: View {
             ScrollView {
                 VStack(spacing: 14) {
                     header.rise(0)
-                    HeroCarousel(planTitle: heroTitle, planSub: why,
-                                 partColor: chosen.wrappedValue.first.map(Parts.color) ?? Brand.pink) {
-                        Haptic.tap(.medium); editing = newWorkout(chosen.wrappedValue)
-                    }
-                    .rise(1)
-                    RaceAlert().rise(1)
+                    YTCarousel().rise(1)
                     planCard.rise(2)
+                    RaceAlert().rise(2)
                     DataWall { showWeight = true }.rise(3)
                     historySection.rise(4)
                 }
@@ -40,6 +36,7 @@ struct HomeView: View {
                 .frame(maxWidth: 720)
                 .frame(maxWidth: .infinity)
             }
+            .refreshable { await YTFeed.shared.refresh(force: true) }
             .background(background)
             .toolbar(.hidden, for: .navigationBar)
             .overlay { if celebrate && !Motion.reduce { Confetti() } }
