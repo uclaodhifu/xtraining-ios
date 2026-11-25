@@ -7,10 +7,8 @@ enum NotesParser {
     struct Result { var workouts: [Workout]; var weights: [(String, Double)]; var fixes: [Fix] }
 
     static func parse(_ text: String, known: [String]) -> Result? {
-        guard let url = Bundle.main.url(forResource: "NotesParser", withExtension: "js"),
-              let js = try? String(contentsOf: url, encoding: .utf8),
-              let ctx = JSContext() else { return nil }
-        ctx.evaluateScript(js)
+        guard let ctx = JSContext() else { return nil }
+        ctx.evaluateScript(notesParserJS)
         guard let out = ctx.objectForKeyedSubscript("xtParse")?.call(withArguments: [text])?.toString(),
               let data = out.data(using: .utf8),
               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }

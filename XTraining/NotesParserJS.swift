@@ -1,3 +1,5 @@
+// 备忘录解析脚本（嵌在代码里，不再单独放 .js 文件——有的签名 App 遇到包里的 .js 会导入失败）
+let notesParserJS = ##"""
 // 备忘录训练记录解析（从网页版 lib/importNotes.js 搬来，App 里用 JavaScriptCore 跑）
 // 把 iPhone 备忘录里手写的训练记录解析成手记的记录。
 // 支持的写法举例：
@@ -255,3 +257,5 @@ function xtParse(text) {
   out.forEach((w) => { if (w.weight) weights.push({ date: w.date, kg: +w.weight }); });
   return JSON.stringify({ entries: out.map((w) => ({ ...w })), weights: weights.map((x) => ({ date: x.date, kg: +x.kg })) });
 }
+
+"""##
