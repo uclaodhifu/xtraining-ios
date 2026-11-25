@@ -99,9 +99,11 @@ func openCreator(_ s: String, _ openURL: OpenURLAction) {
     let t = s.trimmingCharacters(in: .whitespaces)
     if t.hasPrefix("http"), let u = URL(string: t) { openURL(u); return }
     let q = t.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-    guard let app = URL(string: "snssdk1128://search?keyword=\(q)") else { return }
-    openURL(app) { ok in
-        if !ok, let web = URL(string: "https://www.douyin.com/search/\(q)") { openURL(web) }
+    // 只跳一次：装了抖音就用 App 搜，没装才开网页
+    if let app = URL(string: "snssdk1128://search?keyword=\(q)"), UIApplication.shared.canOpenURL(app) {
+        openURL(app)
+    } else if let web = URL(string: "https://www.douyin.com/search/\(q)") {
+        openURL(web)
     }
 }
 

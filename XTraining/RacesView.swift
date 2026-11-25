@@ -360,9 +360,10 @@ struct RaceCard: View {
     private func douyin() {
         let kw = e.dy ?? e.name
         let q = kw.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        guard let app = URL(string: "snssdk1128://search?keyword=\(q)") else { return }
-        openURL(app) { ok in
-            if !ok, let web = URL(string: "https://www.douyin.com/search/\(q)") { openURL(web) }
+        if let app = URL(string: "snssdk1128://search?keyword=\(q)"), UIApplication.shared.canOpenURL(app) {
+            openURL(app)
+        } else if let web = URL(string: "https://www.douyin.com/search/\(q)") {
+            openURL(web)
         }
     }
 }
