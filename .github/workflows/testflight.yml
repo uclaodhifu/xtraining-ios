@@ -1,0 +1,61 @@
+# 云端用 Mac 编译 X Training，并上传到 TestFlight（不需要自己有 Mac）
+name: TestFlight
+
+on:
+  workflow_dispatch:      # 有了苹果开发者账号、填好 Secrets 后，在 Actions 页面手动点 “Run workflow”
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 40
+    env:
+      TEAM_ID: ${{ secrets.TEAM_ID }}
+      APP_BUNDLE_ID: ${{ vars.BUNDLE_ID || 'com.kaigreen.xtraining' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 选最新的 Xcode
+        run: |
+          sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+          xcodebuild -version
+
+      - name: 生成 Xcode 工程
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: 准备 App Store Connect 密钥
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/keys"
+          printf '%s' "$ASC_KEY_P8" > "$RUNNER_TEMP/keys/AuthKey.p8"
+          sed -i '' "s/__TEAM_ID__/$TEAM_ID/" ExportOptions.plist
+
+      - name: 编译打包
+        run: |
+          xcodebuild archive \
+            -project XTraining.xcodeproj -scheme XTraining \
+            -configuration Release -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/XTraining.xcarchive" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/keys/AuthKey.p8" \
+            -authenticationKeyID "${{ secrets.ASC_KEY_ID }}" \
+            -authenticationKeyIssuerID "${{ secrets.ASC_ISSUER_ID }}" \
+            DEVELOPMENT_TEAM="$TEAM_ID" APP_BUNDLE_ID="$APP_BUNDLE_ID" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}"
+
+      - name: 上传到 TestFlight
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/XTraining.xcarchive" \
+            -exportOptionsPlist ExportOptions.plist \
+            -exportPath "$RUNNER_TEMP/export" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/keys/AuthKey.p8" \
+            -authenticationKeyID "${{ secrets.ASC_KEY_ID }}" \
+            -authenticationKeyIssuerID "${{ secrets.ASC_ISSUER_ID }}"
+
+      - name: 清理密钥
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/keys"
