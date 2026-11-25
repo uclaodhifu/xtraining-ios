@@ -82,9 +82,9 @@ struct EntryView: View {
         return VStack(spacing: 0) {
             // 黑色标题栏
             Text(workout.title.isEmpty ? (workout.parts.isEmpty ? "分 化" : workout.parts.joined(separator: " · ")) : workout.title)
-                .font(.headline).foregroundStyle(Color(.systemBackground))
+                .font(.headline).foregroundStyle(.white)
                 .frame(maxWidth: .infinity).padding(.vertical, 10)
-                .background(Color.primary)
+                .background(Color(hex: 0x1c1c1e))
             // 日期行
             HStack(spacing: 0) {
                 Text("日期").font(.caption.bold()).frame(width: labelW)
@@ -93,7 +93,7 @@ struct EntryView: View {
                         .frame(width: histW)
                         .overlay(alignment: .leading) { vline }
                 }
-                Text("今天 \(slashDate(workout.date))").font(.caption.bold()).foregroundStyle(Brand.pink)
+                Text("今天 \(slashDate(workout.date))").font(.caption.bold()).foregroundStyle(workout.parts.first.map(Parts.color) ?? Color.primary)
                     .frame(maxWidth: .infinity)
                     .overlay(alignment: .leading) { vline }
             }
@@ -143,8 +143,8 @@ struct EntryView: View {
                         Label("挂片", systemImage: store.plateCfg[name] != nil ? "circle.grid.2x1.fill" : "circle.grid.2x1")
                             .font(.caption.bold()).labelStyle(.titleAndIcon)
                             .padding(.horizontal, 8).padding(.vertical, 4)
-                            .foregroundStyle(store.plateCfg[name] != nil ? Color.white : color)
-                            .background(Capsule().fill(store.plateCfg[name] != nil ? color : color.opacity(0.12)))
+                            .foregroundStyle(store.plateCfg[name] != nil ? Color(.systemBackground) : Color.secondary)
+                            .background(Capsule().fill(store.plateCfg[name] != nil ? Color.primary : Color(.tertiarySystemFill)))
                     }
                     .buttonStyle(.plain)
                 }
@@ -204,7 +204,7 @@ struct EntryView: View {
                     withAnimation(.snappy) { x.wrappedValue.sets.append(x.wrappedValue.sets.last.map { SetRow(w: $0.w, r: $0.r, p: $0.p) } ?? SetRow()) }
                     Haptic.tap()
                 } label: {
-                    Label("加一组", systemImage: "plus").font(.caption.bold()).foregroundStyle(color)
+                    Label("加一组", systemImage: "plus").font(.caption.bold()).foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, minHeight: 32)
                 }
                 .buttonStyle(.plain)
@@ -230,12 +230,12 @@ struct EntryView: View {
                 HStack(spacing: 4) {
                     Text(cfg.labels[k]).font(.caption2).foregroundStyle(.secondary).frame(width: 16)
                     Button { bump(x, s.id, k, -1, cfg) } label: { Image(systemName: "minus.circle.fill") }
-                        .buttonStyle(.plain).foregroundStyle(.secondary)
+                        .buttonStyle(.plain).foregroundStyle(Color(.systemGray3))
                     Text("\(k < p.count ? p[k] : 0)").font(.system(size: 16, weight: .bold, design: .rounded)).monospacedDigit()
                         .foregroundStyle(trendColor(t)).frame(minWidth: 18)
                         .contentTransition(.numericText()).animation(.snappy, value: k < p.count ? p[k] : 0)
                     Button { bump(x, s.id, k, 1, cfg) } label: { Image(systemName: "plus.circle.fill") }
-                        .buttonStyle(.plain).foregroundStyle(Brand.pink)
+                        .buttonStyle(.plain).foregroundStyle(Color.primary)
                 }
                 .font(.system(size: 18))
             }
@@ -275,7 +275,7 @@ struct EntryView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 TextField("加动作，比如 卧推", text: $newName).onSubmit { add(newName); newName = "" }
-                Button { add(newName); newName = "" } label: { Image(systemName: "plus.circle.fill").font(.title2).foregroundStyle(Brand.gradient) }
+                Button { add(newName); newName = "" } label: { Image(systemName: "plus.circle.fill").font(.title2).foregroundStyle(Color.primary) }
                     .disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty)
             }
             let suggest = suggestions
@@ -283,9 +283,15 @@ struct EntryView: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
                         ForEach(suggest, id: \.self) { n in
-                            Button(n) { add(n); newName = "" }
-                                .font(.footnote).buttonStyle(.bordered).buttonBorderShape(.capsule)
-                                .tint(Parts.of(n).map(Parts.color) ?? .gray)
+                            Button { add(n); newName = "" } label: {
+                                HStack(spacing: 6) {
+                                    Circle().fill(Parts.of(n).map(Parts.color) ?? .gray).frame(width: 7, height: 7)
+                                    Text(n).font(.footnote.weight(.medium)).foregroundStyle(Color.primary)
+                                }
+                                .padding(.horizontal, 12).padding(.vertical, 7)
+                                .background(Capsule().fill(Color(.tertiarySystemFill)))
+                            }
+                            .buttonStyle(PressScale())
                         }
                     }
                 }
@@ -302,9 +308,9 @@ struct EntryView: View {
                                 Text("照着上次练\(p)（\(slashDate(last.date))，\(todo.count) 个动作）")
                                 Spacer()
                             }
-                            .font(.subheadline.bold()).foregroundStyle(Parts.color(p))
-                            .padding(10)
-                            .background(RoundedRectangle(cornerRadius: 12).fill(Parts.color(p).opacity(0.12)))
+                            .font(.subheadline.bold()).foregroundStyle(.white)
+                            .padding(12)
+                            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Parts.color(p)))
                         }
                         .buttonStyle(PressScale())
                     }
@@ -317,8 +323,8 @@ struct EntryView: View {
     // 备注
     private var noteCard: some View {
         VStack(spacing: 0) {
-            Text("备 注").font(.headline).foregroundStyle(Color(.systemBackground))
-                .frame(maxWidth: .infinity).padding(.vertical, 8).background(Color.primary)
+            Text("备 注").font(.headline).foregroundStyle(.white)
+                .frame(maxWidth: .infinity).padding(.vertical, 8).background(Color(hex: 0x1c1c1e))
             VStack(alignment: .leading, spacing: 10) {
                 Picker("感受", selection: Binding(get: { workout.mood ?? -1 }, set: { workout.mood = $0 < 0 ? nil : $0 })) {
                     Text("不记").tag(-1)

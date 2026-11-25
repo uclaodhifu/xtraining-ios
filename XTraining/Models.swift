@@ -15,12 +15,13 @@ enum Parts {
     ]
     static func color(_ p: String) -> Color {
         switch p {
-        case "胸": return Color(hex: 0xff9f0a)
-        case "肩": return Color(hex: 0x0a84ff)
-        case "背": return Color(hex: 0x40c8e0)
-        case "腿": return Color(hex: 0x30d158)
-        case "手臂": return Color(hex: 0xbf5af2)
-        case "有氧": return Color(hex: 0xff375f)
+        // 更沉稳的深色：白字压得住，彼此又一眼能分开
+        case "胸": return Color(hex: 0xe8590c)   // 焦橙
+        case "肩": return Color(hex: 0x3b5bdb)   // 靛蓝
+        case "背": return Color(hex: 0x0c8599)   // 深青
+        case "腿": return Color(hex: 0x2b8a3e)   // 森林绿
+        case "手臂": return Color(hex: 0x7048e8) // 紫罗兰
+        case "有氧": return Color(hex: 0xd6336c) // 树莓红
         default: return .gray
         }
     }

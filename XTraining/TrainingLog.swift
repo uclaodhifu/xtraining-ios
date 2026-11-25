@@ -14,7 +14,7 @@ func trend(_ a: Exercise, _ b: Exercise?) -> Trend {
     return ar > br ? .up : ar < br ? .down : .same
 }
 func trendColor(_ t: Trend) -> Color {
-    switch t { case .up: return .green; case .down: return .red; default: return .primary }
+    switch t { case .up: return Color(hex: 0x2f9e44); case .down: return Color(hex: 0xe03131); default: return .primary }
 }
 func setLabel(_ s: SetRow) -> String {
     if let pt = s.platesText { return s.r.isEmpty ? "\(pt)片" : "\(pt)×\(s.r)" }
