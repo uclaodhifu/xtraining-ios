@@ -42,7 +42,10 @@ jobs:
           codesign -d --entitlements - Payload/XTraining.app
           echo '--- App Info.plist ---'; plutil -p Payload/XTraining.app/Info.plist
           for x in Payload/XTraining.app/PlugIns/*.appex; do echo "--- $x ---"; plutil -p "$x/Info.plist"; codesign -d --entitlements - "$x"; done
-          zip -qry XTraining.ipa Payload
+          # 用苹果自带的 ditto 打包（有的签名 App 认不了 zip 命令打的包）
+          ditto -c -k --norsrc --noextattr --keepParent Payload XTraining.ipa
+          cp XTraining.ipa "XTraining-${{ github.run_number }}.ipa"
+          unzip -tq XTraining.ipa
       - uses: actions/upload-artifact@v4
         with:
           name: XTraining-ipa
@@ -59,7 +62,9 @@ jobs:
           tag_name: build-${{ github.run_number }}
           name: X Training 测试版 ${{ github.run_number }}
           body: 未签名安装包，用 Sideloadly 或 爱思助手 自签安装。
-          files: XTraining.ipa
+          files: |
+            XTraining.ipa
+            XTraining-${{ github.run_number }}.ipa
           make_latest: true
       - name: 确保版本已公开（GitHub 偶尔停在草稿）
         env:
@@ -68,7 +73,7 @@ jobs:
           T=build-${{ github.run_number }}
           gh release view "$T" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 || gh release create "$T" -R "$GITHUB_REPOSITORY" --title "X Training 测试版 ${{ github.run_number }}" --notes "未签名安装包，用 Sideloadly 或 爱思助手 自签安装。" || true
           for i in 1 2 3 4 5; do
-            gh release upload "$T" XTraining.ipa -R "$GITHUB_REPOSITORY" --clobber && break
+            gh release upload "$T" XTraining.ipa "XTraining-${{ github.run_number }}.ipa" -R "$GITHUB_REPOSITORY" --clobber && break
             sleep 15
           done
           for i in 1 2 3 4 5; do
