@@ -90,9 +90,9 @@ struct EntryView: View {
                 .background(Color(hex: 0x1c1c1e))
             // 日期行
             HStack(spacing: 0) {
-                Text("日期").font(.caption.bold()).frame(width: labelW)
-                ForEach(hist) { w in
-                    Text(slashDate(w.date)).font(.caption.bold()).monospacedDigit().foregroundStyle(.secondary)
+                Text("").frame(width: labelW)
+                ForEach(["上上次", "上次"], id: \.self) { t in
+                    Text(t).font(.caption.bold()).foregroundStyle(.secondary)
                         .frame(width: histW)
                         .overlay(alignment: .leading) { vline }
                 }
@@ -131,6 +131,9 @@ struct EntryView: View {
             .exercises.first { $0.name == name }
         let t = trend(x.wrappedValue, prev)
         let color = Parts.of(name).map(Parts.color) ?? Brand.pink
+        // 这个动作自己最近练过的两次（不管那天练的是什么部位），旧的在左
+        let mine: [Workout] = Array(store.sorted.filter { $0.id != workout.id && $0.date <= workout.date && $0.exercises.contains { $0.name == name } }.prefix(2).reversed())
+        let cols: [Workout?] = Array(repeating: nil, count: 2 - mine.count) + mine
         VStack(spacing: 0) {
             // 动作名
             HStack(spacing: 8) {
@@ -162,6 +165,18 @@ struct EntryView: View {
             }
             .padding(.horizontal, 10).padding(.vertical, 8)
             .animation(.spring, value: t == .up)
+            if !x.wrappedValue.isCardio && !mine.isEmpty {
+                HStack(spacing: 0) {
+                    Text("日期").font(.caption2).foregroundStyle(.secondary).frame(width: labelW)
+                    ForEach(Array(cols.enumerated()), id: \.offset) { _, w in
+                        Text(w.map { slashDate($0.date) } ?? "").font(.caption.bold()).monospacedDigit().foregroundStyle(.secondary)
+                            .frame(width: histW, height: 24)
+                            .overlay(alignment: .leading) { vline }
+                    }
+                    Spacer().overlay(alignment: .leading) { vline }
+                }
+                .padding(.leading, 6)
+            }
             if x.wrappedValue.isCardio {
                 HStack {
                     Text("时长").font(.caption).foregroundStyle(.secondary)
@@ -179,8 +194,8 @@ struct EntryView: View {
                 ForEach(Array(x.wrappedValue.sets.enumerated()), id: \.element.id) { si, s in
                     HStack(spacing: 0) {
                         Text("组\(si + 1)").font(.caption.bold()).foregroundStyle(.secondary).frame(width: labelW)
-                        ForEach(hist) { w in
-                            let hs = w.exercises.first { $0.name == name }?.sets
+                        ForEach(Array(cols.enumerated()), id: \.offset) { _, w in
+                            let hs = w?.exercises.first { $0.name == name }?.sets
                             Text(hs.flatMap { si < $0.count ? setLabel($0[si]) : nil } ?? "")
                                 .font(.system(size: 16, weight: .semibold, design: .rounded)).monospacedDigit()
                                 .foregroundStyle(Color.primary.opacity(0.8))
@@ -271,10 +286,20 @@ struct EntryView: View {
 
     private func cellField(_ hint: String, _ text: Binding<String>, _ kb: UIKeyboardType, _ t: Trend) -> some View {
         // 没填时显示上次的数字（亮一点的灰），填了按进步/退步变色，字号大，一眼能读
-        TextField(text: text, prompt: Text(hint).foregroundStyle(Color.primary.opacity(0.42))) { EmptyView() }
+        let unit = hint == "kg" || hint == "次"
+        return TextField("", text: text)
             .keyboardType(kb).multilineTextAlignment(.center)
-            .font(.system(size: 22, weight: .bold, design: .rounded)).monospacedDigit()
+            .font(.system(size: 19, weight: .bold, design: .rounded)).monospacedDigit()
             .foregroundStyle(trendColor(t))
+            .overlay {
+                if text.wrappedValue.isEmpty {
+                    Text(hint)
+                        .font(unit ? .system(size: 13, weight: .medium) : .system(size: 17, weight: .semibold, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(Color.primary.opacity(unit ? 0.3 : 0.45))
+                        .allowsHitTesting(false)
+                }
+            }
             .padding(.vertical, 8)
             .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color(.tertiarySystemFill)))
     }
