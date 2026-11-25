@@ -25,8 +25,7 @@ struct HomeView: View {
             ScrollView {
                 VStack(spacing: 14) {
                     header.rise(0)
-                    YTCarousel().rise(1)
-                    planCard.rise(2)
+                    planCard.rise(1)
                     RaceAlert().rise(2)
                     DataWall { showWeight = true }.rise(3)
                     historySection.rise(4)
@@ -36,7 +35,6 @@ struct HomeView: View {
                 .frame(maxWidth: 720)
                 .frame(maxWidth: .infinity)
             }
-            .refreshable { await YTFeed.shared.refresh(force: true) }
             .background(background)
             .toolbar(.hidden, for: .navigationBar)
             .overlay { if celebrate && !Motion.reduce { Confetti() } }
@@ -94,45 +92,40 @@ struct HomeView: View {
         let today = Day.today
         let trained = !store.todays.isEmpty
         if store.restDays.contains(today) && !trained {
-            VStack(spacing: 10) {
-                Text("😴").font(.system(size: 44))
-                Text("今天是休息日").font(.title3.bold())
-                Text("肌肉是在休息的时候长起来的，好好吃、好好睡").font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
+            BigCard {
+                HeroBanner(tag: "今天练什么", title: "今天是休息日 😴", sub: "肌肉是在休息的时候长起来的，好好吃、好好睡")
                 Button("还是去练一下") { store.setRest(false) }
+                    .font(.subheadline.bold()).frame(maxWidth: .infinity).padding(16)
             }
-            .frame(maxWidth: .infinity).card()
         } else if store.doneDays.contains(today) && trained {
             let ws = store.todays
-            VStack(spacing: 10) {
-                Image(systemName: "checkmark.circle.fill").font(.system(size: 44)).foregroundStyle(Brand.gradient)
-                Text("今天的训练完成了").font(.title3.bold())
-                Text(todayParts(ws)).foregroundStyle(.secondary)
+            BigCard {
+                HeroBanner(tag: "今天练什么", title: "今天练完了 ✓", sub: todayParts(ws))
+                VStack(spacing: 10) {
                 HStack {
                     StatTile(value: "\(ws.reduce(0) { $0 + $1.exercises.count })", label: "动作")
                     StatTile(value: "\(ws.reduce(0) { $0 + $1.setCount })", label: "组")
                     StatTile(value: "\(store.streak)", label: "连续天数")
                 }
                 Button("还要继续练") { store.setDone(false) }
-            }
-            .frame(maxWidth: .infinity).card()
-        } else {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("今天练什么").font(.title2.bold())
-                        Text(why).font(.subheadline).foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Button(cycleOn ? "周期" : "＋ 周期计划") { showCycle = true }
-                        .font(.footnote.bold()).buttonStyle(.bordered).buttonBorderShape(.capsule)
                 }
+                .frame(maxWidth: .infinity).padding(16)
+            }
+        } else {
+            BigCard {
+                HeroBanner(tag: "今天练什么", title: heroTitle, sub: why,
+                           button: chosen.wrappedValue.isEmpty ? "开始训练" : "开始训练 · " + chosen.wrappedValue.joined(separator: " + "),
+                           action: { Haptic.tap(.medium); editing = newWorkout(chosen.wrappedValue) }) {
+                    Button { showCycle = true } label: {
+                        Text(cycleOn ? "周期" : "＋ 周期").font(.footnote.bold()).foregroundStyle(.white)
+                            .padding(.horizontal, 12).frame(height: 34).background(.ultraThinMaterial, in: Capsule())
+                    }
+                }
+            VStack(alignment: .leading, spacing: 12) {
                 if cycleOn { cycleRow }
                 PartChips(parts: Parts.all, selected: chosen)
                 restRow
                 ideas
-                BigButton(title: chosen.wrappedValue.isEmpty ? "开始训练" : "开始训练 · " + chosen.wrappedValue.joined(separator: " + ")) {
-                    Haptic.tap(.medium); editing = newWorkout(chosen.wrappedValue)
-                }
                 if !trained {
                     // 次要操作做小一点，不跟“开始训练”抢视线
                     Button { Haptic.tap(); store.setRest(true) } label: {
@@ -148,7 +141,8 @@ struct HomeView: View {
                         DispatchQueue.main.asyncAfter(deadline: .now() + 3) { celebrate = false } }
                 }
             }
-            .card()
+            .padding(16)
+            }
         }
     }
 

@@ -304,24 +304,13 @@ struct RaceCard: View {
 
     var body: some View {
         let followed = store.follow.contains(e.id)
-        let p = e.poster
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 12) {
-                // 海报：只用颜色和文字
-                ZStack(alignment: .bottomLeading) {
-                    LinearGradient(colors: [p.0, p.1], startPoint: .topLeading, endPoint: .bottomTrailing)
-                    Text(p.2).font(.system(size: 13, weight: .black)).italic().foregroundStyle(.white)
-                        .lineLimit(2).minimumScaleFactor(0.6).padding(7)
-                }
-                .frame(width: 72, height: 96)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(e.name).font(.headline).lineLimit(2)
-                    Text([e.city, e.level].compactMap { $0 }.joined(separator: " · ")).font(.caption).foregroundStyle(.secondary)
-                    if let d = e.divs { Text(d).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
-                    Text(e.timeText).font(.caption2.bold()).foregroundStyle(Brand.pink)
-                }
-                Spacer(minLength: 0)
+            RacePoster(e: e)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(e.name).font(.headline).lineLimit(2)
+                Text([e.city, e.level].compactMap { $0 }.joined(separator: " · ")).font(.caption).foregroundStyle(.secondary)
+                if let d = e.divs { Text(d).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
+                Text(e.timeText).font(.caption2.bold()).foregroundStyle(Brand.pink)
             }
             if open, let d = e.desc {
                 Text(d).font(.subheadline).foregroundStyle(.secondary)

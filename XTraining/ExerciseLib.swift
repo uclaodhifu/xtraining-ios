@@ -136,7 +136,7 @@ struct ExerciseLibView: View {
                 if !xs.isEmpty {
                     Section {
                         ForEach(xs) { x in
-                            NavigationLink(value: x) {
+                            NavigationLink { ExerciseDetail(ex: x) } label: {
                                 HStack(spacing: 10) {
                                     Circle().fill(Parts.color(p)).frame(width: 8, height: 8)
                                     VStack(alignment: .leading, spacing: 2) {
@@ -152,7 +152,6 @@ struct ExerciseLibView: View {
         }
         .searchable(text: $q, prompt: "搜动作")
         .navigationTitle("动作库")
-        .navigationDestination(for: LibEx.self) { ExerciseDetail(ex: $0) }
     }
 }
 
