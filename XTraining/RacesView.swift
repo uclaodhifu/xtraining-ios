@@ -158,13 +158,14 @@ enum Reminders {
     }
 }
 
-// MARK: 追赛页：国内 / 全球职业赛 / 我追的，左右滑动切换
+// MARK: 赛事页：国内 / 全球职业赛 / 我追的，左右滑动切换
 struct RacesView: View {
     @State private var tab = 0
     private let tabs = ["国内", "全球", "我追的", "已结束"]
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                CreatorStrip()
                 Picker("", selection: $tab.animation(.snappy)) {
                     ForEach(tabs.indices, id: \.self) { Text(tabs[$0]).tag($0) }
                 }
@@ -179,7 +180,7 @@ struct RacesView: View {
                 .tabViewStyle(.page(indexDisplayMode: .never))
             }
             .background(Color(.systemGroupedBackground))
-            .navigationTitle("追赛")
+            .navigationTitle("赛事")
         }
     }
 }

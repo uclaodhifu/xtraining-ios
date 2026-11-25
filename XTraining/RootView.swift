@@ -1,6 +1,6 @@
 import SwiftUI
 
-// 底部四个页面：首页 / 追赛 / 进步 / 我（iOS 26 以上是液态玻璃底栏，往下滑会自动收起）
+// 底部四个页面：首页 / 赛事 / 进步 / 我（iOS 26 以上是液态玻璃底栏，往下滑会自动收起）
 struct RootView: View {
     @EnvironmentObject var store: Store
     @Environment(\.scenePhase) private var phase
@@ -10,7 +10,7 @@ struct RootView: View {
             HomeView()
                 .tabItem { Label("首页", systemImage: "house.fill") }.tag(0)
             RacesView()
-                .tabItem { Label("追赛", systemImage: "trophy.fill") }.tag(1)
+                .tabItem { Label("赛事", systemImage: "trophy.fill") }.tag(1)
             ProgressPage()
                 .tabItem { Label("进步", systemImage: "chart.line.uptrend.xyaxis") }.tag(2)
             MeView()

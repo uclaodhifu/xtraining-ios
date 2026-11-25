@@ -91,15 +91,58 @@ struct CreatorsView: View {
         .sheet(item: $editing) { CreatorEditor(c: $0) }
     }
 
-    // 链接就直接打开；填的是抖音号就拉起抖音搜这个号
-    private func open(_ s: String) {
-        let t = s.trimmingCharacters(in: .whitespaces)
-        if t.hasPrefix("http"), let u = URL(string: t) { openURL(u); return }
-        let q = t.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        guard let app = URL(string: "snssdk1128://search?keyword=\(q)") else { return }
-        openURL(app) { ok in
-            if !ok, let web = URL(string: "https://www.douyin.com/search/\(q)") { openURL(web) }
+    private func open(_ s: String) { openCreator(s, openURL) }
+}
+
+// 链接就直接打开；填的是抖音号或名字就拉起抖音搜索
+func openCreator(_ s: String, _ openURL: OpenURLAction) {
+    let t = s.trimmingCharacters(in: .whitespaces)
+    if t.hasPrefix("http"), let u = URL(string: t) { openURL(u); return }
+    let q = t.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+    guard let app = URL(string: "snssdk1128://search?keyword=\(q)") else { return }
+    openURL(app) { ok in
+        if !ok, let web = URL(string: "https://www.douyin.com/search/\(q)") { openURL(web) }
+    }
+}
+
+// 赛事页顶部：前 5 个关注的博主
+struct CreatorStrip: View {
+    @ObservedObject private var cs = CreatorStore.shared
+    @Environment(\.openURL) private var openURL
+
+    var body: some View {
+        HStack(spacing: 14) {
+            if cs.list.isEmpty {
+                NavigationLink { CreatorsView() } label: {
+                    Label("添加关注的健身博主", systemImage: "person.badge.plus").font(.subheadline.bold())
+                    Spacer()
+                    Image(systemName: "chevron.right").font(.caption.bold()).foregroundStyle(.secondary)
+                }
+                .foregroundStyle(.primary)
+            } else {
+                ForEach(cs.list.prefix(5)) { c in
+                    Button { Haptic.tap(); openCreator(c.link, openURL) } label: {
+                        VStack(spacing: 4) {
+                            CreatorAvatar(c: c, size: 50)
+                                .overlay(Circle().strokeBorder(Brand.gradient, lineWidth: 2).padding(-3))
+                            Text(c.name).font(.caption2).lineLimit(1).frame(width: 56)
+                        }
+                    }
+                    .buttonStyle(PressScale())
+                    .foregroundStyle(.primary)
+                }
+                Spacer(minLength: 0)
+                NavigationLink { CreatorsView() } label: {
+                    VStack(spacing: 4) {
+                        Image(systemName: "ellipsis").font(.headline)
+                            .frame(width: 50, height: 50).background(Color.primary.opacity(0.08), in: Circle())
+                        Text(cs.list.count > 5 ? "全部\(cs.list.count)" : "管理").font(.caption2)
+                    }
+                }
+                .foregroundStyle(.primary)
+            }
         }
+        .padding(.horizontal, 16).padding(.vertical, 8)
     }
 }
 
