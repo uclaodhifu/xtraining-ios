@@ -1,13 +1,20 @@
 import SwiftUI
+import PhotosUI
 
 // 首页最上面“今天练什么”大卡片的背景（自己生成的 8 张图，可在卡片右上角换）
 enum HeroBG {
     static let names = ["墨夜光晕", "极光", "石墨速度线", "日落", "深海同心圆", "X 纹", "等高线", "浅色薄雾"]
     static func image(_ i: Int) -> Image { Image("HeroBG\(min(max(i, 1), names.count))") }
+    // 0 = 自己的照片（存在 heroPhoto 里），没有照片就退回 1 号
+    static func image(_ i: Int, photo: Data) -> Image {
+        if i == 0, let ui = UIImage(data: photo) { return Image(uiImage: ui) }
+        return image(i == 0 ? 1 : i)
+    }
 }
 
 struct HeroBanner<Trailing: View>: View {
     @AppStorage("heroBg") private var bg = 1
+    @AppStorage("heroPhoto") private var photo = Data()
     @State private var picking = false
     let tag: String
     let title: String
@@ -42,7 +49,7 @@ struct HeroBanner<Trailing: View>: View {
         .frame(maxWidth: .infinity, minHeight: button == nil ? 220 : 280, alignment: .bottomLeading)
         .background {
             ZStack {
-                HeroBG.image(bg).resizable().scaledToFill()
+                HeroBG.image(bg, photo: photo).resizable().scaledToFill()
                 LinearGradient(colors: [.clear, .black.opacity(0.6)], startPoint: .center, endPoint: .bottom)
             }
         }
@@ -69,11 +76,37 @@ extension HeroBanner where Trailing == EmptyView {
 
 struct HeroBGPicker: View {
     @AppStorage("heroBg") private var bg = 1
+    @AppStorage("heroPhoto") private var photo = Data()
     @Environment(\.dismiss) private var dismiss
+    @State private var pick: PhotosPickerItem? = nil
     var body: some View {
         NavigationStack {
             ScrollView {
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible())], spacing: 12) {
+                    // 自定义：从相册选一张
+                    PhotosPicker(selection: $pick, matching: .images) {
+                        ZStack {
+                            if let ui = UIImage(data: photo) {
+                                Image(uiImage: ui).resizable().scaledToFill()
+                            } else {
+                                Color(.tertiarySystemFill)
+                            }
+                            VStack(spacing: 4) {
+                                Image(systemName: photo.isEmpty ? "plus" : "photo.badge.plus").font(.title3.bold())
+                                Text(photo.isEmpty ? "用自己的照片" : "换一张").font(.caption.bold())
+                            }
+                            .foregroundStyle(photo.isEmpty ? Color.primary : .white)
+                            .padding(8).background(photo.isEmpty ? Color.clear : Color.black.opacity(0.4), in: RoundedRectangle(cornerRadius: 10))
+                        }
+                        .frame(height: 120).frame(maxWidth: .infinity).clipped()
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .overlay {
+                            if bg == 0 && !photo.isEmpty {
+                                RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(.primary, lineWidth: 3)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
                     ForEach(1...HeroBG.names.count, id: \.self) { i in
                         Button { Haptic.tap(); bg = i; dismiss() } label: {
                             HeroBG.image(i).resizable().scaledToFill()
@@ -94,6 +127,13 @@ struct HeroBGPicker: View {
                     }
                 }
                 .padding(16)
+            }
+            .onChange(of: pick) { _, p in
+                Task {
+                    if let d = try? await p?.loadTransferable(type: Data.self), let ui = UIImage(data: d), let j = heroJPEG(ui, width: 1200) {
+                        photo = j; bg = 0; Haptic.tap(); dismiss()
+                    }
+                }
             }
             .navigationTitle("换背景")
             .navigationBarTitleDisplayMode(.inline)
