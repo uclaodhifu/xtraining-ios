@@ -98,17 +98,21 @@ struct SetRow: Codable, Identifiable, Hashable {
     var w = ""
     var r = ""
     var min = ""
-    enum CodingKeys: String, CodingKey { case w, r, min }
-    init(w: String = "", r: String = "", min: String = "") { self.w = w; self.r = r; self.min = min }
+    var p: [Int]? = nil   // 挂片：每根挂杆挂几片，比如 [2, 1] = 上 2 片、下 1 片
+    enum CodingKeys: String, CodingKey { case w, r, min, p }
+    init(w: String = "", r: String = "", min: String = "", p: [Int]? = nil) { self.w = w; self.r = r; self.min = min; self.p = p }
     init(from d: Decoder) throws {
         let c = try d.container(keyedBy: CodingKeys.self)
         w = flex(c, .w); r = flex(c, .r); min = flex(c, .min)
+        p = try? c.decode([Int].self, forKey: .p)
     }
     func encode(to e: Encoder) throws {
         var c = e.container(keyedBy: CodingKeys.self)
         try c.encode(w, forKey: .w); try c.encode(r, forKey: .r)
         if !min.isEmpty { try c.encode(min, forKey: .min) }
+        if let p { try c.encode(p, forKey: .p) }
     }
+    var platesText: String? { p.map { $0.map(String.init).joined(separator: "/") } }
     var weight: Double { Double(w) ?? 0 }
     var reps: Double { Double(r) ?? 0 }
 }
@@ -202,4 +206,20 @@ struct Cycle: Codable, Hashable {
 struct Backup: Codable {
     var entries: [Workout]?
     var weights: [WeightRow]?
+}
+
+// 挂片器械的设置（按动作名存）：几根挂杆、每片多重、器械本身多重
+struct PlateCfg: Codable, Hashable {
+    var pegs = 2
+    var kg = 20.0
+    var base = 0.0
+    func total(_ p: [Int]) -> Double { base + Double(p.reduce(0, +)) * kg }
+    var labels: [String] {
+        switch pegs {
+        case 1: return ["片"]
+        case 2: return ["上", "下"]
+        case 3: return ["上", "中", "下"]
+        default: return (1...pegs).map { "\($0)" }
+        }
+    }
 }

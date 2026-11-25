@@ -8,6 +8,7 @@ struct EntryView: View {
     @State private var newName = ""
     @State private var confirmDelete = false
     @State private var showMore = false
+    @State private var plateFor: String? = nil
 
     init(workout: Workout) { _workout = State(initialValue: workout) }
 
@@ -51,6 +52,9 @@ struct EntryView: View {
                         .disabled(workout.exercises.isEmpty && workout.parts.isEmpty)
                 }
                 ToolbarItemGroup(placement: .keyboard) { Spacer(); Button("完成") { hideKeyboard() } }
+            }
+            .sheet(item: Binding(get: { plateFor.map(StrID.init) }, set: { plateFor = $0?.id })) { m in
+                PlateSettings(name: m.id).presentationDetents([.medium])
             }
             .confirmationDialog("确定删除？", isPresented: $confirmDelete, titleVisibility: .visible) {
                 Button("删除", role: .destructive) { store.delete(workout); dismiss() }
@@ -134,6 +138,16 @@ struct EntryView: View {
                     Image(systemName: t == .up ? "arrow.up.circle.fill" : "arrow.down.circle.fill")
                         .foregroundStyle(trendColor(t)).transition(.scale.combined(with: .opacity))
                 }
+                if !x.wrappedValue.isCardio {
+                    Button { plateFor = name } label: {
+                        Label("挂片", systemImage: store.plateCfg[name] != nil ? "circle.grid.2x1.fill" : "circle.grid.2x1")
+                            .font(.caption.bold()).labelStyle(.titleAndIcon)
+                            .padding(.horizontal, 8).padding(.vertical, 4)
+                            .foregroundStyle(store.plateCfg[name] != nil ? Color.white : color)
+                            .background(Capsule().fill(store.plateCfg[name] != nil ? color : color.opacity(0.12)))
+                    }
+                    .buttonStyle(.plain)
+                }
                 Button(role: .destructive) {
                     withAnimation(.snappy) { workout.exercises.removeAll { $0.id == x.wrappedValue.id } }
                 } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.tertiary) }
@@ -167,9 +181,14 @@ struct EntryView: View {
                                 .overlay(alignment: .leading) { vline }
                         }
                         HStack(spacing: 4) {
-                            cellField(prevHint(prev, si, \.w, "kg"), setBinding(x, s.id, \.w), .decimalPad, t)
+                            if let cfg = store.plateCfg[name] {
+                                plateSteppers(x, s, cfg, t)
+                            } else {
+                                cellField(prevHint(prev, si, \.w, "kg"), setBinding(x, s.id, \.w), .decimalPad, t)
+                            }
                             Text("×").font(.caption).foregroundStyle(.secondary)
                             cellField(prevHint(prev, si, \.r, "次"), setBinding(x, s.id, \.r), .numberPad, t)
+                                .frame(maxWidth: store.plateCfg[name] != nil ? 56 : .infinity)
                         }
                         .padding(.horizontal, 6)
                         .frame(maxWidth: .infinity, minHeight: 38)
@@ -182,7 +201,7 @@ struct EntryView: View {
                     }
                 }
                 Button {
-                    withAnimation(.snappy) { x.wrappedValue.sets.append(x.wrappedValue.sets.last.map { SetRow(w: $0.w, r: $0.r) } ?? SetRow()) }
+                    withAnimation(.snappy) { x.wrappedValue.sets.append(x.wrappedValue.sets.last.map { SetRow(w: $0.w, r: $0.r, p: $0.p) } ?? SetRow()) }
                     Haptic.tap()
                 } label: {
                     Label("加一组", systemImage: "plus").font(.caption.bold()).foregroundStyle(color)
@@ -201,6 +220,39 @@ struct EntryView: View {
     private func setBinding(_ x: Binding<Exercise>, _ id: UUID, _ k: WritableKeyPath<SetRow, String>) -> Binding<String> {
         Binding(get: { x.wrappedValue.sets.first { $0.id == id }?[keyPath: k] ?? "" },
                 set: { v in if let i = x.wrappedValue.sets.firstIndex(where: { $0.id == id }) { x.wrappedValue.sets[i][keyPath: k] = v } })
+    }
+
+    // 挂片：每根挂杆一行  上 − 2 +，不用打字
+    private func plateSteppers(_ x: Binding<Exercise>, _ s: SetRow, _ cfg: PlateCfg, _ t: Trend) -> some View {
+        let p = s.p ?? Array(repeating: 0, count: cfg.pegs)
+        return VStack(spacing: 3) {
+            ForEach(0..<cfg.pegs, id: \.self) { k in
+                HStack(spacing: 4) {
+                    Text(cfg.labels[k]).font(.caption2).foregroundStyle(.secondary).frame(width: 16)
+                    Button { bump(x, s.id, k, -1, cfg) } label: { Image(systemName: "minus.circle.fill") }
+                        .buttonStyle(.plain).foregroundStyle(.secondary)
+                    Text("\(k < p.count ? p[k] : 0)").font(.system(size: 16, weight: .bold, design: .rounded)).monospacedDigit()
+                        .foregroundStyle(trendColor(t)).frame(minWidth: 18)
+                        .contentTransition(.numericText()).animation(.snappy, value: k < p.count ? p[k] : 0)
+                    Button { bump(x, s.id, k, 1, cfg) } label: { Image(systemName: "plus.circle.fill") }
+                        .buttonStyle(.plain).foregroundStyle(Brand.pink)
+                }
+                .font(.system(size: 18))
+            }
+            if s.p != nil { Text("\(fmtNum(cfg.total(p)))kg").font(.system(size: 9)).foregroundStyle(.secondary) }
+        }
+        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity)
+    }
+
+    private func bump(_ x: Binding<Exercise>, _ id: UUID, _ k: Int, _ d: Int, _ cfg: PlateCfg) {
+        guard let i = x.wrappedValue.sets.firstIndex(where: { $0.id == id }) else { return }
+        var p = x.wrappedValue.sets[i].p ?? []
+        if p.count < cfg.pegs { p += Array(repeating: 0, count: cfg.pegs - p.count) }
+        p[k] = max(0, p[k] + d)
+        x.wrappedValue.sets[i].p = p
+        x.wrappedValue.sets[i].w = fmtNum(cfg.total(p))
+        Haptic.tap()
     }
 
     private func prevHint(_ prev: Exercise?, _ i: Int, _ k: KeyPath<SetRow, String>, _ fallback: String) -> String {
@@ -324,3 +376,40 @@ struct EntryView: View {
 func hideKeyboard() {
     UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
 }
+
+// 挂片设置：几根挂杆、每片多重、器械本身多重
+struct PlateSettings: View {
+    @EnvironmentObject var store: Store
+    @Environment(\.dismiss) private var dismiss
+    let name: String
+    @State private var on = false
+    @State private var cfg = PlateCfg()
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Toggle("用挂片记（不用打重量）", isOn: $on.animation())
+                } footer: { Text("像 Prime 这类挂片器械：记录时点 + − 加减片数，训练本里显示成 2/1×8，自动算总重量来比进步。") }
+                if on {
+                    Section("器械") {
+                        Stepper("挂杆：\(cfg.pegs) 根（\(cfg.labels.joined(separator: "、"))）", value: $cfg.pegs, in: 1...3)
+                        Picker("每片重量", selection: $cfg.kg) {
+                            ForEach([20.0, 15, 10, 5, 2.5], id: \.self) { Text("\(fmtNum($0)) kg").tag($0) }
+                        }
+                        Stepper("器械自重：\(fmtNum(cfg.base)) kg", value: $cfg.base, in: 0...200, step: 2.5)
+                    }
+                }
+            }
+            .navigationTitle(name).navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("完成") { store.plateCfg[name] = on ? cfg : nil; dismiss() }.bold()
+                }
+            }
+            .onAppear { if let c = store.plateCfg[name] { cfg = c; on = true } }
+        }
+    }
+}
+
+struct StrID: Identifiable { let id: String }

@@ -17,7 +17,8 @@ func trendColor(_ t: Trend) -> Color {
     switch t { case .up: return .green; case .down: return .red; default: return .primary }
 }
 func setLabel(_ s: SetRow) -> String {
-    s.w.isEmpty ? (s.r.isEmpty ? "—" : "\(s.r)次") : (s.r.isEmpty ? s.w : "\(s.w)×\(s.r)")
+    if let pt = s.platesText { return s.r.isEmpty ? "\(pt)片" : "\(pt)×\(s.r)" }
+    return s.w.isEmpty ? (s.r.isEmpty ? "—" : "\(s.r)次") : (s.r.isEmpty ? s.w : "\(s.w)×\(s.r)")
 }
 
 // 训练日志表：横着是每次训练的日期，竖着是动作，格子里是 重量×次数

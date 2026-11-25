@@ -13,6 +13,7 @@ final class Store: ObservableObject {
     @Published var follow: [String] = [] { didSet { save(follow, "follow") } }
     @Published var avatar: Data? = nil { didSet { ud.set(avatar, forKey: "xt.avatar") } }
     @Published var nickname: String = "" { didSet { ud.set(nickname, forKey: "xt.nickname") } }
+    @Published var plateCfg: [String: PlateCfg] = [:] { didSet { save(plateCfg, "plateCfg") } }
 
     private let ud = UserDefaults.standard
 
@@ -27,6 +28,7 @@ final class Store: ObservableObject {
         follow = load("follow") ?? []
         avatar = ud.data(forKey: "xt.avatar")
         nickname = ud.string(forKey: "xt.nickname") ?? ""
+        plateCfg = load("plateCfg") ?? [:]
     }
 
     private func save<T: Encodable>(_ v: T, _ key: String) {
