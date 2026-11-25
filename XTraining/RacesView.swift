@@ -2,6 +2,8 @@ import SwiftUI
 import UserNotifications
 
 // MARK: 比赛
+struct Podium: Codable, Hashable { var d: String; var t: [String] }
+
 struct Race: Codable, Identifiable, Hashable {
     let id: String
     var date: String?
@@ -21,6 +23,8 @@ struct Race: Codable, Identifiable, Hashable {
     var est: Bool?
     var tz: Double?
     var lt: String?
+    var res: [Podium]?      // 已结束比赛的各组前三名
+    var resNote: String?
 
     var isWorld: Bool { region == "world" }
     // 开赛时刻：国内按北京时间；国外按当地时间 + 时区
@@ -79,6 +83,11 @@ struct Race: Codable, Identifiable, Hashable {
     static func upcoming(_ region: String? = nil) -> [Race] {
         all.filter { e in (e.date == nil || (e.end ?? e.date!) >= Day.today) && (region == nil || (e.region ?? "cn") == region) }
             .sorted { ($0.date ?? "9") < ($1.date ?? "9") }
+    }
+    var isPast: Bool { guard let d = date else { return false }; return (end ?? d) < Day.today }
+    // 已经比完的，最近的排前面
+    static func past() -> [Race] {
+        all.filter(\.isPast).sorted { ($0.date ?? "") > ($1.date ?? "") }
     }
 }
 
@@ -152,7 +161,7 @@ enum Reminders {
 // MARK: 追赛页：国内 / 全球职业赛 / 我追的，左右滑动切换
 struct RacesView: View {
     @State private var tab = 0
-    private let tabs = ["国内", "全球职业赛", "我追的"]
+    private let tabs = ["国内", "全球", "我追的", "已结束"]
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
@@ -165,6 +174,7 @@ struct RacesView: View {
                     RaceList(region: "cn").tag(0)
                     RaceList(region: "world").tag(1)
                     RaceList(onlyFollowed: true).tag(2)
+                    RaceList(past: true).tag(3)
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
             }
@@ -179,10 +189,12 @@ struct RaceList: View {
     @ObservedObject private var feed = RaceFeed.shared
     var region: String? = nil
     var onlyFollowed = false
+    var past = false
     @State private var open: String? = nil
 
     private var list: [Race] {
-        Race.upcoming(onlyFollowed ? nil : region).filter { !onlyFollowed || store.follow.contains($0.id) }
+        if past { return Race.past() }
+        return Race.upcoming(onlyFollowed ? nil : region).filter { !onlyFollowed || store.follow.contains($0.id) }
     }
 
     var body: some View {
@@ -194,7 +206,7 @@ struct RaceList: View {
                     VStack(spacing: 10) {
                         Image(systemName: "trophy").font(.system(size: 40)).foregroundStyle(Brand.gradient)
                             .symbolEffect(.bounce, value: onlyFollowed)
-                        Text(onlyFollowed ? "还没追比赛" : "最近没有比赛").font(.headline)
+                        Text(onlyFollowed ? "还没追比赛" : past ? "还没有结束的比赛" : "最近没有比赛").font(.headline)
                         if onlyFollowed {
                             Text("在“国内”或“全球职业赛”里点「追赛」，开赛前 30 分钟会提醒你").font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
                         }
@@ -278,6 +290,7 @@ struct RaceList: View {
     private func left(_ k: String) -> String {
         if k == "tbd" { return "" }
         let n = Day.between(Day.today, k)
+        if past { return "\(-n) 天前" }
         return n <= 0 ? "进行中" : "还有 \(n) 天"
     }
 }
@@ -314,7 +327,9 @@ struct RaceCard: View {
                 Text(d).font(.subheadline).foregroundStyle(.secondary)
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
+            if e.isPast { PodiumView(e: e, open: open) }
             HStack(spacing: 8) {
+                if !e.isPast {
                 Button {
                     store.toggleFollow(e)
                     Haptic.tap(.medium)
@@ -329,6 +344,7 @@ struct RaceCard: View {
                         }
                 }
                 .buttonStyle(.plain)
+                }
                 if e.isWorld {
                     if let u = e.url, let url = URL(string: u) {
                         Button { openURL(url) } label: {
@@ -383,6 +399,40 @@ struct RaceAlert: View {
             }
             .card()
             .transition(.move(edge: .top).combined(with: .opacity))
+        }
+    }
+}
+
+
+// 已结束比赛：各组前三名
+struct PodiumView: View {
+    let e: Race
+    let open: Bool
+    private let medals = ["🥇", "🥈", "🥉"]
+    var body: some View {
+        let res = e.res ?? []
+        VStack(alignment: .leading, spacing: 8) {
+            if res.isEmpty {
+                Label(e.resNote ?? "成绩还没公布", systemImage: "hourglass").font(.caption).foregroundStyle(.secondary)
+            } else {
+                ForEach(open ? res : Array(res.prefix(2)), id: \.d) { p in
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(p.d).font(.caption.bold()).foregroundStyle(Brand.pink)
+                        ForEach(Array(p.t.prefix(3).enumerated()), id: \.offset) { i, n in
+                            HStack(spacing: 6) {
+                                Text(medals[i]).font(.caption)
+                                Text(n).font(i == 0 ? .subheadline.bold() : .subheadline).lineLimit(1).minimumScaleFactor(0.7)
+                            }
+                        }
+                    }
+                    .padding(10).frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                if !open && res.count > 2 {
+                    Text("点开看全部 \(res.count) 个组别").font(.caption2).foregroundStyle(.secondary)
+                }
+                if let n = e.resNote { Text(n).font(.caption2).foregroundStyle(.secondary) }
+            }
         }
     }
 }

@@ -40,9 +40,27 @@ let eventsJSON = #"""
   "divs": "古典健体",
   "desc": "IFBB Pro League 认证的职业赛，只设古典健体一个组别，都是职业选手。职业赛的冠军通常能拿到奥赛（Olympia）的参赛资格。",
   "dy": "环球中国珠海职业赛",
-  "url": "https://www.ifbbpro.com/schedule/",
+  "url": "https://www.ifbbpro.com/competition/2022-global-classic-zhuhai-pro/",
   "time": "10:00",
-  "est": true
+  "est": true,
+  "res": [
+   {
+    "d": "古典健体",
+    "t": [
+     "Junbao Luo",
+     "Wen Hsin Huang",
+     "Ding Tao"
+    ]
+   },
+   {
+    "d": "Fit Model",
+    "t": [
+     "Min Jeong Myeong",
+     "Ying Liu",
+     "Kaizhen Lin"
+    ]
+   }
+  ]
  },
  {
   "id": "hj-hz-nat",
@@ -131,10 +149,60 @@ let eventsJSON = #"""
   "divs": "212 健美、古典健体、男子健体、女子健美、女子体格",
   "desc": "IFBB Pro League 职业赛（Steve Karr Las Vegas Pro），在美国拉斯维加斯举办，设212 健美、古典健体、男子健体、女子健美、女子体格组。在奥赛的老家拉斯维加斯办，组别很全。各组冠军通常能拿到奥赛资格。",
   "dy": "Steve Karr Las Vegas Pro 健美",
-  "url": "https://www.ifbbpro.com/schedule/",
+  "url": "https://www.ifbbpro.com/competition/2026-steve-karr-las-vegas-classic-pro/",
   "region": "world",
   "tz": -8,
-  "lt": "10:00"
+  "lt": "10:00",
+  "res": [
+   {
+    "d": "212 健美",
+    "t": [
+     "Shaun Clarida",
+     "Santiago Almazan",
+     "Hang Niu"
+    ]
+   },
+   {
+    "d": "古典健体",
+    "t": [
+     "Robert Timms",
+     "Daniel Fabode",
+     "Zavier Steward"
+    ]
+   },
+   {
+    "d": "男子健体",
+    "t": [
+     "Deandre Johnson",
+     "Dmitrii Petrov",
+     "Hussein Akancan"
+    ]
+   },
+   {
+    "d": "女子健美",
+    "t": [
+     "Nadia Capotosto",
+     "Carmen Tocheniuk",
+     "Marilyn Yee"
+    ]
+   },
+   {
+    "d": "女子体格",
+    "t": [
+     "Natalia Abraham Coelho",
+     "Maria Barba",
+     "Brittany Herrera"
+    ]
+   },
+   {
+    "d": "Fit Model",
+    "t": [
+     "Emily Chanel",
+     "Lindsey Tucker-Broussard",
+     "Carla Andrea Reyes Vargas"
+    ]
+   }
+  ]
  },
  {
   "id": "eastcoast",
@@ -148,10 +216,28 @@ let eventsJSON = #"""
   "divs": "男子健体、比基尼",
   "desc": "IFBB Pro League 职业赛（East Coast Pro），在美国新泽西举办，设男子健体、比基尼组。各组冠军通常能拿到奥赛资格。",
   "dy": "East Coast Pro 健美",
-  "url": "https://www.ifbbpro.com/schedule/",
+  "url": "https://www.ifbbpro.com/competition/2026-east-coast-pro/",
   "region": "world",
   "tz": -5,
-  "lt": "10:00"
+  "lt": "10:00",
+  "res": [
+   {
+    "d": "男子健体",
+    "t": [
+     "Jordan Clark",
+     "Diogo Basaglia",
+     "Daivion Shepherd"
+    ]
+   },
+   {
+    "d": "比基尼",
+    "t": [
+     "Savannah Watchman",
+     "Mahsa Akbarimehr",
+     "Cindy Lam"
+    ]
+   }
+  ]
  },
  {
   "id": "chatt",
@@ -165,27 +251,55 @@ let eventsJSON = #"""
   "divs": "女子健身",
   "desc": "IFBB Pro League 职业赛（Chattanooga Night of Champions Pro），在美国查塔努加举办，设女子健身组。各组冠军通常能拿到奥赛资格。",
   "dy": "Chattanooga Night of Champions Pro 健美",
-  "url": "https://www.ifbbpro.com/schedule/",
+  "url": "https://www.ifbbpro.com/competition/2026-chattanooga-night-of-champions-pro/",
   "region": "world",
   "tz": -5,
-  "lt": "10:00"
+  "lt": "10:00",
+  "res": [
+   {
+    "d": "女子健身",
+    "t": [
+     "Jaclyn Baker",
+     "Amber Steffen",
+     "Andrea Glass"
+    ]
+   },
+   {
+    "d": "健康身材",
+    "t": [
+     "Rosemary Rodriguez",
+     "Guadalupe Concepcion Meza Saldana",
+     "Bre Bailey"
+    ]
+   }
+  ]
  },
  {
   "id": "nz",
   "date": "2026-11-07",
-  "name": "新西兰职业赛",
-  "en": "New Zealand Pro",
-  "city": "新西兰",
+  "name": "新西兰职业赛（奥克兰）",
+  "en": "Moe's Muscles Pro",
+  "city": "奥克兰",
   "country": "新西兰",
   "org": "IFBB",
   "level": "IFBB 职业赛",
   "divs": "古典健体",
   "desc": "IFBB Pro League 职业赛（New Zealand Pro），在新西兰举办，设古典健体组。各组冠军通常能拿到奥赛资格。",
   "dy": "New Zealand Pro 健美",
-  "url": "https://www.ifbbpro.com/schedule/",
+  "url": "https://www.ifbbpro.com/competition/2026-moes-muscles-pro/",
   "region": "world",
   "tz": 13,
-  "lt": "10:00"
+  "lt": "10:00",
+  "res": [
+   {
+    "d": "古典健体",
+    "t": [
+     "Terrence Teo Kok Hua",
+     "Harrison Booth",
+     "Yanwen Huang Huang"
+    ]
+   }
+  ]
  },
  {
   "id": "romania",
@@ -218,10 +332,36 @@ let eventsJSON = #"""
   "divs": "古典健体、男子健体、比基尼",
   "desc": "IFBB Pro League 职业赛（Muscle Contest Fitpira Pro），在巴西皮拉西卡巴举办，设古典健体、男子健体、比基尼组。各组冠军通常能拿到奥赛资格。",
   "dy": "Muscle Contest Fitpira Pro 健美",
-  "url": "https://www.ifbbpro.com/schedule/",
+  "url": "https://www.ifbbpro.com/competition/2026-musclecontet-fitpira-pro/",
   "region": "world",
   "tz": -3,
-  "lt": "10:00"
+  "lt": "10:00",
+  "res": [
+   {
+    "d": "古典健体",
+    "t": [
+     "Junior Javorski",
+     "Livingstone Livinho",
+     "Eiton Freitas Nascimento"
+    ]
+   },
+   {
+    "d": "男子健体",
+    "t": [
+     "Kaique Santos",
+     "Vincius Mateus Viera Lima",
+     "William Aguiar Amorim"
+    ]
+   },
+   {
+    "d": "比基尼",
+    "t": [
+     "Nivea Campos",
+     "Bruna Toigo",
+     "Brenda Iracema"
+    ]
+   }
+  ]
  },
  {
   "id": "weider-nat",
@@ -236,10 +376,83 @@ let eventsJSON = #"""
   "divs": "男子健美、古典健体、男子健体、女子健身、形体、女子体格、比基尼",
   "desc": "IFBB Pro League 自然职业赛（Ben Weider Natural Pro），在美国亚历山德里亚举办，设男子健美、古典健体、男子健体、女子健身、形体、女子体格、比基尼组。以 IFBB 创始人本·韦德命名的自然职业赛，选手要通过药检。",
   "dy": "Ben Weider Natural Pro 健美",
-  "url": "https://www.ifbbpro.com/schedule/",
+  "url": "https://www.ifbbpro.com/competition/2026-ben-weider-natural-pro/",
   "region": "world",
   "tz": -5,
-  "lt": "10:00"
+  "lt": "10:00",
+  "res": [
+   {
+    "d": "男子健美",
+    "t": [
+     "Yeong Hong Chua",
+     "Songyoung Jung"
+    ]
+   },
+   {
+    "d": "古典健体",
+    "t": [
+     "Prosper Nwafor",
+     "Hanjin Choi",
+     "Sha'meir Coleman-Smith"
+    ]
+   },
+   {
+    "d": "男子健体",
+    "t": [
+     "Naoya Amano",
+     "Joshua Atease",
+     "Chien Hsin Chen"
+    ]
+   },
+   {
+    "d": "女子健身",
+    "t": [
+     "Nikolett Szabo",
+     "Martina Bianchini",
+     "Zuzanna Paterek"
+    ]
+   },
+   {
+    "d": "形体",
+    "t": [
+     "Dekel Quant",
+     "Daniella Means",
+     "Felecia Harris"
+    ]
+   },
+   {
+    "d": "比基尼",
+    "t": [
+     "Megan D'ginto",
+     "Jessica Mclaughlin",
+     "Marissa Gorjizadeh"
+    ]
+   },
+   {
+    "d": "女子体格",
+    "t": [
+     "Trisha Pollydore",
+     "Cheyenne Tinnell",
+     "Janessa Roy"
+    ]
+   },
+   {
+    "d": "健康身材",
+    "t": [
+     "Maria Rita Penteado",
+     "Farrah Altidor",
+     "Yeying Lin"
+    ]
+   },
+   {
+    "d": "Fit Model",
+    "t": [
+     "Ebony Alvarado",
+     "Regina Perez",
+     "Brooke Kelly"
+    ]
+   }
+  ]
  },
  {
   "id": "kc",
@@ -253,10 +466,28 @@ let eventsJSON = #"""
   "divs": "古典健体、比基尼",
   "desc": "IFBB Pro League 职业赛（KC Pro），在美国堪萨斯城举办，设古典健体、比基尼组。各组冠军通常能拿到奥赛资格。",
   "dy": "KC Pro 健美",
-  "url": "https://www.ifbbpro.com/schedule/",
+  "url": "https://www.ifbbpro.com/competition/2026-kc-pro/",
   "region": "world",
   "tz": -6,
-  "lt": "10:00"
+  "lt": "10:00",
+  "res": [
+   {
+    "d": "古典健体",
+    "t": [
+     "Junior Javorski",
+     "Daniel Fabode",
+     "Dominic Carter"
+    ]
+   },
+   {
+    "d": "比基尼",
+    "t": [
+     "Iulia Baba",
+     "Monique Jansen Van Vuuren",
+     "Cindy Lam"
+    ]
+   }
+  ]
  },
  {
   "id": "irongames",
@@ -270,10 +501,20 @@ let eventsJSON = #"""
   "divs": "男子健体",
   "desc": "IFBB Pro League 职业赛（Iron Games Pro），在美国圣地亚哥举办，设男子健体组。各组冠军通常能拿到奥赛资格。",
   "dy": "Iron Games Pro 健美",
-  "url": "https://www.ifbbpro.com/schedule/",
+  "url": "https://www.ifbbpro.com/competition/2026-irongames-pro/",
   "region": "world",
   "tz": -8,
-  "lt": "10:00"
+  "lt": "10:00",
+  "res": [
+   {
+    "d": "男子健体",
+    "t": [
+     "Carlos Deoliveira",
+     "Jordan Clark",
+     "Deandre Johnson"
+    ]
+   }
+  ]
  },
  {
   "id": "juizdefora",
@@ -287,10 +528,36 @@ let eventsJSON = #"""
   "divs": "男子健体、女子体格",
   "desc": "IFBB Pro League 职业赛（Muscle Contest Juiz de Fora Pro），在巴西茹伊斯迪福拉举办，设男子健体、女子体格组。各组冠军通常能拿到奥赛资格。",
   "dy": "Muscle Contest Juiz de Fora Pro 健美",
-  "url": "https://www.ifbbpro.com/schedule/",
+  "url": "https://www.ifbbpro.com/competition/2026-luciano-cruz-juiz-de-fora-pro/",
   "region": "world",
   "tz": -3,
-  "lt": "10:00"
+  "lt": "10:00",
+  "res": [
+   {
+    "d": "男子健体",
+    "t": [
+     "Kaique Santos",
+     "Rafael Oliveira",
+     "Diogo Basaglia"
+    ]
+   },
+   {
+    "d": "女子健美",
+    "t": [
+     "Carmen Tocheniuk",
+     "Tiana Flex",
+     "Mariana Guayara Murcia"
+    ]
+   },
+   {
+    "d": "女子体格",
+    "t": [
+     "Naiana Nana",
+     "Monique Menchao",
+     "Fernanda Centaura"
+    ]
+   }
+  ]
  },
  {
   "id": "maryland",
@@ -304,27 +571,58 @@ let eventsJSON = #"""
   "divs": "古典健体、男子健体、形体、比基尼",
   "desc": "IFBB Pro League 职业赛（Maryland Night of Champions Pro），在美国陶森举办，设古典健体、男子健体、形体、比基尼组。含 40 岁以上大师组。各组冠军通常能拿到奥赛资格。",
   "dy": "Maryland Night of Champions Pro 健美",
-  "url": "https://www.ifbbpro.com/schedule/",
+  "url": "https://www.ifbbpro.com/competition/2026-maryland-night-of-champions-pro/",
   "region": "world",
   "tz": -5,
-  "lt": "10:00"
+  "lt": "10:00",
+  "resNote": "官网只公布了 40 岁以上大师组成绩"
  },
  {
   "id": "mrbig-nat",
   "date": "2026-11-21",
   "name": "Mr Big 自然职业赛",
-  "en": "Mr Big Evolution Natural Pro",
-  "city": "葡萄牙",
+  "en": "Europe Naturals Pro Show",
+  "city": "卡尔卡韦卢什",
   "country": "葡萄牙",
   "org": "IFBB",
   "level": "IFBB 职业赛",
   "divs": "男子健美、古典健体、男子健体、形体、比基尼",
   "desc": "IFBB Pro League 自然职业赛（Mr Big Evolution Natural Pro），在葡萄牙举办，设男子健美、古典健体、男子健体、形体、比基尼组。自然职业赛，选手要通过药检。",
   "dy": "Mr Big Evolution Natural Pro 健美",
-  "url": "https://www.ifbbpro.com/schedule/",
+  "url": "https://www.ifbbpro.com/competition/2026-mr-big-evolution-natural-pro-championships/",
   "region": "world",
   "tz": 0,
-  "lt": "10:00"
+  "lt": "10:00",
+  "res": [
+   {
+    "d": "男子健美",
+    "t": [
+     "Patrick Obinna Obijuru Jnr",
+     "Fabrice Roland Ngabo"
+    ]
+   },
+   {
+    "d": "男子健体",
+    "t": [
+     "Joshua Atease",
+     "Paul-Emile Huet",
+     "Samir Loqmane"
+    ]
+   },
+   {
+    "d": "比基尼",
+    "t": [
+     "Maja Dahmke"
+    ]
+   },
+   {
+    "d": "健康身材",
+    "t": [
+     "Laura Forsyth",
+     "Vanessa Tamba"
+    ]
+   }
+  ]
  },
  {
   "id": "southern-nat",
@@ -355,10 +653,20 @@ let eventsJSON = #"""
   "divs": "古典健体",
   "desc": "IFBB Pro League 职业赛（Thailand Pro），在泰国举办，设古典健体组。离国内近，亚洲古典健体选手常去。各组冠军通常能拿到奥赛资格。",
   "dy": "Thailand Pro 健美",
-  "url": "https://www.ifbbpro.com/schedule/",
+  "url": "https://www.ifbbpro.com/competition/2026-thailand-pro-2/",
   "region": "world",
   "tz": 7,
-  "lt": "10:00"
+  "lt": "10:00",
+  "res": [
+   {
+    "d": "古典健体",
+    "t": [
+     "Mohammed Murshed",
+     "Vahid Badpei",
+     "Moh Diky Nur Yufa"
+    ]
+   }
+  ]
  },
  {
   "id": "hawaii",
@@ -372,10 +680,11 @@ let eventsJSON = #"""
   "divs": "男子健体、比基尼",
   "desc": "IFBB Pro League 职业赛（Shawn Ray's Hawaiian Classic），在美国檀香山举办，设男子健体、比基尼组。传奇健美选手肖恩·雷主办，含 40 岁以上大师组。各组冠军通常能拿到奥赛资格。",
   "dy": "Shawn Ray's Hawaiian Classic 健美",
-  "url": "https://www.ifbbpro.com/schedule/",
+  "url": "https://www.ifbbpro.com/competition/2026-shawn-rays-hawaiian-classic-masters-pro/",
   "region": "world",
   "tz": -10,
-  "lt": "10:00"
+  "lt": "10:00",
+  "resNote": "官网只公布了 40 岁以上大师组成绩"
  },
  {
   "id": "atlantic",
@@ -390,10 +699,21 @@ let eventsJSON = #"""
   "divs": "男子健美、212 健美、古典健体、男子健体、形体、女子体格、比基尼",
   "desc": "IFBB Pro League 职业赛（Atlantic Coast Pro），在美国劳德代尔堡举办，设男子健美、212 健美、古典健体、男子健体、形体、女子体格、比基尼组。年底组别最全的美国职业赛之一。各组冠军通常能拿到奥赛资格。",
   "dy": "Atlantic Coast Pro 健美",
-  "url": "https://www.ifbbpro.com/schedule/",
+  "url": "https://www.ifbbpro.com/competition/2026-atlantic-coast-pro/",
   "region": "world",
   "tz": -5,
-  "lt": "10:00"
+  "lt": "10:00",
+  "res": [
+   {
+    "d": "形体",
+    "t": [
+     "Manuella Lima",
+     "Nicole Zenobia Graham",
+     "Taylor Santucci"
+    ]
+   }
+  ],
+  "resNote": "其他组别官网还没整理完"
  },
  {
   "id": "mrbig-masters",
@@ -407,27 +727,63 @@ let eventsJSON = #"""
   "divs": "男子健美、212 健美、古典健体、男子健体、女子健美、形体、女子体格、比基尼",
   "desc": "IFBB Pro League 职业赛（Mr Big Evolution Masters Pro），在葡萄牙举办，设男子健美、212 健美、古典健体、男子健体、女子健美、形体、女子体格、比基尼组。40 岁以上大师组职业赛。各组冠军通常能拿到奥赛资格。",
   "dy": "Mr Big Evolution Masters Pro 健美",
-  "url": "https://www.ifbbpro.com/schedule/",
+  "url": "https://www.ifbbpro.com/competition/2026-mr-big-evolution-pro-portugal-masters/",
   "region": "world",
   "tz": 0,
-  "lt": "10:00"
+  "lt": "10:00",
+  "resNote": "官网只公布了 40 岁以上大师组成绩"
  },
  {
   "id": "spain-opare",
-  "date": "2026-11-22",
-  "name": "西班牙职业赛（Opare）",
-  "en": "Spain Pro (Gabriel Opare)",
-  "city": "西班牙",
+  "date": "2026-11-20",
+  "name": "西班牙大奖赛职业赛",
+  "en": "Spanish Grand Prix Pro",
+  "city": "马德里",
   "country": "西班牙",
   "org": "IFBB",
   "level": "IFBB 职业赛",
   "divs": "古典健体、男子健体、形体、比基尼",
-  "desc": "IFBB Pro League 职业赛（Spain Pro (Gabriel Opare)），在西班牙举办，设古典健体、男子健体、形体、比基尼组。各组冠军通常能拿到奥赛资格。",
+  "desc": "IFBB Pro League 职业赛（Spanish Grand Prix Pro），在西班牙马德里举办，设古典健体、男子健体、形体、比基尼等组。各组冠军通常能拿到奥赛资格。",
   "dy": "Spain Pro 健美",
-  "url": "https://www.ifbbpro.com/schedule/",
+  "url": "https://www.ifbbpro.com/competition/2026-spanish-grand-prix-pro/",
   "region": "world",
   "tz": 1,
-  "lt": "10:00"
+  "lt": "10:00",
+  "res": [
+   {
+    "d": "古典健体",
+    "t": [
+     "Tomislav Strmecki",
+     "Zhivko Petkov",
+     "Danis Afari Rose"
+    ]
+   },
+   {
+    "d": "男子健体",
+    "t": [
+     "Sidy Pouye",
+     "Youssef Cherrate",
+     "Omar Suleiman"
+    ]
+   },
+   {
+    "d": "形体",
+    "t": [
+     "Daniela Stephanie Montero Encarnacion",
+     "Paulina Pontus",
+     "Helen Zavitsanou"
+    ]
+   },
+   {
+    "d": "比基尼",
+    "t": [
+     "Ivanna Escandar",
+     "Luca Katai",
+     "Rania Stamatiadou"
+    ]
+   }
+  ],
+  "end": "2026-11-22"
  },
  {
   "id": "spain-martinez",
