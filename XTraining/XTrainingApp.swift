@@ -8,7 +8,7 @@ struct XTrainingApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView()
+            SplashHost()
                 .environmentObject(store)
                 .preferredColorScheme(theme == "light" ? .light : theme == "dark" ? .dark : nil)
                 .tint(Brand.pink)
