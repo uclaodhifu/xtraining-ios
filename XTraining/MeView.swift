@@ -45,6 +45,7 @@ struct MeView: View {
                     ActivityCard()
                         .padding(.vertical, 6)
                 }
+                CloudSection()
                 Section {
                     Picker("记录训练的输入方式", selection: $inputMode) {
                         Text("数字手写").tag(0)
@@ -192,6 +193,7 @@ struct ClearDataView: View {
                         Label("已清除", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
                         Button {
                             withAnimation {
+                                CloudSync.shared.forgive(undo.w.map(\.id))
                                 store.workouts = undo.w; store.weights = undo.kg
                                 store.restDays = undo.rest; store.doneDays = undo.done
                             }
@@ -230,7 +232,7 @@ struct ClearDataView: View {
     private func clear() {
         undo = Snap(w: store.workouts, kg: store.weights, rest: store.restDays, done: store.doneDays)
         withAnimation {
-            if workouts { store.workouts = [] }
+            if workouts { CloudSync.shared.noteDelete(store.workouts.map(\.id)); store.workouts = [] }
             if weights { store.weights = [] }
             if days { store.restDays = []; store.doneDays = [] }
         }

@@ -48,7 +48,7 @@ final class Store: ObservableObject {
     func upsert(_ w: Workout) {
         if let i = workouts.firstIndex(where: { $0.id == w.id }) { workouts[i] = w } else { workouts.append(w) }
     }
-    func delete(_ w: Workout) { workouts.removeAll { $0.id == w.id } }
+    func delete(_ w: Workout) { CloudSync.shared.noteDelete([w.id]); workouts.removeAll { $0.id == w.id } }
     var todays: [Workout] { workouts.filter { $0.date == Day.today } }
 
     // 每个部位上次是哪天练的

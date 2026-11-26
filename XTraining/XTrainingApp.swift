@@ -46,6 +46,7 @@ struct XTrainingApp: App {
         WindowGroup {
             SplashHost()
                 .environmentObject(store)
+                .task { CloudSync.shared.start(store) }
                 .preferredColorScheme(theme == "light" ? .light : theme == "dark" ? .dark : nil)
                 .tint(Brand.pink)
                 .environment(\.locale, Locale(identifier: "zh_CN"))   // 日期选择器等系统控件显示中文
