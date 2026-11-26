@@ -251,8 +251,9 @@ function parseNotes(text, year = guessYear) {
 function hash(s) { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); }
 
 // App 调用入口：返回 JSON 字符串 {entries, weights}
-function xtParse(text) {
-  const out = parseNotes(text);
+function xtParse(text, fixedYear) {
+  // fixedYear > 0：只写了月日的日期都按这一年；否则按今天往前推
+  const out = parseNotes(text, fixedYear > 0 ? (() => fixedYear) : guessYear);
   const weights = (out.weights || []).slice();
   out.forEach((w) => { if (w.weight) weights.push({ date: w.date, kg: +w.weight }); });
   return JSON.stringify({ entries: out.map((w) => ({ ...w })), weights: weights.map((x) => ({ date: x.date, kg: +x.kg })) });

@@ -6,10 +6,10 @@ enum NotesParser {
     struct Fix: Hashable { let from: String; let to: String }
     struct Result { var workouts: [Workout]; var weights: [(String, Double)]; var fixes: [Fix] }
 
-    static func parse(_ text: String, known: [String]) -> Result? {
+    static func parse(_ text: String, known: [String], year: Int = 0) -> Result? {
         guard let ctx = JSContext() else { return nil }
         ctx.evaluateScript(notesParserJS)
-        guard let out = ctx.objectForKeyedSubscript("xtParse")?.call(withArguments: [text])?.toString(),
+        guard let out = ctx.objectForKeyedSubscript("xtParse")?.call(withArguments: [text, year])?.toString(),
               let data = out.data(using: .utf8),
               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
         let entries = obj["entries"] as? [Any] ?? []
@@ -78,6 +78,8 @@ struct NotesImportView: View {
     @State private var text = ""
     @State private var result: NotesParser.Result?
     @State private var done = ""
+    @State private var year = 0   // 0 = 自动（按今天往前推）
+    private var thisYear: Int { Calendar.current.component(.year, from: Date()) }
 
     private var known: [String] {
         var seen = Set<String>(), out: [String] = []
@@ -97,11 +99,17 @@ struct NotesImportView: View {
                             Label("粘贴", systemImage: "doc.on.clipboard")
                         }
                         Spacer()
-                        Button("识别") { hideKeyboard(); result = NotesParser.parse(text, known: known) }
+                        Button("识别") { hideKeyboard(); reparse() }
                             .bold().disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
+                    // 备忘录里常只写“11月20日”，这里选是哪一年
+                    Picker("年份", selection: $year) {
+                        Text("自动").tag(0)
+                        ForEach((2015...thisYear).reversed(), id: \.self) { y in Text(verbatim: "\(y)年").tag(y) }
+                    }
+                    .onChange(of: year) { _, _ in if result != nil { reparse() } }
                 } footer: {
-                    Text("支持：11月20日 胸+肩 / 卧推 60kg 8 8 6 / 卧推 60×8 65×6 / 深蹲 100×5×5 / 侧平举 8kg 3组×15 / 跑步 30分钟 / 体重 90.5。打错的动作名会自动改正。")
+                    Text("年份：只写了月日的记录按选的年份导入；选「自动」就按今天往前推（比今天晚的日期算去年）。写了年份的（如 2024年3月5日）照写的来。\n支持：11月20日 胸+肩 / 卧推 60kg 8 8 6 / 卧推 60×8 65×6 / 深蹲 100×5×5 / 侧平举 8kg 3组×15 / 跑步 30分钟 / 体重 90.5。打错的动作名会自动改正。")
                 }
 
                 if let r = result {
@@ -150,6 +158,8 @@ struct NotesImportView: View {
             }
         }
     }
+
+    private func reparse() { result = NotesParser.parse(text, known: known, year: year) }
 
     private func doImport() {
         guard let r = result else { return }
