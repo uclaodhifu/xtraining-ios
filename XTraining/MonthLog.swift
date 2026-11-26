@@ -68,7 +68,7 @@ struct MonthLogTable: View {
         var seen = Set<String>(), rows: [String] = []
         for w in inMonth.reversed() { for x in w.exercises(of: part) where seen.insert(x.name).inserted { rows.append(x.name) } }
         rows = ordered(rows)
-        let lineH: CGFloat = 16
+        let lineH: CGFloat = 22
         let heights: [CGFloat] = rows.map { n in
             let m = inMonth.map { w in w.exercises(of: part).first { $0.name == n }?.sets.count ?? 0 }.max() ?? 1
             return CGFloat(max(1, m)) * lineH + 14 + 14
@@ -231,8 +231,7 @@ struct MonthLogTable: View {
             // 格子底色表示涨跌，下面写差了多少
             VStack(spacing: 0) {
                 ForEach(x.sets) { s in
-                    Text(setLabel(s))
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    SetInkLabel(s: s, h: lineH - 2, font: .system(size: 12, weight: .semibold, design: .rounded))   // 手写的组显示原样笔迹
                         .monospacedDigit().lineLimit(1).minimumScaleFactor(0.7)
                         .frame(height: lineH)
                 }

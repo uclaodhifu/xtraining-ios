@@ -256,3 +256,24 @@ struct InkCanvas: UIViewRepresentable {
         func canvasViewDrawingDidChange(_ c: PKCanvasView) { onChange() }
     }
 }
+
+// 日志表格里的一组：手写过的显示原样笔迹（重量 × 次数），没手写的照常显示数字
+struct SetInkLabel: View {
+    let s: SetRow
+    var h: CGFloat = 16
+    var font: Font = .caption
+    var body: some View {
+        if s.inkW == nil && s.inkR == nil {
+            Text(setLabel(s)).font(font)
+        } else {
+            HStack(spacing: 1) {
+                part(s.inkW, s.platesText.map { "\($0)片" } ?? s.w)
+                Text("×").font(font)
+                part(s.inkR, s.r)
+            }
+        }
+    }
+    @ViewBuilder private func part(_ id: String?, _ text: String) -> some View {
+        if let id { InkView(id: id, height: h) } else { Text(text.isEmpty ? "—" : text).font(font) }
+    }
+}

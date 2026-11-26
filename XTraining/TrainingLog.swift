@@ -128,8 +128,7 @@ struct TrainingLogTable: View {
             let t = trend(x, prev)
             VStack(spacing: 0) {
                 ForEach(x.sets) { s in
-                    Text(setLabel(s))
-                        .font(.system(size: 11, weight: t == .none || t == .same ? .regular : .semibold, design: .rounded))
+                    SetInkLabel(s: s, h: lineH - 2, font: .system(size: 11, weight: t == .none || t == .same ? .regular : .semibold, design: .rounded))   // 手写的组显示原样笔迹
                         .monospacedDigit().lineLimit(1).minimumScaleFactor(0.7)
                         .frame(height: lineH)
                 }
