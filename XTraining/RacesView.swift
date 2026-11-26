@@ -125,8 +125,8 @@ final class RaceFeed: ObservableObject {
                 Reminders.cancel(o); Reminders.schedule(n)
             case let (o?, nil):
                 Reminders.cancel(o)
-            case let (nil, n?):
-                Reminders.schedule(n)
+            case let (_, n?):
+                Reminders.schedule(n)   // 没变也重排一次，新加的提醒（比如前一天）能补上
             default: break
             }
         }
@@ -265,6 +265,7 @@ struct RaceList: View {
                 }
             }
             .refreshable { await feed.refresh(follow: store.follow) }
+            .task { await feed.refresh(follow: store.follow) }
         }
     }
 
