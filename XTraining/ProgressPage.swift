@@ -48,16 +48,17 @@ struct PartProgress: View {
     @State private var picked: String? = nil
     @State private var showAll = false
     @State private var editing: Workout? = nil
-    @State private var setSel: String? = nil   // 平均组数图点中的月份
 
     private var sessions: [Workout] { store.workouts.filter { $0.parts.contains(part) }.sorted { $0.date < $1.date } }
     private var month: String { String(Day.today.prefix(7)) }
 
     var body: some View {
-        ScrollView {
+        let ss = sessions          // 只排一次序，下面几块都用它（以前每块各算一遍，滑动卡）
+        let nm = names(ss)
+        return ScrollView {
             VStack(spacing: 14) {
                 YesterdayCard()   // 跟着页面一起滚走
-                if sessions.isEmpty {
+                if ss.isEmpty {
                     VStack(spacing: 8) {
                         Text("📈").font(.system(size: 44))
                         Text("还没练过\(part)").font(.headline)
@@ -65,18 +66,18 @@ struct PartProgress: View {
                     }
                     .frame(maxWidth: .infinity).padding(.vertical, 50).card()
                 } else {
-                    sessionStrip
-                    tiles
-                    setsChart
+                    sessionStrip(ss)
+                    tiles(ss)
+                    SetsChart(part: part, rows: setRows(ss))
                     ForEach(Array(charts.enumerated()), id: \.offset) { i, name in
-                        LiftChart(part: part, index: i, name: name, options: names)
+                        LiftChart(part: part, index: i, name: name, options: nm, sessions: ss)
                     }
                     Button {
-                        var list = charts; list.append(names.first ?? "__first")
+                        var list = charts; list.append(nm.first ?? "__first")
                         store.liftCharts[part] = list
-                    } label: { Label("再加一张动作重量图", systemImage: "plus.circle") }
+                    } label: { Label("再加一张目标重量图", systemImage: "plus.circle") }
                         .frame(maxWidth: .infinity).padding(.vertical, 6)
-                    exerciseList
+                    exerciseList(ss, nm)
                 }
             }
             .padding(.horizontal, 16).padding(.bottom, 30)
@@ -86,8 +87,7 @@ struct PartProgress: View {
     }
 
     // 每次训练的日期框，左右滑，点开看那次练了什么
-    @ViewBuilder private var sessionStrip: some View {
-        let list = sessions
+    @ViewBuilder private func sessionStrip(_ list: [Workout]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             ScrollViewReader { proxy in
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -143,9 +143,9 @@ struct PartProgress: View {
     }
 
     // 这个部位练过的所有动作
-    private var names: [String] {
+    private func names(_ ss: [Workout]) -> [String] {
         var seen = Set<String>(), out: [String] = []
-        for w in sessions.reversed() { for x in w.exercises(of: part) where seen.insert(x.name).inserted { out.append(x.name) } }
+        for w in ss.reversed() { for x in w.exercises(of: part) where seen.insert(x.name).inserted { out.append(x.name) } }
         return out
     }
     private var charts: [String] {
@@ -154,10 +154,10 @@ struct PartProgress: View {
         return [def]
     }
 
-    private var tiles: some View {
-        let m = sessions.filter { $0.date.hasPrefix(month) }
+    private func tiles(_ ss: [Workout]) -> some View {
+        let m = ss.filter { $0.date.hasPrefix(month) }
         let sets = m.reduce(0) { $0 + $1.exercises(of: part).reduce(0) { $0 + $1.sets.count } }
-        let last = sessions.last.map { Day.ago($0.date) } ?? "—"
+        let last = ss.last.map { Day.ago($0.date) } ?? "—"
         return HStack {
             StatTile(value: "\(m.count)", label: "本月次数")
             StatTile(value: "\(sets)", label: "本月组数")
@@ -166,56 +166,26 @@ struct PartProgress: View {
         .card()
     }
 
-    // 每月平均每次练几组
-    private var setsChart: some View {
+    // 每月平均每次练几组（固定最近 8 个月，没练的是 0）
+    private func setRows(_ ss: [Workout]) -> [Pt] {
         var byMonth: [String: (Int, Int)] = [:]
-        for w in sessions {
+        for w in ss {
             let k = String(w.date.prefix(7))
             let n = w.exercises(of: part).reduce(0) { $0 + $1.sets.count }
             let v = byMonth[k] ?? (0, 0)
             byMonth[k] = (v.0 + n, v.1 + 1)
         }
-        // 固定显示最近 8 个月（没练的月份是 0）
         let start = Day.date(String(Day.today.prefix(7)) + "-01")
-        let rows: [Pt] = (0..<8).reversed().map { back in
+        return (0..<8).reversed().map { back in
             let d = Calendar.current.date(byAdding: .month, value: -back, to: start) ?? start
             let k = String(Day.str(d).prefix(7))
             let v = byMonth[k] ?? (0, 0)
             return Pt(id: k, v: v.1 == 0 ? 0 : Double(v.0) / Double(v.1))
         }
-        return VStack(alignment: .leading, spacing: 8) {
-            Text("平均组数").font(.title3.bold())
-            Text("每次练\(part)平均几组，按月").font(.caption).foregroundStyle(.secondary)
-            Chart(rows) { r in
-                let blue = Color(hex: 0x0a84ff)
-                let on = r.id == (setSel ?? rows.last?.id)
-                BarMark(x: .value("月", monthLabel(r.id)), y: .value("组", r.v), width: .ratio(0.45))
-                    .foregroundStyle(on ? blue.gradient : (setSel == nil ? blue.opacity(0.45).gradient : Color.gray.opacity(0.35).gradient))
-                    .cornerRadius(6)
-                    .annotation(position: .top) {
-                        Text(r.v > 0 ? fmtNum(r.v) : "").font(.caption2.weight(on && setSel != nil ? .bold : .regular))
-                            .foregroundStyle(on && setSel != nil ? Color(hex: 0x0a84ff) : .secondary)
-                    }
-            }
-            .chartOverlay { proxy in
-                GeometryReader { g in
-                    Rectangle().fill(.clear).contentShape(Rectangle())
-                        .onTapGesture { loc in
-                            guard let f = proxy.plotFrame else { return }
-                            guard let lab: String = proxy.value(atX: loc.x - g[f].origin.x),
-                                  let r = rows.first(where: { monthLabel($0.id) == lab }) else { return }
-                            withAnimation(.snappy) { setSel = setSel == r.id ? nil : r.id }
-                            Haptic.tap()
-                        }
-                }
-            }
-            .frame(height: 170)
-        }
-        .card()
     }
 
     // 每个动作：第一次 → 最近一次的最佳重量
-    private var exerciseList: some View {
+    private func exerciseList(_ sessions: [Workout], _ names: [String]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("每个动作的进步").font(.title3.bold())
             ForEach(showAll ? names : Array(names.prefix(3)), id: \.self) { n in
@@ -272,116 +242,88 @@ func monthLabel(_ ym: String) -> String {
     return p.count == 2 ? "\(Int(p[1]) ?? 0)月" : ym
 }
 
-// 动作重量图：选一个动作，看每月最重多少，以及多久突破一次
+// 目标重量图：给动作自己定一个目标重量，每次训练的最重一组都跟它比
 struct LiftChart: View {
     @EnvironmentObject var store: Store
     let part: String
     let index: Int
     let name: String
     let options: [String]
-    @State private var sel: Int? = nil   // 点中的柱子（在 shown 里的位置）
-    @State private var press: Int? = nil // 长按中的柱子：弹出那次练了什么
-    private var popKey: String { "\(part)-\(index)" }
+    let sessions: [Workout]
+    @AppStorage("xt.targets") private var targetsData = Data()   // { 动作名: 目标kg }
+    @State private var sel: Int? = nil
+    @State private var editing = false
+    @State private var input = ""
 
     private var resolved: String {
         if name == "__first" { return options.first ?? "" }
         return options.first { $0 == name } ?? options.first { $0.contains(name) } ?? name
     }
-    // 每次训练这个动作的 最重一组 和 平均每组重量
-    private var points: [(date: String, best: Double, mean: Double)] {
-        store.workouts.filter { $0.parts.contains(part) }.sorted { $0.date < $1.date }.compactMap { w in
-            let sets = w.exercises.filter { $0.name == resolved }.flatMap(\.sets).map(\.weight).filter { $0 > 0 }
-            guard let best = sets.max() else { return nil }
-            return (w.date, best, sets.reduce(0, +) / Double(sets.count))
-        }
-    }
-
-    // 长按柱子弹出的小方框：那天这个部位练了哪些动作、每组多少
-    private func dayPopup(_ date: String) -> some View {
-        let xs = store.workouts.filter { $0.date == date }.flatMap { $0.exercises(of: part) }
-        return VStack(alignment: .leading, spacing: 4) {
-            Text("\(slashDate(date)) 练了").font(.caption.bold()).foregroundStyle(.secondary)
-            ForEach(Array(xs.prefix(6).enumerated()), id: \.offset) { _, x in
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(x.name).font(.caption.bold()).foregroundStyle(x.name == resolved ? Color(hex: 0x0a84ff) : .primary)
-                    Text(x.isCardio ? "\(x.sets.first?.min ?? "")分钟" : x.sets.map(setLabel).joined(separator: "  "))
-                        .font(.system(size: 10, design: .rounded)).monospacedDigit().foregroundStyle(.secondary).lineLimit(2)
-                }
-            }
-            if xs.count > 6 { Text("还有 \(xs.count - 6) 个动作").font(.caption2).foregroundStyle(.secondary) }
-        }
-        .padding(10)
-        .frame(maxWidth: 196, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color(.systemBackground)))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color(hex: 0x0a84ff).opacity(0.5), lineWidth: 1.5))
-        .shadow(color: .black.opacity(0.25), radius: 12, y: 4)
+    private var targets: [String: Double] { (try? JSONDecoder().decode([String: Double].self, from: targetsData)) ?? [:] }
+    private func setTarget(_ v: Double?) {
+        var t = targets; t[resolved] = v
+        targetsData = (try? JSONEncoder().encode(t)) ?? targetsData
     }
 
     var body: some View {
-        let pts = points
+        let ex = resolved
+        let pts: [(date: String, best: Double)] = sessions.compactMap { w in
+            let ws = w.exercises.filter { $0.name == ex }.flatMap(\.sets).map(\.weight).filter { $0 > 0 }
+            return ws.max().map { (w.date, $0) }
+        }
         let shown = Array(pts.suffix(8))
-        let avgBest = shown.isEmpty ? 0 : shown.map(\.best).reduce(0, +) / Double(shown.count)
-        let latest = shown.last
-        let prev = shown.dropLast().last
-        // 突破：比之前最重的更重
-        var top = 0.0, breaks: [String] = []
-        for p in pts { if p.best > top { if top > 0 { breaks.append(p.date) }; top = p.best } }
-        let gaps = zip(breaks.dropFirst(), breaks).map { Day.between($1, $0) }
-        let avg = gaps.isEmpty ? nil : Double(gaps.reduce(0, +)) / Double(gaps.count)
-        let since = breaks.last.map { Day.between($0, Day.today) }
-        let accent = Color(hex: 0x0a84ff)
+        let target = targets[ex]
+        let accent = Color(hex: 0x0a84ff), good = Color(hex: 0x2f9e44)
+        let hit = target.map { t in shown.filter { $0.best >= t }.count } ?? 0
+        let bestEver = pts.map(\.best).max() ?? 0
 
         return VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("动作重量").font(.title3.bold())
+                Text("目标重量").font(.title3.bold())
                 Spacer()
                 Menu {
                     ForEach(options, id: \.self) { n in Button(n) { set(n) } }
                     if index > 0 { Divider(); Button("删掉这张图", role: .destructive) { remove() } }
                 } label: {
-                    HStack(spacing: 4) { Text(resolved.isEmpty ? "选动作" : resolved); Image(systemName: "chevron.down") }
-                        .font(.subheadline.bold())
+                    HStack(spacing: 4) { Text(ex.isEmpty ? "选动作" : ex); Image(systemName: "chevron.down") }.font(.subheadline.bold())
                 }
             }
-            if let latest {
-                Text(verdict(latest.best, avgBest, prev?.best)).font(.subheadline.bold())
+            if let latest = shown.last {
+                let cur = sel.flatMap { $0 < shown.count ? shown[$0] : nil } ?? latest
+                Text(verdict(cur.best, target, sel == nil ? "最近一次" : slashDate(cur.date))).font(.subheadline.bold())
                 Divider()
                 HStack(alignment: .top, spacing: 28) {
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text("平均").font(.caption).foregroundStyle(.secondary)
-                        kg(avgBest).foregroundStyle(.secondary)
+                    Button { input = target.map(fmtNum) ?? ""; editing = true } label: {
+                        VStack(alignment: .leading, spacing: 0) {
+                            HStack(spacing: 3) { Text("目标").font(.caption); Image(systemName: "pencil").font(.caption2) }.foregroundStyle(.orange)
+                            if let target { kg(target).foregroundStyle(.orange) } else { Text("点这里设").font(.title3.bold()).foregroundStyle(.orange).padding(.vertical, 4) }
+                        }
                     }
-                    let cur = sel.flatMap { $0 < shown.count ? shown[$0] : nil } ?? latest
+                    .buttonStyle(.plain)
                     VStack(alignment: .leading, spacing: 0) {
                         Text(sel != nil ? slashDate(cur.date) : (latest.date == Day.today ? "今天" : "最近一次")).font(.caption).foregroundStyle(accent)
-                        kg(cur.best).foregroundStyle(accent)
+                        kg(cur.best).foregroundStyle(target.map { cur.best >= $0 } == true ? good : accent)
                     }
                     Spacer()
                 }
-                // 固定 8 个位置，柱子窄一点；点一根柱子，其他变灰
                 let pad = 8 - shown.count
                 let hi = sel ?? (shown.count - 1)
                 Chart {
                     ForEach(Array(shown.enumerated()), id: \.offset) { i, p in
-                        let on = i == hi
-                        let c: Color = sel == nil ? (on ? accent : accent.opacity(0.5)) : (on ? accent : Color.gray.opacity(0.35))
+                        let ok = target.map { p.best >= $0 } == true
+                        let base = ok ? good : accent
                         BarMark(x: .value("次", "\(i + pad)"), y: .value("最重", p.best), width: .ratio(0.45))
-                            .foregroundStyle(c.opacity(on ? 0.3 : 0.35))
-                            .cornerRadius(6)
-                        BarMark(x: .value("次", "\(i + pad)"), y: .value("平均", p.mean), width: .ratio(0.45))
-                            .foregroundStyle(c)
+                            .foregroundStyle(i == hi ? base : base.opacity(sel == nil ? 0.5 : 0.25))
                             .cornerRadius(6)
                             .annotation(position: .top) {
-                                if on && sel != nil { Text(fmtNum(p.best)).font(.caption2.bold()).foregroundStyle(accent) }
+                                Text(fmtNum(p.best)).font(.caption2.weight(i == hi ? .bold : .regular)).foregroundStyle(i == hi ? base : .secondary)
                             }
                     }
-                    RuleMark(y: .value("平均", avgBest))
-                        .foregroundStyle(Color.gray.opacity(0.6))
-                        .lineStyle(StrokeStyle(lineWidth: 2))
-                        .annotation(position: .top, alignment: .trailing) { Text("平均").font(.caption2).foregroundStyle(.secondary) }
-                    if let press, press < shown.count {
-                        RuleMark(x: .value("次", "\(press + pad)"))
-                            .foregroundStyle(accent.opacity(0.25))
+                    if let target {
+                        RuleMark(y: .value("目标", target))
+                            .foregroundStyle(Color.orange)
+                            .lineStyle(StrokeStyle(lineWidth: 2, dash: [6, 4]))
+                            .annotation(position: .top, alignment: .leading) { Text("目标 \(fmtNum(target))").font(.caption2.bold()).foregroundStyle(.orange) }
                     }
                 }
                 .chartXScale(domain: (0..<8).map { "\($0)" })
@@ -389,112 +331,108 @@ struct LiftChart: View {
                     AxisMarks { v in
                         AxisValueLabel {
                             if let s = v.as(String.self), let k = Int(s), k - pad >= 0, k - pad < shown.count {
-                                Text(shortDate(shown[k - pad].date)).font(.caption2)
-                                    .foregroundStyle(k - pad == hi ? accent : Color.secondary)
+                                Text(slashDate(shown[k - pad].date)).font(.caption2).foregroundStyle(k - pad == hi ? accent : Color.secondary)
                             }
                         }
                     }
                 }
+                .chartYAxis(.hidden)
+                .chartYScale(domain: 0...(max(bestEver, target ?? 0) * 1.15 + 1))
                 .chartOverlay { proxy in
                     GeometryReader { g in
                         Rectangle().fill(.clear).contentShape(Rectangle())
                             .onTapGesture { loc in
-                                if press != nil { withAnimation(.easeOut(duration: 0.15)) { press = nil }; return }
-                                guard let f = proxy.plotFrame else { return }
-                                let x = loc.x - g[f].origin.x
-                                guard let s: String = proxy.value(atX: x), let k = Int(s) else { return }
+                                guard let f = proxy.plotFrame, let s: String = proxy.value(atX: loc.x - g[f].origin.x), let k = Int(s) else { return }
                                 let i = k - pad
-                                withAnimation(.easeInOut(duration: 0.2)) { sel = (i < 0 || i >= shown.count || sel == i) ? nil : i }
+                                var t = Transaction(); t.disablesAnimations = true
+                                withTransaction(t) { sel = (i < 0 || i >= shown.count || sel == i) ? nil : i }
                                 Haptic.tap()
                             }
-                            // 长按：弹出小方框，那天练了什么；松手就收起
-                            .simultaneousGesture(
-                                LongPressGesture(minimumDuration: 0.35)
-                                    .sequenced(before: DragGesture(minimumDistance: 0))
-                                    .onChanged { v in
-                                        guard case .second(true, let drag) = v, let f = proxy.plotFrame else { return }
-                                        let x = (drag?.location.x ?? g[f].midX) - g[f].origin.x
-                                        guard let s: String = proxy.value(atX: x), let k = Int(s) else { return }
-                                        let i = k - pad
-                                        let n: Int? = (i >= 0 && i < shown.count) ? i : nil
-                                        if n != press { press = n; if n != nil { Haptic.tap(.medium) } }
-                                    }
-                                    // 松手后弹框留着；点一下任意地方才收起
-                            )
-                        // 弹框放在图表外面一层，不再挤动图表（以前会闪一下）
-                        if let press, press < shown.count, let f = proxy.plotFrame,
-                           let px = proxy.position(forX: "\(press + pad)") {
-                            let w: CGFloat = 196
-                            let cx = g[f].origin.x + px
-                            dayPopup(shown[press].date)
-                                .frame(width: w, alignment: .leading)
-                                .offset(x: min(max(0, cx - w / 2), max(0, g.size.width - w)), y: -6)
-                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                                .allowsHitTesting(false)
-                                .transition(.opacity.combined(with: .scale(scale: 0.95, anchor: .bottom)))
-                                .zIndex(2)
-                        }
                     }
                 }
-                .onChange(of: press) { _, p in
-                    if p != nil { ChartPopup.shared.owner = popKey }
-                    else if ChartPopup.shared.owner == popKey { ChartPopup.shared.owner = nil }
-                }
-                .onReceive(ChartPopup.shared.$owner) { o in
-                    if o != popKey && press != nil { withAnimation(.easeOut(duration: 0.15)) { press = nil } }
-                }
-                .chartYAxis(.hidden)
+                .transaction { $0.animation = nil }
                 .frame(height: 190)
-                HStack(spacing: 14) {
-                    HStack(spacing: 4) { Circle().fill(Color(hex: 0x0a84ff).opacity(0.25)).frame(width: 8); Text("最重一组") }
-                    HStack(spacing: 4) { Circle().fill(Color(hex: 0x0a84ff).opacity(0.6)).frame(width: 8); Text("平均每组") }
-                }
-                .font(.caption2).foregroundStyle(.secondary)
                 Divider()
                 HStack {
-                    StatTile(value: "\(breaks.count)", label: "突破次数")
-                    StatTile(value: avg.map { "\(Int($0.rounded()))天" } ?? "—", label: "平均多久突破")
-                    VStack(spacing: 2) {
-                        Text(since.map { "\($0)天" } ?? "—").font(.title2.bold()).monospacedDigit()
-                            .foregroundStyle((avg != nil && since != nil && Double(since!) > avg!) ? Color.orange : Color.primary)
-                        Text("距上次突破").font(.caption).foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity)
+                    StatTile(value: target == nil ? "—" : "\(hit)/\(shown.count)", label: "最近达标")
+                    StatTile(value: fmtNum(bestEver) + "kg", label: "最好一次")
+                    StatTile(value: target.map { t in latest.best >= t ? "已达标" : "差" + fmtNum(t - latest.best) + "kg" } ?? "—", label: "离目标")
                 }
             } else {
-                Text("还没有“\(resolved)”的重量记录").font(.subheadline).foregroundStyle(.secondary).padding(.vertical, 20)
+                Text("还没有“\(ex)”的重量记录").font(.subheadline).foregroundStyle(.secondary).padding(.vertical, 20)
             }
         }
         .card()
+        .alert("\(ex) 的目标重量", isPresented: $editing) {
+            TextField("比如 60", text: $input).keyboardType(.decimalPad)
+            Button("保存") { if let v = Double(input.replacingOccurrences(of: ",", with: ".")), v > 0 { setTarget(v) } }
+            if target != nil { Button("清除目标", role: .destructive) { setTarget(nil) } }
+            Button("取消", role: .cancel) {}
+        } message: { Text("每次训练的最重一组都会跟这个重量比") }
     }
 
     private func kg(_ v: Double) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 1) {
             Text(fmtNum(v)).font(.system(size: 30, weight: .bold, design: .rounded))
-                .contentTransition(.numericText()).animation(.snappy, value: v)
             Text("kg").font(.subheadline.bold())
         }
     }
-    private func shortDate(_ d: String) -> String {
-        let p = d.split(separator: "-"); return p.count == 3 ? "\(Int(p[1]) ?? 0)/\(Int(p[2]) ?? 0)" : d
+    private func verdict(_ v: Double, _ target: Double?, _ who: String) -> String {
+        guard let target else { return "\(who) \(fmtNum(v))kg · 设个目标重量，每次都跟它比" }
+        if v >= target { return v > target ? "\(who)超过目标 \(fmtNum(v - target))kg，可以加目标了 💪" : "\(who)刚好达到目标 ✓" }
+        return "\(who)离目标还差 \(fmtNum(target - v))kg"
     }
-    private func verdict(_ last: Double, _ avg: Double, _ prev: Double?) -> String {
-        let who = "最近一次"
-        if let prev, last > prev { return "\(who)比上次重 \(fmtNum(last - prev))kg，进步了 💪" }
-        if last > avg + 0.01 { return "\(who)比平均重 \(fmtNum(last - avg))kg，状态不错" }
-        if abs(last - avg) <= 0.01 { return "\(who)和平均持平，继续保持" }
-        return "\(who)比平均轻 \(fmtNum(avg - last))kg，下次加把劲"
-    }
-
     private func current() -> [String] {
         if let c = store.liftCharts[part], !c.isEmpty { return c }
         return [part == "肩" ? "飞鸟" : part == "腿" ? "深蹲" : "__first"]
     }
     private func set(_ n: String) {
         var c = current(); if index < c.count { c[index] = n }; store.liftCharts[part] = c
+        sel = nil
     }
     private func remove() {
         var c = current(); if index < c.count { c.remove(at: index) }; store.liftCharts[part] = c
+    }
+}
+
+// 平均组数柱状图：单独一个小视图，点柱子只重画这张图，颜色立刻变（不带动画，跟手）
+struct SetsChart: View {
+    let part: String
+    let rows: [Pt]
+    @State private var sel: String? = nil
+    var body: some View {
+        let blue = Color(hex: 0x0a84ff)
+        VStack(alignment: .leading, spacing: 8) {
+            Text("平均组数").font(.title3.bold())
+            Text("每次练\(part)平均几组，按月").font(.caption).foregroundStyle(.secondary)
+            Chart(rows) { r in
+                let on = r.id == (sel ?? rows.last?.id)
+                BarMark(x: .value("月", monthLabel(r.id)), y: .value("组", r.v), width: .ratio(0.45))
+                    .foregroundStyle(on ? blue : (sel == nil ? blue.opacity(0.45) : Color.gray.opacity(0.35)))
+                    .cornerRadius(6)
+                    .annotation(position: .top) {
+                        Text(r.v > 0 ? fmtNum(r.v) : "").font(.caption2.weight(on && sel != nil ? .bold : .regular))
+                            .foregroundStyle(on && sel != nil ? blue : .secondary)
+                    }
+            }
+            .chartOverlay { proxy in
+                GeometryReader { g in
+                    Rectangle().fill(.clear).contentShape(Rectangle())
+                        // 点哪根就立刻亮哪根（不带动画；再点一次取消）
+                        .onTapGesture { loc in
+                            guard let f = proxy.plotFrame,
+                                  let lab: String = proxy.value(atX: loc.x - g[f].origin.x),
+                                  let r = rows.first(where: { monthLabel($0.id) == lab }) else { return }
+                            var t = Transaction(); t.disablesAnimations = true
+                            withTransaction(t) { sel = sel == r.id ? nil : r.id }
+                            Haptic.tap()
+                        }
+                }
+            }
+            .transaction { $0.animation = nil }
+            .frame(height: 170)
+        }
+        .card()
     }
 }
 
