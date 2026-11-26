@@ -118,10 +118,8 @@ struct HeroCarousel: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .modifier(KenBurns(period: 12))
             .clipped()
             LinearGradient(colors: [.clear, .black.opacity(0.75)], startPoint: .center, endPoint: .bottom)
-            ShineSweep()
             VStack(alignment: .leading, spacing: 8) {
                 if let tag { Text(tag).font(.caption.bold()).foregroundStyle(.white.opacity(0.75)).textCase(.uppercase) }
                 Text(title.isEmpty ? " " : (h.kind == "custom" ? title : (h.title.isEmpty ? title : h.title)))

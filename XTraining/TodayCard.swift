@@ -50,9 +50,7 @@ struct HeroBanner<Trailing: View>: View {
         .background {
             ZStack {
                 HeroBG.image(bg, photo: photo).resizable().scaledToFill()
-                    .modifier(KenBurns())
                 LinearGradient(colors: [.clear, .black.opacity(0.6)], startPoint: .center, endPoint: .bottom)
-                ShineSweep()
             }
         }
         .clipped()
