@@ -73,12 +73,14 @@ struct HandPad: View {
     @State private var dotAt: Int? = nil     // 点「.」时前面已经写了几位数字
     @State private var job: DispatchWorkItem? = nil
     @State private var empty = true
+    @State private var miss = false      // 刚才没认出来
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         VStack(spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
-                Text(title).font(.caption.bold()).foregroundStyle(Paper.pencil).lineLimit(1)
+                Text(miss ? "没认出来，写大一点或点清除重写" : title).font(.caption.bold())
+                    .foregroundStyle(miss ? Tone.down : Paper.pencil).lineLimit(1)
                 Spacer()
                 Text(value.isEmpty ? "—" : value).font(textMode ? .system(size: 20, weight: .bold) : Paper.hand(30))
                     .foregroundStyle(Paper.ink).lineLimit(1)
@@ -122,7 +124,7 @@ struct HandPad: View {
         .buttonStyle(PressScale())
     }
 
-    private func reset() { job?.cancel(); job = nil; canvas.drawing = PKDrawing(); dotAt = nil; empty = true }
+    private func reset() { job?.cancel(); job = nil; canvas.drawing = PKDrawing(); dotAt = nil; empty = true; miss = false }
     private func clear() { reset(); value = "" }
     // 小数点没写/认不出来：记住前面几位，之后认出来的数字在这里插一个点
     private func dot() {
@@ -146,13 +148,16 @@ struct HandPad: View {
     }
     private func scheduleRecognize() {
         job?.cancel()
-        let d = canvas.drawing, tm = textMode
-        guard !d.strokes.isEmpty else { return }
+        let tm = textMode
+        guard !canvas.drawing.strokes.isEmpty else { return }
         let w = DispatchWorkItem {
+            let d = canvas.drawing
+            guard let cg = HandPad.page(d) else { return }
             DispatchQueue.global(qos: .userInitiated).async {
-                let r = HandPad.read(d, text: tm)
+                let r = HandPad.recognize(cg, text: tm)
                 DispatchQueue.main.async {
                     job = nil
+                    miss = r.isEmpty
                     if !r.isEmpty { apply(r); Haptic.tap() }
                     onInk?(d)   // 认不出来也先把笔迹留下
                 }
@@ -165,9 +170,14 @@ struct HandPad: View {
     // 笔画画成白底黑字的图，交给 iPhone 自带的文字识别（不联网）
     // 手写的短数字系统有时认不出，所以：放在一张宽一点的白纸中间、笔画加粗，认不出再换几种设置多试几次
     static func read(_ drawing: PKDrawing, text: Bool) -> String {
-        let d = PKDrawing(strokes: drawing.strokes.map { var s = $0; s.ink = PKInk(.marker, color: .black); return s })
+        guard let cg = page(drawing) else { return "" }
+        return recognize(cg, text: text)
+    }
+    // 画成图这一步放在主线程做（PencilKit 在后台线程画可能是空白）
+    static func page(_ drawing: PKDrawing) -> CGImage? {
+        let d = PKDrawing(strokes: drawing.strokes.map { var s = $0; s.ink = PKInk(.pen, color: .black); return s })
         let b = d.bounds
-        guard !b.isEmpty else { return "" }
+        guard !b.isEmpty else { return nil }
         let ink = lightTrait { d.image(from: b.insetBy(dx: -8, dy: -8), scale: 2) }
         // 统一缩放到字高约 120 像素，左右留足白边
         let k = 120 / max(ink.size.height, 1)
@@ -178,7 +188,9 @@ struct HandPad: View {
             UIColor.white.setFill(); ctx.fill(CGRect(origin: .zero, size: page))
             ink.draw(in: CGRect(x: (page.width - w) / 2, y: (page.height - h) / 2, width: w, height: h))
         }
-        guard let cg = img.cgImage else { return "" }
+        return img.cgImage
+    }
+    static func recognize(_ cg: CGImage, text: Bool) -> String {
         let tries: [([String], Bool, VNRequestTextRecognitionLevel)] = text
             ? [(["zh-Hans", "en-US"], true, .accurate), (["zh-Hans"], false, .accurate)]
             : [(["en-US"], false, .accurate), (["zh-Hans", "en-US"], false, .accurate), (["en-US"], true, .accurate), (["en-US"], false, .fast)]
