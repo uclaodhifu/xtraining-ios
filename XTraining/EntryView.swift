@@ -77,6 +77,7 @@ struct EntryView: View {
             }
             // 打字（动作名、备注）时用系统键盘，手写板先收起
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+                if PadFix.editing { return }   // 在手写板上改数字，手写板留着
                 if writing != nil || addingByHand { withAnimation(.snappy) { writing = nil; addingByHand = false } }
             }
             .onChange(of: writing) { _, c in
@@ -410,7 +411,13 @@ struct EntryView: View {
                 } label: {
                     ZStack {
                         if let ink {
-                            InkView(id: ink, height: 32).id("\(ink)-\(inkTick)")    // 原样笔迹
+                            VStack(spacing: 0) {
+                                InkView(id: ink, height: 28).id("\(ink)-\(inkTick)")    // 原样笔迹
+                                // 下面小字是认出来的数字（算涨跌用），没认出来是红色问号
+                                Text(text.wrappedValue.isEmpty ? "?" : text.wrappedValue)
+                                    .font(.system(size: 9, weight: .bold, design: .rounded)).monospacedDigit()
+                                    .foregroundStyle(text.wrappedValue.isEmpty ? Tone.down : Paper.pencil)
+                            }
 
                         } else if text.wrappedValue.isEmpty {
                             Text(hint)
@@ -464,8 +471,9 @@ struct EntryView: View {
         }, set: { v in
             guard let i = workout.exercises.firstIndex(where: { $0.id == c.ex }),
                   let k = workout.exercises[i].sets.firstIndex(where: { $0.id == c.set }) else { return }
+            let v = v.filter { "0123456789.".contains($0) }
             if c.weight { workout.exercises[i].sets[k].w = v } else { workout.exercises[i].sets[k].r = v }
-            if v.isEmpty { if c.weight { workout.exercises[i].sets[k].inkW = nil } else { workout.exercises[i].sets[k].inkR = nil } }
+            if v.isEmpty && !PadFix.editing { if c.weight { workout.exercises[i].sets[k].inkW = nil } else { workout.exercises[i].sets[k].inkR = nil } }
         })
     }
     private func cellTitle(_ c: WriteCell) -> String {

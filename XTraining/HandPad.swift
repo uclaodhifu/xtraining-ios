@@ -5,6 +5,9 @@ import Vision
 // 输入方式（我 → 输入方式）：0 只有重量/次数手写（默认）  1 全部手写，格子里留原样笔迹  2 都用系统键盘
 enum InputMode { static let key = "xt.inputMode" }
 
+// 正在手写板上改识别结果（这时弹出的键盘不要把手写板关掉）
+@MainActor enum PadFix { static var editing = false }
+
 struct WriteCell: Equatable { var ex: UUID; var set: UUID; var weight: Bool }
 
 // 笔迹存在本机文件里（每格一个小文件），训练数据里只记编号
@@ -74,6 +77,7 @@ struct HandPad: View {
     @State private var job: DispatchWorkItem? = nil
     @State private var empty = true
     @State private var miss = false      // 刚才没认出来
+    @FocusState private var fixing: Bool
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
@@ -84,6 +88,19 @@ struct HandPad: View {
                 if textMode {
                     Text(value.isEmpty ? "—" : value).font(.system(size: 20, weight: .bold))
                         .foregroundStyle(Paper.ink).lineLimit(1)
+                } else {
+                    // 认出来的数字：用来算涨跌和进步；认错了点一下直接改
+                    HStack(spacing: 4) {
+                        Text("认成").font(.caption2).foregroundStyle(Paper.pencil)
+                        TextField("?", text: $value)
+                            .keyboardType(.decimalPad).multilineTextAlignment(.center)
+                            .font(.system(size: 18, weight: .bold, design: .rounded)).monospacedDigit()
+                            .foregroundStyle(value.isEmpty ? Tone.down : Paper.ink)
+                            .frame(width: 64).padding(.vertical, 3)
+                            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Paper.ink.opacity(0.07)))
+                            .focused($fixing)
+                            .onChange(of: fixing) { _, f in PadFix.editing = f }
+                    }
                 }
                 Button { onClose() } label: {
                     Image(systemName: "chevron.down").font(.footnote.bold()).foregroundStyle(Paper.pencil)
