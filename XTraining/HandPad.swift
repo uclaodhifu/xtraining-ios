@@ -99,7 +99,11 @@ struct HandPad: View {
                             .frame(width: 64).padding(.vertical, 3)
                             .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Paper.ink.opacity(0.07)))
                             .focused($fixing)
-                            .onChange(of: fixing) { _, f in PadFix.editing = f }
+                            .onChange(of: fixing) { _, f in
+                                PadFix.editing = f
+                                // 改完了：把这次的笔迹按改对的数字记下来，下次认得更准
+                                if !f, !value.isEmpty, !canvas.drawing.strokes.isEmpty { DigitReader.learn(canvas.drawing, answer: value) }
+                            }
                     }
                 }
                 Button { onClose() } label: {
@@ -162,7 +166,8 @@ struct HandPad: View {
         guard job != nil, !canvas.drawing.strokes.isEmpty else { return }
         job?.cancel(); job = nil
         let d = canvas.drawing
-        let r = HandPad.read(d, text: textMode)
+        var r = HandPad.read(d, text: textMode)
+        if !textMode { r = DigitReader.fuse(r, DigitReader.read(d)) }
         if !r.isEmpty { apply(r) }
         onInk?(d)
     }
@@ -173,8 +178,10 @@ struct HandPad: View {
         let w = DispatchWorkItem {
             let d = canvas.drawing
             guard let cg = HandPad.page(d) else { return }
+            let mine: (text: String, digits: Int)? = tm ? nil : DigitReader.read(d)
             DispatchQueue.global(qos: .userInitiated).async {
-                let r = HandPad.recognize(cg, text: tm)
+                var r = HandPad.recognize(cg, text: tm)
+                if let mine { r = DigitReader.fuse(r, mine) }
                 DispatchQueue.main.async {
                     job = nil
                     // 后台悄悄认一下数字，只用来算涨跌和统计，界面上不显示
@@ -279,18 +286,28 @@ struct SetInkLabel: View {
     let s: SetRow
     var h: CGFloat = 16
     var font: Font = .caption
+    var num = false        // 笔迹下面用小字写上认出来的数字（改过「认成」就显示改后的）
     var body: some View {
         if s.inkW == nil && s.inkR == nil {
             Text(setLabel(s)).font(font)
-        } else {
-            HStack(spacing: 1) {
-                part(s.inkW, s.platesText.map { "\($0)片" } ?? s.w)
-                Text("×").font(font)
-                part(s.inkR, s.r)
+        } else if num {
+            VStack(spacing: 0) {
+                ink(h - 10)
+                Text(setLabel(s)).font(.system(size: 9, weight: .semibold, design: .rounded)).monospacedDigit()
+                    .opacity(0.75).lineLimit(1).minimumScaleFactor(0.6).frame(height: 10)
             }
+        } else {
+            ink(h)
         }
     }
-    @ViewBuilder private func part(_ id: String?, _ text: String) -> some View {
+    private func ink(_ h: CGFloat) -> some View {
+        HStack(spacing: 1) {
+            part(s.inkW, s.platesText.map { "\($0)片" } ?? s.w, h)
+            Text("×").font(font)
+            part(s.inkR, s.r, h)
+        }
+    }
+    @ViewBuilder private func part(_ id: String?, _ text: String, _ h: CGFloat) -> some View {
         if let id { InkView(id: id, height: h) } else { Text(text.isEmpty ? "—" : text).font(font) }
     }
 }

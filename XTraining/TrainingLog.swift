@@ -44,7 +44,8 @@ struct TrainingLogTable: View {
         let cols = self.cols
         let all = names
         let rows = showAll ? all : Array(all.prefix(maxRows))
-        let lineH: CGFloat = 15
+        let inked = cols.contains { w in w.exercises(of: part).contains { $0.sets.contains { $0.inkW != nil || $0.inkR != nil } } }
+        let lineH: CGFloat = inked ? 26 : 15   // 有手写的：笔迹下面还要写认出来的数字
         let heights: [CGFloat] = rows.map { n in
             let m = cols.map { w in w.exercises(of: part).first { $0.name == n }?.sets.count ?? 0 }.max() ?? 1
             return CGFloat(max(1, m)) * lineH + 14
@@ -128,7 +129,7 @@ struct TrainingLogTable: View {
             let t = trend(x, prev)
             VStack(spacing: 0) {
                 ForEach(x.sets) { s in
-                    SetInkLabel(s: s, h: lineH - 2, font: .system(size: 11, weight: t == .none || t == .same ? .regular : .semibold, design: .rounded))   // 手写的组显示原样笔迹
+                    SetInkLabel(s: s, h: lineH - 2, font: .system(size: 11, weight: t == .none || t == .same ? .regular : .semibold, design: .rounded), num: true)   // 手写的组显示原样笔迹 + 小字数字
                         .monospacedDigit().lineLimit(1).minimumScaleFactor(0.7)
                         .frame(height: lineH)
                 }
