@@ -70,6 +70,30 @@ struct MonthCompare: View {
     @State private var pickB = false
     @State private var ha: [String: DayAct] = [:]
     @State private var hb: [String: DayAct] = [:]
+    @AppStorage("xt.cmpEx") private var cmpRaw = ""     // 自己选的 3 个对比动作，用 | 分开；空着就用练得最多的
+
+    // 练得最多的动作（按练过几次算）
+    private var topNames: [String] {
+        var n: [String: Int] = [:]
+        for w in store.workouts { for x in Set(w.exercises.filter { !$0.isCardio }.map(\.name)) { n[x, default: 0] += 1 } }
+        return n.sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }.map(\.key)
+    }
+    private var cmpNames: [String] {
+        let saved = cmpRaw.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+        var out: [String] = []
+        let top = topNames
+        for i in 0..<3 {
+            if i < saved.count, !saved[i].isEmpty { out.append(saved[i]) }
+            else if let t = top.first(where: { !out.contains($0) && !saved.contains($0) }) { out.append(t) }
+        }
+        return out
+    }
+    private func setCmp(_ i: Int, _ name: String?) {
+        var saved = cmpRaw.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+        while saved.count < 3 { saved.append("") }
+        saved[i] = name ?? ""
+        cmpRaw = saved.joined(separator: "|")
+    }
 
     init(a: String) { _a = State(initialValue: a) }
 
@@ -120,6 +144,15 @@ struct MonthCompare: View {
                     }
                     .buttonStyle(.plain)
                 } footer: { Text("右边和左边比：多了绿色，少了红色。点月份可以换。") }
+                Section {
+                    HStack(spacing: 8) {
+                        ForEach(Array(cmpNames.enumerated()), id: \.offset) { i, n in
+                            exTile(i, n, bb[n], ba[n])
+                        }
+                    }
+                    .buttonStyle(.borderless)
+                    .listRowInsets(EdgeInsets(top: 10, leading: 10, bottom: 10, trailing: 10))
+                } header: { Text("动作对比") } footer: { Text("默认是练得最多的 3 个动作，点动作名可以换。") }
                 Section("运动量") {
                     row("运动天数", Double(sb.days), Double(sa.days), "天")
                     row("运动次数", Double(sb.count), Double(sa.count), "次")
@@ -159,6 +192,48 @@ struct MonthCompare: View {
             .task(id: b) { if !b.isEmpty { hb = await Health.shared.fetch(month: Day.date(b + "-01")) } }
             .onAppear { if b.isEmpty { b = prevMonth(a) } }
         }
+    }
+
+    // 一个动作两个月最好的一组：上面小字是上个月，下面大字是这个月，再盖个涨跌小章
+    private func exTile(_ i: Int, _ name: String, _ old: SetRow?, _ new: SetRow?) -> some View {
+        let t: Trend = {
+            guard let o = old, let n = new else { return .none }
+            if n.weight != o.weight { return n.weight > o.weight ? .up : .down }
+            return n.reps > o.reps ? .up : n.reps < o.reps ? .down : .same
+        }()
+        let tag: String = {
+            guard let o = old, let n = new else { return new == nil ? "本月没练" : "新动作" }
+            if n.weight != o.weight { return (n.weight > o.weight ? "+" : "−") + fmtNum(abs(n.weight - o.weight)) + "kg" }
+            if n.reps != o.reps { return (n.reps > o.reps ? "+" : "−") + fmtNum(abs(n.reps - o.reps)) + "次" }
+            return "持平"
+        }()
+        return VStack(alignment: .leading, spacing: 6) {
+            Menu {
+                ForEach(topNames.prefix(40), id: \.self) { n in
+                    Button { setCmp(i, n); Haptic.tap() } label: { if n == name { Label(n, systemImage: "checkmark") } else { Text(n) } }
+                }
+                Divider()
+                Button("恢复默认") { setCmp(i, nil) }
+            } label: {
+                HStack(spacing: 2) {
+                    Circle().fill(Parts.of(name).map(Parts.color) ?? .gray).frame(width: 6, height: 6)
+                    Text(name).font(.caption.bold()).lineLimit(1).minimumScaleFactor(0.7)
+                    Image(systemName: "chevron.down").font(.system(size: 8, weight: .bold)).foregroundStyle(.secondary)
+                }
+                .foregroundStyle(Color.primary)
+            }
+            Text(old.map(setLabel) ?? "—").font(.caption).foregroundStyle(.secondary).monospacedDigit()
+            Text(new.map(setLabel) ?? "—").font(.system(size: 19, weight: .heavy, design: .rounded)).monospacedDigit()
+                .foregroundStyle(Tone.text(t)).lineLimit(1).minimumScaleFactor(0.6)
+            Text(t == .same ? "= 持平" : tag)
+                .font(.system(size: 11, weight: .heavy, design: .rounded))
+                .foregroundStyle(t == .none ? Color.secondary : Tone.text(t))
+                .padding(.horizontal, 6).padding(.vertical, 3)
+                .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(t == .none ? Color.primary.opacity(0.06) : Tone.fill(t)))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Tone.fill(t == .none ? .same : t).opacity(0.6)))
     }
 
     private func monthButton(_ m: String, _ action: @escaping () -> Void) -> some View {
