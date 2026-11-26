@@ -49,6 +49,10 @@ targets:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
         ITSAppUsesNonExemptEncryption: false
+        UTExportedTypeDeclarations:
+          - UTTypeIdentifier: com.kaigreen.xtraining.card
+            UTTypeDescription: X Training 动作卡片
+            UTTypeConformsTo: [public.data]
         NSHealthShareUsageDescription: 读取你在 Apple 健康里的运动、消耗的卡路里和步数，显示在“我”的运动记录日历里。
         NSHealthUpdateUsageDescription: X Training 目前不会往 Apple 健康里写数据。
         LSApplicationCategoryType: public.app-category.healthcare-fitness

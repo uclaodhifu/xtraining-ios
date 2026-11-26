@@ -104,7 +104,7 @@ struct SetRow: Codable, Identifiable, Hashable {
     init(w: String = "", r: String = "", min: String = "", p: [Int]? = nil) { self.w = w; self.r = r; self.min = min; self.p = p }
     init(from d: Decoder) throws {
         let c = try d.container(keyedBy: CodingKeys.self)
-        w = flex(c, .w); r = flex(c, .r); min = flex(c, .min)
+        w = dropJunk(flex(c, .w)); r = dropJunk(flex(c, .r)); min = dropJunk(flex(c, .min))
         p = try? c.decode([Int].self, forKey: .p)
     }
     func encode(to e: Encoder) throws {

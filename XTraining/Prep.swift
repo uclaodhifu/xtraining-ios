@@ -424,7 +424,7 @@ struct PrepDayEditor: View {
             .padding(.horizontal, 16).padding(.vertical, 12)
             .background(Capsule().fill(Color(.systemBackground)))
         }
-        .dropDestination(for: String.self) { _, _ in
+        .dropDestination(for: CardDrag.self) { _, _ in
             dragging = nil; Haptic.success(); return true
         } isTargeted: { on in
             guard on, let d = dragging, d != x.id,
@@ -438,9 +438,9 @@ struct PrepDayEditor: View {
         .transition(.opacity.combined(with: .move(edge: .top)))
     }
 
-    private func beginDrag(_ id: UUID) -> String {
+    private func beginDrag(_ id: UUID) -> CardDrag {
         DispatchQueue.main.async { dragging = id; Haptic.tap(.medium) }
-        return id.uuidString
+        return CardDrag(id: id)
     }
     private func bind(_ id: UUID, _ k: WritableKeyPath<PrepEx, String>) -> Binding<String> {
         Binding(get: { day.exercises.first { $0.id == id }?[keyPath: k] ?? "" },

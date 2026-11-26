@@ -87,6 +87,8 @@ struct HomeView: View {
     }
 
     private func newWorkout(_ parts: [String]) -> Workout {
+        // 有今天没保存的草稿，就接着记
+        if let d = EntryDraft.load(), !store.workouts.contains(where: { $0.id == d.id }) { return d }
         var w = Workout(); w.parts = parts; return w
     }
 

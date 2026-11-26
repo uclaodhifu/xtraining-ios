@@ -11,8 +11,12 @@ struct EntryView: View {
     @State private var plateFor: String? = nil
     @State private var infoFor: LibEx? = nil
     @State private var dragging: UUID? = nil
+    @State private var restored: Bool
 
-    init(workout: Workout) { _workout = State(initialValue: workout) }
+    init(workout: Workout) {
+        _workout = State(initialValue: workout)
+        _restored = State(initialValue: !workout.exercises.isEmpty && EntryDraft.load()?.id == workout.id)
+    }
 
     private var isNew: Bool { !store.workouts.contains { $0.id == workout.id } }
     private var dateBinding: Binding<Date> {
@@ -31,6 +35,7 @@ struct EntryView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 14) {
+                    if restored && isNew { draftBanner }
                     topCard
                     notebook
                     addCard
@@ -46,6 +51,11 @@ struct EntryView: View {
             .scrollDismissesKeyboard(.interactively)
             .safeAreaInset(edge: .bottom) { RestBar(exercise: workout.exercises.last?.name ?? "") }
             .background(Color(.systemGroupedBackground))
+            // 新的训练边记边存草稿，退出再进来还在
+            .onChange(of: workout) { _, w in
+                guard isNew else { return }
+                if w.exercises.isEmpty && w.note.isEmpty { EntryDraft.clear() } else { EntryDraft.save(w) }
+            }
             .navigationTitle(isNew ? "开始训练" : "修改训练")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -64,6 +74,22 @@ struct EntryView: View {
                 Button("删除", role: .destructive) { store.delete(workout); dismiss() }
             }
         }
+    }
+
+    // 接着上次没保存的记录
+    private var draftBanner: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "arrow.clockwise.circle.fill").font(.title3).foregroundStyle(Color(hex: 0x0a84ff))
+            Text("已接上刚才没保存的记录").font(.subheadline.bold())
+            Spacer()
+            Button("清空重来") {
+                EntryDraft.clear()
+                var w = Workout(); w.parts = workout.parts
+                withAnimation(.snappy) { workout = w; restored = false }
+            }
+            .font(.subheadline).foregroundStyle(.secondary)
+        }
+        .card()
     }
 
     // 日期 + 部位
@@ -144,7 +170,7 @@ struct EntryView: View {
                         .padding(.horizontal, 16).padding(.vertical, 12)
                         .background(Capsule().fill(Color(.systemBackground)))
                     }
-                    .dropDestination(for: String.self) { _, _ in
+                    .dropDestination(for: CardDrag.self) { _, _ in
                         dragging = nil
                         Haptic.success()
                         return true
@@ -164,9 +190,9 @@ struct EntryView: View {
     }
 
     // 开始拖的时候记下是哪张卡（draggable 的内容在按住拖起时才取值）
-    private func beginDrag(_ id: UUID) -> String {
+    private func beginDrag(_ id: UUID) -> CardDrag {
         DispatchQueue.main.async { dragging = id; Haptic.tap(.medium) }
-        return id.uuidString
+        return CardDrag(id: id)
     }
 
     private var hline: some View { Rectangle().fill(Color.primary.opacity(0.12)).frame(height: 1) }
@@ -289,7 +315,10 @@ struct EntryView: View {
     }
     private func setBinding(_ x: Binding<Exercise>, _ id: UUID, _ k: WritableKeyPath<SetRow, String>) -> Binding<String> {
         Binding(get: { x.wrappedValue.sets.first { $0.id == id }?[keyPath: k] ?? "" },
-                set: { v in if let i = x.wrappedValue.sets.firstIndex(where: { $0.id == id }) { x.wrappedValue.sets[i][keyPath: k] = v } })
+                set: { v in
+                    // 只收数字和小数点，别的东西（比如拖进来的文字）一律不要
+                    let n = v.filter { "0123456789.".contains($0) }
+                    if let i = x.wrappedValue.sets.firstIndex(where: { $0.id == id }) { x.wrappedValue.sets[i][keyPath: k] = n } })
     }
 
     // 挂片：每根挂杆一行  上 − 2 +，不用打字
@@ -449,6 +478,7 @@ struct EntryView: View {
         for x in workout.exercises { if let p = Parts.of(x.name), !workout.parts.contains(p) { workout.parts.append(p) } }
         workout.parts = Parts.all.filter { workout.parts.contains($0) }
         store.upsert(workout)
+        EntryDraft.clear()
         Haptic.success()
         dismiss()
     }
