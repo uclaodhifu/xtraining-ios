@@ -107,7 +107,18 @@ struct RestBar: View {
         return green                                                              // 其余时间：绿
     }
 
+    @State private var keyboard = false         // 键盘弹出来时先把计时条收起来，免得和键盘叠在一起
+
     var body: some View {
+        ZStack {
+            if !keyboard { bar.transition(.move(edge: .bottom).combined(with: .opacity)) } else { Color.clear.frame(height: 0) }
+        }
+        .animation(.easeOut(duration: 0.2), value: keyboard)
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in keyboard = true }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in keyboard = false }
+    }
+
+    private var bar: some View {
         Group {
             if let s = t.start, let e = t.end, t.running {
                 TimelineView(.periodic(from: .now, by: 1)) { ctx in
