@@ -6,7 +6,7 @@ on:
 
 jobs:
   build:
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 40
     env:
       TEAM_ID: ${{ secrets.TEAM_ID }}
