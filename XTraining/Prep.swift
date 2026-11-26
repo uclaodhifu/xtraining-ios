@@ -148,6 +148,7 @@ struct PrepView: View {
                     }
                 }
             }
+            .safeAreaInset(edge: .bottom) { RestBar() }
             .navigationTitle("备赛计划").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
             .sheet(item: $editingDay) { d in PrepDayEditor(day: d) }
@@ -264,6 +265,7 @@ struct PrepDayEditor: View {
                 .padding(.horizontal, 14).padding(.bottom, 30)
             }
             .scrollDismissesKeyboard(.interactively)
+            .safeAreaInset(edge: .bottom) { RestBar(exercise: day.exercises.first?.name ?? "") }
             .background(Color(.systemGroupedBackground))
             .navigationTitle(day.name).navigationBarTitleDisplayMode(.inline)
             .toolbar {
