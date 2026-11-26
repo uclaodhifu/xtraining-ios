@@ -9,6 +9,7 @@ struct YesterdayCard: View {
     @State private var fromHealth = false
 
     private var day: String { Day.add(Day.today, -1) }
+    private let blue = Color(hex: 0x0a84ff)   // 和进步页的蓝色柱状图一样
     private var ws: [Workout] { store.workouts.filter { $0.date == day } }
     private var sets: Int {
         ws.reduce(0) { $0 + $1.exercises.filter { !$0.isCardio }.reduce(0) { $0 + $1.sets.count } }
@@ -24,7 +25,7 @@ struct YesterdayCard: View {
             HStack(alignment: .firstTextBaseline) {
                 Text("昨天").font(.headline)
                 Spacer()
-                Text(cnDate(day)).font(.headline).monospacedDigit()
+                Text(cnDate(day)).font(.subheadline.bold()).monospacedDigit().foregroundStyle(.secondary)
             }
             Spacer(minLength: 14)
             HStack(alignment: .bottom) {
@@ -37,27 +38,18 @@ struct YesterdayCard: View {
                 timeline.frame(maxWidth: 190)
             }
         }
-        .foregroundStyle(.white)
-        .padding(18)
-        .frame(maxWidth: .infinity, minHeight: 170)
-        .background {
-            ZStack {
-                LinearGradient(colors: [Color(hex: 0x6a5acd), Color(hex: 0x9b6bd1), Color(hex: 0xc77dbb)],
-                               startPoint: .topLeading, endPoint: .bottomTrailing)
-                Rectangle().fill(.ultraThinMaterial).opacity(0.35)
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(.white.opacity(0.25)))
-        }
-        .shadow(color: Color(hex: 0x6a5acd).opacity(0.25), radius: 14, y: 6)
+        .padding(.vertical, 2)
+        .frame(maxWidth: .infinity, minHeight: 150)
+        .card()
         .task(id: store.workouts.count) { await load() }
     }
 
     private func row(_ v: String, _ unit: String, small: Bool = false) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Text(v).font(.system(size: small ? 24 : 34, weight: .heavy, design: .rounded)).italic()
+            Text(v).font(.system(size: small ? 24 : 32, weight: .heavy, design: .rounded))
+                .foregroundStyle(blue)
                 .lineLimit(1).minimumScaleFactor(0.6)
-            if !unit.isEmpty { Text(unit).font(.title3.bold()) }
+            if !unit.isEmpty { Text(unit).font(.subheadline.bold()).foregroundStyle(.secondary) }
         }
     }
 
@@ -67,18 +59,18 @@ struct YesterdayCard: View {
             HStack(spacing: 0) {
                 ForEach(0..<25, id: \.self) { h in
                     let on = segs.contains { Double(h) + 0.5 > $0.0 && Double(h) - 0.5 < $0.1 } && h < 24
-                    Circle().fill(on ? Color.white : Color.white.opacity(0.45))
+                    Circle().fill(on ? blue : Color.primary.opacity(0.18))
                         .frame(width: on ? 7 : 4.5, height: on ? 7 : 4.5)
-                        .shadow(color: on ? .white : .clear, radius: 4)
+                        .shadow(color: on ? blue.opacity(0.6) : .clear, radius: 3)
                         .frame(maxWidth: .infinity)
                 }
             }
             HStack {
                 Text("00:00"); Spacer(); Text("12:00"); Spacer(); Text("24:00")
             }
-            .font(.system(size: 10, weight: .semibold)).monospacedDigit().opacity(0.9)
+            .font(.system(size: 10, weight: .semibold)).monospacedDigit().foregroundStyle(.secondary)
             if !segs.isEmpty && !fromHealth {
-                Text("按记录时间估算").font(.system(size: 9)).opacity(0.7)
+                Text("按记录时间估算").font(.system(size: 9)).foregroundStyle(.secondary)
             }
         }
     }
