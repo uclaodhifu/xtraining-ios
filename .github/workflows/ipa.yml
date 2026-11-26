@@ -2,9 +2,7 @@
 name: 编译安装包
 
 on:
-  workflow_dispatch:
-  push:
-    branches: [main]
+  workflow_dispatch:      # 只手动跑（省云端时间）；推送 main 时 TestFlight 那边已经会编译
 
 permissions:
   contents: write
