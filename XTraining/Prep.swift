@@ -287,6 +287,7 @@ struct PrepDayEditor: View {
                 .padding(.horizontal, 14).padding(.bottom, 30)
             }
             .scrollDismissesKeyboard(.interactively)
+            .dropDestination(for: CardDrag.self) { _, _ in dragging = nil; return true }
             .safeAreaInset(edge: .bottom) { RestBar(exercise: day.exercises.first?.name ?? "") }
             .background(Color(.systemGroupedBackground))
             .navigationTitle(day.name).navigationBarTitleDisplayMode(.inline)
@@ -413,7 +414,6 @@ struct PrepDayEditor: View {
         .padding(.vertical, 4)
         .background(shape.fill(Color(.secondarySystemGroupedBackground)))
         .overlay(shape.strokeBorder(lifting ? color : Color.primary.opacity(0.1), lineWidth: lifting ? 2 : 1))
-        .opacity(lifting ? 0.55 : 1)
         .contentShape(.dragPreview, shape)
         .draggable(beginDrag(x.id)) {
             HStack(spacing: 8) {

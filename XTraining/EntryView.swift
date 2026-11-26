@@ -49,6 +49,8 @@ struct EntryView: View {
                 .frame(maxWidth: 720).frame(maxWidth: .infinity)
             }
             .scrollDismissesKeyboard(.interactively)
+            // 卡片拖到空白处松手，也要把“正在拖”的状态清掉，免得卡片一直是高亮的
+            .dropDestination(for: CardDrag.self) { _, _ in dragging = nil; return true }
             .safeAreaInset(edge: .bottom) { RestBar(exercise: workout.exercises.last?.name ?? "") }
             .background(Color(.systemGroupedBackground))
             // 新的训练边记边存草稿，退出再进来还在
@@ -158,7 +160,6 @@ struct EntryView: View {
                     .overlay(shape.strokeBorder(lifting ? (Parts.of(ex.name).map(Parts.color) ?? Brand.pink) : Color.primary.opacity(0.12),
                                                 lineWidth: lifting ? 2 : 1))
                     .shadow(color: .black.opacity(0.06), radius: 10, y: 4)
-                    .opacity(lifting ? 0.55 : 1)
                     .contentShape(.dragPreview, shape)
                     .draggable(beginDrag(ex.id)) {
                         HStack(spacing: 8) {
