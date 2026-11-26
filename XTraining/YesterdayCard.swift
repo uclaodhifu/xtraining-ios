@@ -95,7 +95,7 @@ struct YesterdayCard: View {
         }
         // 没连健康：按保存时间往前推，每组约 2.5 分钟（至少 20 分钟）
         fromHealth = false
-        segs = ws.compactMap { w in
+        segs = ws.compactMap { w -> (Double, Double)? in
             let n = w.exercises.reduce(0) { $0 + ($1.isCardio ? 0 : $1.sets.count) }
             let cardio = w.exercises.filter(\.isCardio).compactMap { Double($0.sets.first?.min ?? "") }.reduce(0, +)
             let mins = max(20, Double(n) * 2.5 + cardio)
