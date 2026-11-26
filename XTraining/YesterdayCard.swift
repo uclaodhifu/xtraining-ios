@@ -7,6 +7,13 @@ struct YesterdayCard: View {
     @ObservedObject private var health = Health.shared
     @State private var segs: [(Double, Double)] = []   // 小时（0–24）开始、结束
     @State private var fromHealth = false
+    // 时间轴：几点记录的就点亮几点
+    private var marks: Set<Int> {
+        Set(ws.compactMap { w in
+            let d = Date(timeIntervalSince1970: w.createdAt / 1000)
+            return Day.str(d) == day ? Calendar.current.component(.hour, from: d) : nil
+        })
+    }
 
     private var day: String { Day.add(Day.today, -1) }
     private let blue = Color(hex: 0x0a84ff)   // 和进步页的蓝色柱状图一样
@@ -58,7 +65,7 @@ struct YesterdayCard: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 0) {
                 ForEach(0..<25, id: \.self) { h in
-                    let on = segs.contains { Double(h) + 0.5 > $0.0 && Double(h) - 0.5 < $0.1 } && h < 24
+                    let on = marks.contains(h)
                     Circle().fill(on ? blue : Color.primary.opacity(0.18))
                         .frame(width: on ? 7 : 4.5, height: on ? 7 : 4.5)
                         .shadow(color: on ? blue.opacity(0.6) : .clear, radius: 3)
@@ -70,7 +77,7 @@ struct YesterdayCard: View {
             }
             .font(.system(size: 10, weight: .semibold)).monospacedDigit().foregroundStyle(.secondary)
             if !segs.isEmpty && !fromHealth {
-                Text("按记录时间估算").font(.system(size: 9)).foregroundStyle(.secondary)
+                Text("时长按记录估算").font(.system(size: 9)).foregroundStyle(.secondary)
             }
         }
     }
