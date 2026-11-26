@@ -11,6 +11,7 @@ struct EntryView: View {
     @State private var plateFor: String? = nil
     @State private var infoFor: LibEx? = nil
     @State private var dragging: UUID? = nil
+    @State private var writing: WriteCell? = nil   // 正在手写的格子
     @State private var restored: Bool
 
     init(workout: Workout) {
@@ -33,6 +34,7 @@ struct EntryView: View {
 
     var body: some View {
         NavigationStack {
+            ScrollViewReader { proxy in
             ScrollView {
                 VStack(spacing: 14) {
                     if restored && isNew { draftBanner }
@@ -51,7 +53,24 @@ struct EntryView: View {
             .scrollDismissesKeyboard(.interactively)
             // 卡片拖到空白处松手，也要把“正在拖”的状态清掉，免得卡片一直是高亮的
             .dropDestination(for: CardDrag.self) { _, _ in dragging = nil; return true }
-            .safeAreaInset(edge: .bottom) { RestBar(exercise: workout.exercises.last?.name ?? "") }
+            .safeAreaInset(edge: .bottom) {
+                // 写重量/次数时，底下换成手写板；写完收起来又是休息计时
+                if let c = writing {
+                    HandPad(value: cellBinding(c), title: cellTitle(c), onNext: { nextCell(c) },
+                            onClose: { withAnimation(.snappy) { writing = nil } })
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                } else {
+                    RestBar(exercise: workout.exercises.last?.name ?? "")
+                }
+            }
+            // 打字（动作名、备注）时用系统键盘，手写板先收起
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+                if writing != nil { withAnimation(.snappy) { writing = nil } }
+            }
+            .onChange(of: writing) { _, c in
+                if let c { withAnimation(.snappy) { proxy.scrollTo(c.set, anchor: .center) } }
+            }
+            }
             .background(Color(.systemGroupedBackground))
             // 新的训练边记边存草稿，退出再进来还在
             .onChange(of: workout) { _, w in
@@ -265,6 +284,7 @@ struct EntryView: View {
                 ForEach(Array(x.wrappedValue.sets.enumerated()), id: \.element.id) { si, s in
                     let ps: SetRow? = lastSets.flatMap { si < $0.count ? $0[si] : nil }
                     setLine(x, si, s, ps, prev, t, name)
+                        .id(s.id)
                     .contextMenu {
                         Button("删掉这一组", role: .destructive) { withAnimation { x.wrappedValue.sets.removeAll { $0.id == s.id } } }
                     }
@@ -349,23 +369,64 @@ struct EntryView: View {
         return a > b ? .up : a < b ? .down : .same
     }
 
-    private func cellField(_ hint: String, _ text: Binding<String>, _ kb: UIKeyboardType, _ t: Trend) -> some View {
-        // 像在本子上写：没有灰框，只有一条底线；数字用手写体、钢笔蓝；没填时淡淡显示上次的数字
+    private func cellField(_ hint: String, _ text: Binding<String>, _ cell: WriteCell) -> some View {
+        // 不弹键盘：点一下格子，底下出手写板
         let unit = hint == "kg" || hint == "次"
-        return TextField("", text: text)
-            .keyboardType(kb).multilineTextAlignment(.center)
-            .font(Paper.hand(24)).monospacedDigit()
-            .foregroundStyle(Paper.ink)
-            .overlay {
+        let on = writing == cell
+        return Button {
+            hideKeyboard(); Haptic.tap()
+            withAnimation(.snappy) { writing = cell }
+        } label: {
+            ZStack {
                 if text.wrappedValue.isEmpty {
                     Text(hint)
                         .font(unit ? .system(size: 13, weight: .medium) : Paper.hand(22))
                         .foregroundStyle(Paper.pencil.opacity(unit ? 0.6 : 0.55))
-                        .allowsHitTesting(false)
+                } else {
+                    Text(text.wrappedValue).font(Paper.hand(24)).monospacedDigit().foregroundStyle(Paper.ink)
+                        .lineLimit(1).minimumScaleFactor(0.6)
                 }
             }
-            .padding(.vertical, 4)
-            .overlay(alignment: .bottom) { Rectangle().fill(Paper.ink.opacity(text.wrappedValue.isEmpty ? 0.15 : 0.3)).frame(height: 1.5).padding(.horizontal, 6) }
+            .frame(maxWidth: .infinity, minHeight: 38)
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(on ? Paper.ink.opacity(0.08) : .clear))
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(Paper.ink.opacity(on ? 0.8 : (text.wrappedValue.isEmpty ? 0.15 : 0.3))).frame(height: on ? 2 : 1.5).padding(.horizontal, 6)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func cellBinding(_ c: WriteCell) -> Binding<String> {
+        Binding(get: {
+            guard let x = workout.exercises.first(where: { $0.id == c.ex }), let s = x.sets.first(where: { $0.id == c.set }) else { return "" }
+            return c.weight ? s.w : s.r
+        }, set: { v in
+            guard let i = workout.exercises.firstIndex(where: { $0.id == c.ex }),
+                  let k = workout.exercises[i].sets.firstIndex(where: { $0.id == c.set }) else { return }
+            if c.weight { workout.exercises[i].sets[k].w = v } else { workout.exercises[i].sets[k].r = v }
+        })
+    }
+    private func cellTitle(_ c: WriteCell) -> String {
+        guard let x = workout.exercises.first(where: { $0.id == c.ex }) else { return "" }
+        let n = (x.sets.firstIndex { $0.id == c.set } ?? 0) + 1
+        return "\(x.name) · 第\(n)组 · " + (c.weight ? "重量 kg" : "次数")
+    }
+    // 重量写完跳到次数；次数写完跳到下一组的重量（挂片的动作跳过重量）；最后一格写完收起
+    private func nextCell(_ c: WriteCell) {
+        guard let xi = workout.exercises.firstIndex(where: { $0.id == c.ex }),
+              let si = workout.exercises[xi].sets.firstIndex(where: { $0.id == c.set }) else { writing = nil; return }
+        let x = workout.exercises[xi]
+        let plate = store.plateCfg[x.name] != nil
+        var next: WriteCell? = nil
+        if c.weight { next = WriteCell(ex: c.ex, set: c.set, weight: false) }
+        else if si + 1 < x.sets.count { next = WriteCell(ex: c.ex, set: x.sets[si + 1].id, weight: !plate) }
+        else {
+            for y in workout.exercises[(xi + 1)...] where !y.isCardio {
+                if let s = y.sets.first { next = WriteCell(ex: y.id, set: s.id, weight: store.plateCfg[y.name] == nil); break }
+            }
+        }
+        withAnimation(.snappy) { writing = next }
     }
 
     // 本子里的一行：组号 | 上次（铅笔灰）| 今天（钢笔蓝手写）| 小章
@@ -385,10 +446,10 @@ struct EntryView: View {
                         if let cfg = store.plateCfg[name] {
                             plateSteppers(x, s, cfg, t)
                         } else {
-                            cellField(prevHint(prev, si, \.w, "kg"), setBinding(x, s.id, \.w), .decimalPad, cmp(s.w, prev, si, \.w))
+                            cellField(prevHint(prev, si, \.w, "kg"), setBinding(x, s.id, \.w), WriteCell(ex: x.wrappedValue.id, set: s.id, weight: true))
                         }
                         Text("×").font(Paper.hand(18)).foregroundStyle(Paper.ink.opacity(0.6))
-                        cellField(prevHint(prev, si, \.r, "次"), setBinding(x, s.id, \.r), .numberPad, cmp(s.r, prev, si, \.r))
+                        cellField(prevHint(prev, si, \.r, "次"), setBinding(x, s.id, \.r), WriteCell(ex: x.wrappedValue.id, set: s.id, weight: false))
                             .frame(maxWidth: store.plateCfg[name] != nil ? 50 : .infinity)
                     }
                     .frame(maxWidth: .infinity)
