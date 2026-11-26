@@ -88,18 +88,19 @@ final class RestTimer: ObservableObject {
 }
 
 // 记录页底部的休息条
-// 休息条：醒目的彩色卡片。没计时是橙粉渐变；计时中按剩余时间从绿变橙再变红，最后 10 秒会跳动
+// 休息条：醒目的绿色卡片；最后 10 秒变红并跳动
 struct RestBar: View {
     @ObservedObject private var t = RestTimer.shared
     var exercise: String = ""
     private let presets = [60, 90, 120, 180]
 
-    private static let idle = [Color(hex: 0xff7a18), Color(hex: 0xff3d7f)]
+    private static let green = [Color(hex: 0x12b886), Color(hex: 0x0ca678)]
+    private static let idle = green
     private static func colors(_ left: Double, _ total: Double) -> [Color] {
         let f = total > 0 ? left / total : 0
         if left <= 10 { return [Color(hex: 0xff3b30), Color(hex: 0xd6246e)] }   // 快到了：红
-        if f > 0.5 { return [Color(hex: 0x12b886), Color(hex: 0x0ca678).opacity(0.9)] } // 刚开始：绿
-        return [Color(hex: 0xffa94d), Color(hex: 0xff6b00)]                       // 过半：橙
+        _ = f
+        return green                                                              // 其余时间：绿
     }
 
     var body: some View {
@@ -135,7 +136,6 @@ struct RestBar: View {
                     .padding(.horizontal, 14).padding(.vertical, 10)
                     .background(card(Self.colors(left, total)))
                     .animation(.easeInOut(duration: 0.8), value: left <= 10)
-                    .animation(.easeInOut(duration: 0.8), value: total > 0 && left / total > 0.5)
                 }
             } else {
                 HStack(spacing: 8) {
@@ -145,7 +145,7 @@ struct RestBar: View {
                         Button { t.begin(p, exercise: exercise) } label: {
                             Text(p % 60 == 0 ? "\(p / 60)分" : "\(p / 60):\(String(format: "%02d", p % 60))")
                                 .font(.subheadline.bold()).padding(.horizontal, 12).padding(.vertical, 8)
-                                .foregroundStyle(p == t.preset ? Color(hex: 0xff3d7f) : .white)
+                                .foregroundStyle(p == t.preset ? Color(hex: 0x0ca678) : .white)
                                 .background(p == t.preset ? Color.white : Color.white.opacity(0.22), in: Capsule())
                         }
                         .buttonStyle(PressScale())
