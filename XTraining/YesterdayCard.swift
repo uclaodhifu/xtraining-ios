@@ -28,15 +28,14 @@ struct YesterdayCard: View {
     private var hours: Double { segs.reduce(0) { $0 + max(0, $1.1 - $1.0) } }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
                 Text("昨天").font(.headline)
                 Spacer()
                 Text(cnDate(day)).font(.subheadline.bold()).monospacedDigit().foregroundStyle(.secondary)
             }
-            Spacer(minLength: 14)
             HStack(alignment: .bottom) {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 0) {
                     row(parts, "", small: parts.count > 3)
                     row(String(format: "%.1f", hours), "小时")
                     row("\(sets)", "组")
@@ -45,15 +44,15 @@ struct YesterdayCard: View {
                 timeline.frame(maxWidth: 190)
             }
         }
-        .padding(.vertical, 2)
-        .frame(maxWidth: .infinity, minHeight: 150)
+        .frame(maxWidth: .infinity)
+        .fixedSize(horizontal: false, vertical: true)
         .card()
         .task(id: store.workouts.count) { await load() }
     }
 
     private func row(_ v: String, _ unit: String, small: Bool = false) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Text(v).font(.system(size: small ? 24 : 32, weight: .heavy, design: .rounded))
+            Text(v).font(.system(size: small ? 20 : 24, weight: .heavy, design: .rounded))
                 .foregroundStyle(blue)
                 .lineLimit(1).minimumScaleFactor(0.6)
             if !unit.isEmpty { Text(unit).font(.subheadline.bold()).foregroundStyle(.secondary) }

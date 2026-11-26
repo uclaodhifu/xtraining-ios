@@ -9,7 +9,6 @@ struct ProgressPage: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                YesterdayCard().padding(.horizontal, 16).padding(.bottom, 12)
                 Picker("部位", selection: $part.animation(.snappy)) {
                     ForEach(Parts.strength, id: \.self) { Text($0).tag($0) }
                 }
@@ -42,6 +41,7 @@ struct PartProgress: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 14) {
+                YesterdayCard()   // 跟着页面一起滚走
                 if sessions.isEmpty {
                     VStack(spacing: 8) {
                         Text("📈").font(.system(size: 44))
