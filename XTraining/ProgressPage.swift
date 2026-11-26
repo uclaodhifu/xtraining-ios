@@ -158,15 +158,22 @@ struct PartProgress: View {
             let v = byMonth[k] ?? (0, 0)
             byMonth[k] = (v.0 + n, v.1 + 1)
         }
-        let rows = byMonth.keys.sorted().suffix(8).map { k in Pt(id: k, v: Double(byMonth[k]!.0) / Double(max(1, byMonth[k]!.1))) }
+        // 固定显示最近 6 个月（没练的月份是 0）
+        let start = Day.date(String(Day.today.prefix(7)) + "-01")
+        let rows: [Pt] = (0..<6).reversed().map { back in
+            let d = Calendar.current.date(byAdding: .month, value: -back, to: start) ?? start
+            let k = String(Day.str(d).prefix(7))
+            let v = byMonth[k] ?? (0, 0)
+            return Pt(id: k, v: v.1 == 0 ? 0 : Double(v.0) / Double(v.1))
+        }
         return VStack(alignment: .leading, spacing: 8) {
             Text("平均组数").font(.title3.bold())
             Text("每次练\(part)平均几组，按月").font(.caption).foregroundStyle(.secondary)
             Chart(rows) { r in
                 BarMark(x: .value("月", monthLabel(r.id)), y: .value("组", r.v))
-                    .foregroundStyle(Parts.color(part).gradient)
+                    .foregroundStyle(r.id == rows.last?.id ? Color(hex: 0x0a84ff).gradient : Color(hex: 0x0a84ff).opacity(0.45).gradient)
                     .cornerRadius(6)
-                    .annotation(position: .top) { Text(fmtNum(r.v)).font(.caption2).foregroundStyle(.secondary) }
+                    .annotation(position: .top) { Text(r.v > 0 ? fmtNum(r.v) : "").font(.caption2).foregroundStyle(.secondary) }
             }
             .frame(height: 170)
         }
@@ -264,7 +271,7 @@ struct LiftChart: View {
         let gaps = zip(breaks.dropFirst(), breaks).map { Day.between($1, $0) }
         let avg = gaps.isEmpty ? nil : Double(gaps.reduce(0, +)) / Double(gaps.count)
         let since = breaks.last.map { Day.between($0, Day.today) }
-        let accent = Color.orange
+        let accent = Color(hex: 0x0a84ff)
 
         return VStack(alignment: .leading, spacing: 10) {
             HStack {
@@ -296,10 +303,10 @@ struct LiftChart: View {
                     ForEach(Array(shown.enumerated()), id: \.offset) { i, p in
                         let last = i == shown.count - 1
                         BarMark(x: .value("次", "\(i)"), y: .value("最重", p.best), width: .ratio(0.62))
-                            .foregroundStyle(last ? accent.opacity(0.3) : Color.gray.opacity(0.22))
+                            .foregroundStyle(accent.opacity(last ? 0.3 : 0.14))
                             .cornerRadius(7)
                         BarMark(x: .value("次", "\(i)"), y: .value("平均", p.mean), width: .ratio(0.62))
-                            .foregroundStyle(last ? accent : Color.gray.opacity(0.55))
+                            .foregroundStyle(last ? accent : accent.opacity(0.5))
                             .cornerRadius(7)
                     }
                     RuleMark(y: .value("平均", avgBest))
@@ -320,8 +327,8 @@ struct LiftChart: View {
                 .chartYAxis(.hidden)
                 .frame(height: 190)
                 HStack(spacing: 14) {
-                    HStack(spacing: 4) { Circle().fill(Color.gray.opacity(0.25)).frame(width: 8); Text("最重一组") }
-                    HStack(spacing: 4) { Circle().fill(Color.gray.opacity(0.6)).frame(width: 8); Text("平均每组") }
+                    HStack(spacing: 4) { Circle().fill(Color(hex: 0x0a84ff).opacity(0.25)).frame(width: 8); Text("最重一组") }
+                    HStack(spacing: 4) { Circle().fill(Color(hex: 0x0a84ff).opacity(0.6)).frame(width: 8); Text("平均每组") }
                 }
                 .font(.caption2).foregroundStyle(.secondary)
                 Divider()
