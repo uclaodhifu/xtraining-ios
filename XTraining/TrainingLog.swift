@@ -21,6 +21,33 @@ func setLabel(_ s: SetRow) -> String {
     return s.w.isEmpty ? (s.r.isEmpty ? "—" : "\(s.r)次") : (s.r.isEmpty ? s.w : "\(s.w)×\(s.r)")
 }
 
+// 每个月可以指定一次训练当“初始重量”：这个月之后的训练都跟它比（不再跟上一次比）
+// 存成 { "胸|2026-11": 训练id }
+enum Baseline {
+    static let key = "xt.baseline"
+    static func all(_ data: Data) -> [String: String] { (try? JSONDecoder().decode([String: String].self, from: data)) ?? [:] }
+    static func id(_ data: Data, part: String, month: String) -> String? { all(data)[part + "|" + month] }
+    static func toggle(_ data: inout Data, part: String, month: String, id: String) {
+        var m = all(data); let k = part + "|" + month
+        m[k] = m[k] == id ? nil : id
+        data = (try? JSONEncoder().encode(m)) ?? data
+    }
+    // 这次训练该跟谁比：同月、在初始训练之后 → 初始那次；否则 → 上一次
+    static func ref(_ data: Data, part: String, name: String, w: Workout, all hist: [Workout], prev: Exercise?) -> (Exercise?, Bool) {
+        let month = String(w.date.prefix(7))
+        guard let bid = id(data, part: part, month: month), bid != w.id,
+              let bw = hist.first(where: { $0.id == bid }), bw.date <= w.date,
+              let bx = bw.exercises(of: part).first(where: { $0.name == name }) else { return (prev, false) }
+        return (bx, true)
+    }
+}
+
+// 动作名的手写笔迹（最近一次写过的）
+func inkName(_ name: String, part: String, in ws: [Workout]) -> String? {
+    for w in ws.reversed() { if let x = w.exercises(of: part).first(where: { $0.name == name }), let ink = x.inkName { return ink } }
+    return nil
+}
+
 // 训练日志表：横着是每次训练的日期，竖着是动作，格子里是 重量×次数
 // 比上次进步绿色↑，退步红色↓，持平黑色
 struct TrainingLogTable: View {
@@ -28,6 +55,7 @@ struct TrainingLogTable: View {
     let part: String
     var maxRows = 5
     @State private var showAll = false
+    @AppStorage(Baseline.key) private var baseData = Data()
     var onOpen: (Workout) -> Void = { _ in }
     var onExpand: (() -> Void)? = nil
 
@@ -64,7 +92,8 @@ struct TrainingLogTable: View {
                         ForEach(rows.indices, id: \.self) { i in
                             HStack(alignment: .top, spacing: 4) {
                                 Text("\(i + 1)").font(.caption2.bold()).foregroundStyle(Parts.color(part))
-                                Text(rows[i]).font(.caption.bold()).lineLimit(2).minimumScaleFactor(0.7)
+                                if let ink = inkName(rows[i], part: part, in: cols) { InkView(id: ink, height: 18) }
+                                else { Text(rows[i]).font(.caption.bold()).lineLimit(2).minimumScaleFactor(0.7) }
                             }
                             .padding(.top, 6)
                             .frame(width: nameW, height: heights[i], alignment: .topLeading)
@@ -75,13 +104,20 @@ struct TrainingLogTable: View {
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(alignment: .top, spacing: 0) {
                                 ForEach(Array(cols.enumerated()), id: \.element.id) { ci, w in
+                                    let isBase = Baseline.id(baseData, part: part, month: String(w.date.prefix(7))) == w.id
                                     VStack(spacing: 0) {
                                         VStack(spacing: 0) {
                                             Text(slashDate(w.date)).font(.caption.bold()).monospacedDigit()
-                                            Text(weekdayCN(w.date)).font(.system(size: 9)).foregroundStyle(.secondary)
+                                            Text(isBase ? "初始" : weekdayCN(w.date)).font(.system(size: 9, weight: isBase ? .heavy : .regular))
+                                                .foregroundStyle(isBase ? Tone.gold : Color.secondary)
                                         }
                                         .foregroundStyle(w.date == Day.today ? Parts.color(part) : Color.primary)
                                         .frame(width: colW, height: headH)
+                                        .contextMenu {
+                                            Button { Baseline.toggle(&baseData, part: part, month: String(w.date.prefix(7)), id: w.id); Haptic.success() } label: {
+                                                Label(isBase ? "取消初始重量" : "设为本月初始重量", systemImage: "flag")
+                                            }
+                                        }
                                         ForEach(rows.indices, id: \.self) { i in
                                             cell(rows[i], cols, ci, lineH)
                                                 .frame(width: colW, height: heights[i])
@@ -103,6 +139,7 @@ struct TrainingLogTable: View {
                     legend("arrow.up", .green, "进步")
                     legend("arrow.down", .red, "退步")
                     legend("equal", .primary, "持平")
+                    Text("长按日期设初始重量").foregroundStyle(.secondary)
                     Spacer()
                     if let onExpand {
                         Button { onExpand() } label: {
@@ -125,7 +162,8 @@ struct TrainingLogTable: View {
 
     @ViewBuilder private func cell(_ name: String, _ cols: [Workout], _ ci: Int, _ lineH: CGFloat) -> some View {
         if let x = cols[ci].exercises(of: part).first(where: { $0.name == name }) {
-            let prev = cols[..<ci].reversed().lazy.compactMap { $0.exercises(of: self.part).first { $0.name == name } }.first
+            let last = cols[..<ci].reversed().lazy.compactMap { $0.exercises(of: self.part).first { $0.name == name } }.first
+            let prev = Baseline.ref(baseData, part: part, name: name, w: cols[ci], all: cols, prev: last).0   // 设了初始重量就跟初始那次比
             let t = trend(x, prev)
             VStack(spacing: 0) {
                 ForEach(x.sets) { s in

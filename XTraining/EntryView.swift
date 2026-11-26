@@ -239,7 +239,7 @@ struct EntryView: View {
             HStack(spacing: 8) {
                 Text("\(i + 1)").font(.caption.bold()).foregroundStyle(.white)
                     .frame(width: 22, height: 22).background(Circle().fill(color))
-                if inputMode == 1, let ink = x.wrappedValue.inkName {
+                if let ink = x.wrappedValue.inkName {   // 写过的动作名一直显示笔迹，不随输入方式变
                     InkView(id: ink, height: 26).frame(maxWidth: .infinity, alignment: .leading)   // 手写的动作名原样显示
                 } else {
                     TextField("动作名", text: x.name).font(.subheadline.bold())
@@ -505,8 +505,11 @@ struct EntryView: View {
         return HStack(spacing: 0) {
                     Text("\(si + 1)").font(.system(size: 13, weight: .bold, design: .rounded)).foregroundStyle(Paper.pencil).frame(width: labelW)
                     // 上次：铅笔灰
-                    Text(ps.map(setLabel) ?? "—")
-                        .font(.system(size: 15, weight: .semibold, design: .rounded)).monospacedDigit()
+                    Group {
+                        if let ps { SetInkLabel(s: ps, h: 22, font: .system(size: 15, weight: .semibold, design: .rounded)).opacity(0.55) }   // 上次手写的也显示原样笔迹
+                        else { Text("—").font(.system(size: 15, weight: .semibold, design: .rounded)) }
+                    }
+                        .monospacedDigit()
                         .foregroundStyle(Paper.pencil)
                         .lineLimit(1).minimumScaleFactor(0.6)
                         .frame(width: histW + 10)
