@@ -9,6 +9,8 @@ struct HomeView: View {
     @State private var picked: [String]? = nil
     @State private var editing: Workout? = nil
     @State private var showCycle = false
+    @State private var showPrep = false
+    @ObservedObject private var prep = PrepStore.shared
     @State private var showWeight = false
     @State private var showAll = false
     @State private var query = ""
@@ -41,6 +43,7 @@ struct HomeView: View {
             .sheet(isPresented: $editTitle) { TitleEditor() }
             .sheet(item: $editing) { w in EntryView(workout: w) }
             .sheet(isPresented: $showCycle) { CycleEditor() }
+            .sheet(isPresented: $showPrep) { PrepView() }
             .sheet(isPresented: $showWeight) { WeightView() }
         }
     }
@@ -116,9 +119,19 @@ struct HomeView: View {
                 HeroBanner(tag: "今天练什么", title: heroTitle, sub: why,
                            button: chosen.wrappedValue.isEmpty ? "开始训练" : "开始训练 · " + chosen.wrappedValue.joined(separator: " + "),
                            action: { Haptic.tap(.medium); editing = newWorkout(chosen.wrappedValue) }) {
-                    Button { showCycle = true } label: {
-                        Text(cycleOn ? "周期" : "＋ 周期").font(.footnote.bold()).foregroundStyle(.white)
+                    HStack(spacing: 8) {
+                        Button { showCycle = true } label: {
+                            Text(cycleOn ? "周期" : "＋ 周期").font(.footnote.bold()).foregroundStyle(.white)
+                                .padding(.horizontal, 12).frame(height: 34).background(.ultraThinMaterial, in: Capsule())
+                        }
+                        Button { showPrep = true } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "trophy.fill").font(.caption2)
+                                Text(prep.daysLeft.map { $0 >= 0 ? "备赛 \($0)天" : "备赛" } ?? (prep.active ? "备赛" : "＋ 备赛"))
+                            }
+                            .font(.footnote.bold()).foregroundStyle(.white)
                             .padding(.horizontal, 12).frame(height: 34).background(.ultraThinMaterial, in: Capsule())
+                        }
                     }
                 }
             VStack(alignment: .leading, spacing: 12) {

@@ -153,6 +153,7 @@ struct HomeLog: View {
     @EnvironmentObject var store: Store
     @State private var part = ""
     @State private var full = false
+    @State private var prep = false
     var onOpen: (Workout) -> Void
 
     private var defaultPart: String {
@@ -166,6 +167,12 @@ struct HomeLog: View {
                 Text("训练日志").font(.title3.bold())
                 Spacer()
                 Text("点日期可以修改").font(.caption2).foregroundStyle(.secondary)
+                Button { Haptic.tap(); prep = true } label: {
+                    Label("备赛", systemImage: "trophy.fill").font(.caption.bold())
+                        .padding(.horizontal, 10).frame(height: 30)
+                        .foregroundStyle(.white).background(Capsule().fill(Brand.gradient))
+                }
+                .buttonStyle(PressScale())
                 Button { Haptic.tap(); full = true } label: {
                     Image(systemName: "arrow.up.left.and.arrow.down.right")
                         .font(.footnote.bold()).frame(width: 30, height: 30)
@@ -184,6 +191,7 @@ struct HomeLog: View {
         }
         .card()
         .fullScreenCover(isPresented: $full) { LogFullScreen(part: p) }
+        .sheet(isPresented: $prep) { PrepLogView() }
     }
 }
 
