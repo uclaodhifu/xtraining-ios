@@ -211,6 +211,12 @@ struct PrepDayEditor: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var ps = PrepStore.shared
     @State var day: PrepDay
+    // 旧计划没有每组的数据：先补成固定的空行，不然每次刷新都换新行，输入框填不进去
+    init(day: PrepDay) {
+        var d = day
+        for i in d.exercises.indices where d.exercises[i].rows == nil { d.exercises[i].rows = d.exercises[i].setRows }
+        _day = State(initialValue: d)
+    }
     @State private var newName = ""
 
     private var suggestions: [String] {
@@ -519,7 +525,9 @@ struct PrepDayEditor: View {
     private func add(_ n: String) {
         let t = n.trimmingCharacters(in: .whitespaces)
         guard !t.isEmpty else { return }
-        withAnimation { day.exercises.append(PrepEx(name: t, sets: Parts.of(t) == "有氧" ? 1 : 4, reps: Parts.of(t) == "有氧" ? "30分钟" : "8-12")) }
+        var x = PrepEx(name: t, sets: Parts.of(t) == "有氧" ? 1 : 4, reps: Parts.of(t) == "有氧" ? "30分钟" : "8-12")
+        x.rows = x.setRows
+        withAnimation { day.exercises.append(x) }
         newName = ""
         Haptic.tap()
     }
