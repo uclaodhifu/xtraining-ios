@@ -1,9 +1,18 @@
 import SwiftUI
 import UIKit
+import UserNotifications
 
 // iPhone 平时锁竖屏，只有训练日志全屏时转横屏；iPad 随便转
-final class AppDelegate: NSObject, UIApplicationDelegate {
+final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     static var lock: UIInterfaceOrientationMask = .portrait
+    func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        UNUserNotificationCenter.current().delegate = self
+        return true
+    }
+    // App 开着的时候，休息结束也弹横幅、响提示音
+    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
+        [.banner, .sound, .list]
+    }
     func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
         UIDevice.current.userInterfaceIdiom == .pad ? .all : AppDelegate.lock
     }

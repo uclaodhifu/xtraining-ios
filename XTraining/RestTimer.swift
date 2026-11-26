@@ -35,10 +35,11 @@ final class RestTimer: ObservableObject {
         Haptic.tap()
     }
 
-    func stop() {
+    func stop(keepAlert: Bool = false) {
         tick?.cancel()
         start = nil; end = nil
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["rest-end"])
+        // 手动停才取消提醒；时间到了自然结束时让通知照常响
+        if !keepAlert { UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["rest-end"]) }
         let a = activity; activity = nil
         Task { await a?.end(nil, dismissalPolicy: .immediate) }
         // 清掉上次没关掉的
@@ -53,7 +54,7 @@ final class RestTimer: ObservableObject {
                 guard let self, let e = self.end else { return }
                 if Date() >= e {
                     Haptic.success()
-                    self.stop()
+                    self.stop(keepAlert: true)
                     return
                 }
             }
