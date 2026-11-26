@@ -48,9 +48,10 @@ func inkName(_ name: String, part: String, in ws: [Workout]) -> String? {
     return nil
 }
 
-// 训练日志表：横着是每次训练的日期，竖着是动作，格子里是 重量×次数
-// 比上次进步绿色↑，退步红色↓，持平黑色
+// 训练日志表（竖屏）：固定显示最近几次（colCount）练这个部位的训练，不用左右滑
+// 每格是那天这个动作最重的一组：手写的显示原样笔迹，下面小字是认出来的数字；比上次进步绿↑、退步红↓
 struct TrainingLogTable: View {
+    static let colCount = 4          // 竖屏显示最近几次训练
     @EnvironmentObject var store: Store
     let part: String
     var maxRows = 5
@@ -59,95 +60,99 @@ struct TrainingLogTable: View {
     var onOpen: (Workout) -> Void = { _ in }
     var onExpand: (() -> Void)? = nil
 
-    private var cols: [Workout] {
-        store.workouts.filter { $0.parts.contains(part) && !$0.exercises(of: part).isEmpty }.sorted { $0.date < $1.date }
-    }
-    private var names: [String] {
-        var seen = Set<String>(), out: [String] = []
-        for w in cols.reversed() { for x in w.exercises(of: part) where seen.insert(x.name).inserted { out.append(x.name) } }
+    // 同一天练两次合成一列
+    private var history: [Workout] {
+        let ws = store.workouts.filter { !$0.exercises(of: part).isEmpty }
+            .sorted { $0.date != $1.date ? $0.date < $1.date : $0.createdAt < $1.createdAt }
+        var out: [Workout] = []
+        for w in ws {
+            guard var last = out.last, last.date == w.date else { out.append(w); continue }
+            for x in w.exercises(of: part) {
+                if let k = last.exercises.firstIndex(where: { $0.name == x.name }) { last.exercises[k].sets += x.sets }
+                else { last.exercises.append(x) }
+            }
+            for p in w.parts where !last.parts.contains(p) { last.parts.append(p) }
+            out[out.count - 1] = last
+        }
         return out
+    }
+    // 一个动作那天最重的一组（一样重取次数多的）
+    private func top(_ x: Exercise) -> SetRow? {
+        x.sets.filter { $0.weight > 0 || $0.reps > 0 || $0.p != nil }
+            .max { ($0.weight, $0.reps) < ($1.weight, $1.reps) } ?? x.sets.last
+    }
+    private func original(_ w: Workout) -> Workout {
+        store.workouts.filter { $0.date == w.date && !$0.exercises(of: part).isEmpty }.max { $0.createdAt < $1.createdAt } ?? w
     }
 
     var body: some View {
-        let cols = self.cols
-        let all = names
-        let rows = showAll ? all : Array(all.prefix(maxRows))
-        let inked = cols.contains { w in w.exercises(of: part).contains { $0.sets.contains { $0.inkW != nil || $0.inkR != nil } } }
-        let lineH: CGFloat = inked ? 26 : 15   // 有手写的：笔迹下面还要写认出来的数字
-        let heights: [CGFloat] = rows.map { n in
-            let m = cols.map { w in w.exercises(of: part).first { $0.name == n }?.sets.count ?? 0 }.max() ?? 1
-            return CGFloat(max(1, m)) * lineH + 14
-        }
-        let nameW: CGFloat = 80, colW: CGFloat = 72, headH: CGFloat = 32
+        let hist = history
+        let cols = Array(hist.suffix(Self.colCount))
+        let first = hist.count - cols.count
+        let names = orderByLatest(cols)
+        let rows = showAll ? names : Array(names.prefix(maxRows))
         let line = Color.primary.opacity(0.1)
+        let nameW: CGFloat = 54, rowH: CGFloat = 66, headH: CGFloat = 34
+
         return VStack(alignment: .leading, spacing: 8) {
             if cols.isEmpty {
                 Text("还没练过\(part)。记一次训练，这里就会出现表格。").font(.subheadline).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity).padding(.vertical, 24)
             } else {
-                HStack(alignment: .top, spacing: 0) {
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text("动作").font(.caption.bold()).foregroundStyle(.secondary)
-                            .frame(width: nameW, height: headH, alignment: .leading)
-                        ForEach(rows.indices, id: \.self) { i in
-                            HStack(alignment: .top, spacing: 4) {
-                                Text("\(i + 1)").font(.caption2.bold()).foregroundStyle(Parts.color(part))
-                                if let ink = inkName(rows[i], part: part, in: cols) { InkView(id: ink, height: 18) }
-                                else { Text(rows[i]).font(.caption.bold()).lineLimit(2).minimumScaleFactor(0.7) }
+                VStack(spacing: 0) {
+                    // 日期行：点日期打开那次训练修改，长按设本月初始重量
+                    HStack(spacing: 0) {
+                        Text("动作").font(.caption2).foregroundStyle(.secondary).frame(width: nameW, height: headH)
+                        ForEach(Array(cols.enumerated()), id: \.offset) { _, w in
+                            let isBase = Baseline.id(baseData, part: part, month: String(w.date.prefix(7))) == w.id
+                            VStack(spacing: 0) {
+                                Text(slashDate(w.date)).font(.caption.bold()).monospacedDigit()
+                                if isBase { Text("初始").font(.system(size: 8, weight: .heavy)).foregroundStyle(Tone.gold) }
                             }
-                            .padding(.top, 6)
-                            .frame(width: nameW, height: heights[i], alignment: .topLeading)
-                            .overlay(alignment: .top) { Rectangle().fill(line).frame(height: 1) }
-                        }
-                    }
-                    ScrollViewReader { proxy in
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(alignment: .top, spacing: 0) {
-                                ForEach(Array(cols.enumerated()), id: \.element.id) { ci, w in
-                                    let isBase = Baseline.id(baseData, part: part, month: String(w.date.prefix(7))) == w.id
-                                    VStack(spacing: 0) {
-                                        VStack(spacing: 0) {
-                                            Text(slashDate(w.date)).font(.caption.bold()).monospacedDigit()
-                                            Text(isBase ? "初始" : weekdayCN(w.date)).font(.system(size: 9, weight: isBase ? .heavy : .regular))
-                                                .foregroundStyle(isBase ? Tone.gold : Color.secondary)
-                                        }
-                                        .foregroundStyle(w.date == Day.today ? Parts.color(part) : Color.primary)
-                                        .frame(width: colW, height: headH)
-                                        .contextMenu {
-                                            Button { Baseline.toggle(&baseData, part: part, month: String(w.date.prefix(7)), id: w.id); Haptic.success() } label: {
-                                                Label(isBase ? "取消初始重量" : "设为本月初始重量", systemImage: "flag")
-                                            }
-                                        }
-                                        ForEach(rows.indices, id: \.self) { i in
-                                            cell(rows[i], cols, ci, lineH)
-                                                .frame(width: colW, height: heights[i])
-                                                .overlay(alignment: .top) { Rectangle().fill(line).frame(height: 1) }
-                                        }
-                                    }
-                                    .overlay(alignment: .leading) { Rectangle().fill(line).frame(width: 1) }
-                                    .contentShape(Rectangle())
-                                    .onTapGesture { onOpen(w) }
-                                    .id(w.id)
+                            .foregroundStyle(w.date == Day.today ? Parts.color(part) : Color.primary)
+                            .frame(maxWidth: .infinity).frame(height: headH)
+                            .overlay(alignment: .leading) { Rectangle().fill(line).frame(width: 1) }
+                            .contentShape(Rectangle())
+                            .onTapGesture { onOpen(original(w)) }
+                            .contextMenu {
+                                Button { Baseline.toggle(&baseData, part: part, month: String(w.date.prefix(7)), id: w.id); Haptic.success() } label: {
+                                    Label(isBase ? "取消初始重量" : "设为本月初始重量", systemImage: "flag")
                                 }
                             }
                         }
-                        .onAppear { if let last = cols.last { proxy.scrollTo(last.id, anchor: .trailing) } }
-                        .onChange(of: cols.count) { _, _ in if let last = cols.last { withAnimation { proxy.scrollTo(last.id, anchor: .trailing) } } }
+                    }
+                    ForEach(Array(rows.enumerated()), id: \.element) { ri, n in
+                        HStack(spacing: 0) {
+                            VStack(spacing: 2) {
+                                Text("\(ri + 1)").font(.caption2.bold()).foregroundStyle(Parts.color(part))
+                                if let ink = inkName(n, part: part, in: cols) { InkView(id: ink, height: 16) }
+                                else { Text(n).font(.caption2.bold()).lineLimit(2).minimumScaleFactor(0.6).multilineTextAlignment(.center) }
+                            }
+                            .frame(width: nameW, height: rowH)
+                            ForEach(Array(cols.enumerated()), id: \.offset) { ci, w in
+                                cell(n, w, hist, first + ci)
+                                    .frame(maxWidth: .infinity).frame(height: rowH)
+                                    .overlay(alignment: .leading) { Rectangle().fill(line).frame(width: 1) }
+                                    .contentShape(Rectangle())
+                                    .onTapGesture { onOpen(original(w)) }
+                            }
+                        }
+                        .overlay(alignment: .top) { Rectangle().fill(line).frame(height: 1) }
                     }
                 }
+                .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.primary.opacity(0.04)))
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 HStack(spacing: 12) {
                     legend("arrow.up", .green, "进步")
                     legend("arrow.down", .red, "退步")
                     legend("equal", .primary, "持平")
-                    Text("长按日期设初始重量").foregroundStyle(.secondary)
                     Spacer()
+                    if names.count > maxRows {
+                        Button(showAll ? "收起" : "全部 \(names.count) 个") { withAnimation(.snappy) { showAll.toggle() } }
+                            .font(.caption.bold()).tint(Brand.pink)
+                    }
                     if let onExpand {
-                        Button { onExpand() } label: {
-                            Label(all.count > maxRows ? "展开全部 \(all.count) 个" : "展开横屏看", systemImage: "arrow.up.left.and.arrow.down.right")
-                        }
-                        .font(.caption.bold()).tint(Brand.pink)
-                    } else if all.count > maxRows {
-                        Button(showAll ? "收起" : "查看全部 \(all.count) 个") { withAnimation(.snappy) { showAll.toggle() } }
+                        Button { onExpand() } label: { Label("横屏看整月", systemImage: "arrow.up.left.and.arrow.down.right") }
                             .font(.caption.bold()).tint(Brand.pink)
                     }
                 }
@@ -156,28 +161,39 @@ struct TrainingLogTable: View {
         }
     }
 
+    // 动作顺序：按最近一次训练里的顺序，最近没练的跟在后面
+    private func orderByLatest(_ cols: [Workout]) -> [String] {
+        var seen = Set<String>(), out: [String] = []
+        for w in cols.reversed() { for x in w.exercises(of: part) where seen.insert(x.name).inserted { out.append(x.name) } }
+        return out
+    }
+
     private func legend(_ icon: String, _ c: Color, _ t: String) -> some View {
         HStack(spacing: 2) { Image(systemName: icon).foregroundStyle(c); Text(t).foregroundStyle(.secondary) }
     }
 
-    @ViewBuilder private func cell(_ name: String, _ cols: [Workout], _ ci: Int, _ lineH: CGFloat) -> some View {
-        if let x = cols[ci].exercises(of: part).first(where: { $0.name == name }) {
-            let last = cols[..<ci].reversed().lazy.compactMap { $0.exercises(of: self.part).first { $0.name == name } }.first
-            let prev = Baseline.ref(baseData, part: part, name: name, w: cols[ci], all: cols, prev: last).0   // 设了初始重量就跟初始那次比
+    @ViewBuilder private func cell(_ name: String, _ w: Workout, _ hist: [Workout], _ idx: Int) -> some View {
+        if let x = w.exercises(of: part).first(where: { $0.name == name }), let s = top(x) {
+            let last = hist[..<idx].reversed().lazy.compactMap { $0.exercises(of: self.part).first { $0.name == name } }.first
+            let prev = Baseline.ref(baseData, part: part, name: name, w: w, all: hist, prev: last).0
             let t = trend(x, prev)
-            VStack(spacing: 0) {
-                ForEach(x.sets) { s in
-                    SetInkLabel(s: s, h: lineH - 2, font: .system(size: 11, weight: t == .none || t == .same ? .regular : .semibold, design: .rounded), num: true)   // 手写的组显示原样笔迹 + 小字数字
-                        .monospacedDigit().lineLimit(1).minimumScaleFactor(0.7)
-                        .frame(height: lineH)
+            let c: Color = t == .up ? Color(hex: 0x2f9e44) : t == .down ? Color(hex: 0xe03131) : .secondary
+            let inked = InkStore.has(s.inkW) != nil || InkStore.has(s.inkR) != nil
+            VStack(spacing: 1) {
+                SetInkLabel(s: s, h: 26, font: .system(size: 15, weight: .semibold, design: .rounded))
+                    .monospacedDigit().lineLimit(1).minimumScaleFactor(0.5)
+                    .foregroundStyle(inked ? Color.primary : (t == .up || t == .down ? c : .primary))
+                if inked {
+                    Text(setLabel(s)).font(.system(size: 10, weight: .semibold, design: .rounded)).monospacedDigit()
+                        .foregroundStyle(c).lineLimit(1).minimumScaleFactor(0.6)
                 }
             }
+            .padding(.horizontal, 2)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .foregroundStyle(trendColor(t))
             .overlay(alignment: .topTrailing) {
                 if t == .up || t == .down {
-                    Image(systemName: t == .up ? "arrow.up" : "arrow.down").font(.system(size: 9, weight: .heavy))
-                        .foregroundStyle(trendColor(t)).padding(3)
+                    Image(systemName: t == .up ? "arrow.up" : "arrow.down").font(.system(size: 8, weight: .heavy))
+                        .foregroundStyle(c).padding(3)
                 }
             }
         } else {

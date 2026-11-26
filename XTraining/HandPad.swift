@@ -57,6 +57,7 @@ enum InkStore {
         return try? PKDrawing(data: data)
     }
     // 画成图（按当前白天/夜间重新上墨蓝色）
+    static func cached(_ id: String, dark: Bool) -> UIImage? { cache.object(forKey: "\(id)-\(dark)" as NSString) }
     static func image(_ id: String, dark: Bool) -> UIImage? {
         let k = "\(id)-\(dark)" as NSString
         if let i = cache.object(forKey: k) { return i }
@@ -70,13 +71,23 @@ enum InkStore {
 }
 
 // 格子里显示原样笔迹
+// 画好的图有缓存就直接用；第一次要画的先占位，稍后再画，滑动时不卡
 struct InkView: View {
     let id: String
     var height: CGFloat = 30
     @Environment(\.colorScheme) private var scheme
+    @State private var img: UIImage? = nil
     var body: some View {
-        if let img = InkStore.image(id, dark: scheme == .dark) {
-            Image(uiImage: img).resizable().scaledToFit().frame(maxHeight: height)
+        let dark = scheme == .dark
+        let ready = img ?? InkStore.cached(id, dark: dark)
+        Group {
+            if let ready { Image(uiImage: ready).resizable().scaledToFit().frame(maxHeight: height) }
+            else { Color.clear.frame(width: height, height: height) }
+        }
+        .task(id: "\(id)-\(dark)") {
+            if InkStore.cached(id, dark: dark) != nil { img = nil; return }
+            await Task.yield()
+            img = InkStore.image(id, dark: dark)
         }
     }
 }
