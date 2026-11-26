@@ -32,11 +32,17 @@ final class Health: ObservableObject {
 
     func load(month: Date) async {
         guard connected, available else { days = [:]; return }
-        let cal = Calendar.current
-        guard let start = cal.date(from: cal.dateComponents([.year, .month], from: month)),
-              let end = cal.date(byAdding: .month, value: 1, to: start) else { return }
         loading = true
         defer { loading = false }
+        days = await fetch(month: month)
+    }
+
+    // 读某个月的数据，不改动页面上正在显示的月份（月份对比用）
+    func fetch(month: Date) async -> [String: DayAct] {
+        guard connected, available else { return [:] }
+        let cal = Calendar.current
+        guard let start = cal.date(from: cal.dateComponents([.year, .month], from: month)),
+              let end = cal.date(byAdding: .month, value: 1, to: start) else { return [:] }
         var out: [String: DayAct] = [:]
         let pred = HKQuery.predicateForSamples(withStart: start, end: end)
         let wq = HKSampleQueryDescriptor(predicates: [.workout(pred)], sortDescriptors: [SortDescriptor(\.startDate)])
@@ -60,7 +66,7 @@ final class Health: ObservableObject {
                 if n > 0 { out[Day.str(s.startDate), default: DayAct()].steps = n }
             }
         }
-        days = out
+        return out
     }
 
     static func name(_ t: HKWorkoutActivityType) -> String {
@@ -94,6 +100,8 @@ struct ActivityCard: View {
     @ObservedObject private var health = Health.shared
     @State private var month = Date()
     @State private var denied = false
+    @State private var picking = false
+    @State private var comparing = false
 
     private let cal: Calendar = { var c = Calendar(identifier: .gregorian); c.firstWeekday = 2; return c }()
 
@@ -114,7 +122,12 @@ struct ActivityCard: View {
             HStack {
                 Button { shift(-1) } label: { Image(systemName: "chevron.left") }
                 Spacer()
-                Label(title, systemImage: "figure.run").font(.headline)
+                Button { picking = true } label: {
+                    HStack(spacing: 4) {
+                        Label(title, systemImage: "figure.run").font(.headline)
+                        Image(systemName: "chevron.down").font(.caption2.bold()).foregroundStyle(.secondary)
+                    }
+                }
                 Spacer()
                 Button { shift(1) } label: { Image(systemName: "chevron.right") }
                     .disabled(Day.str(month).prefix(7) >= Day.today.prefix(7))
@@ -136,13 +149,14 @@ struct ActivityCard: View {
                 }
                 Text("≈").font(.title2.bold()).foregroundStyle(Brand.pink).padding(.horizontal, 6)
                 VStack(spacing: 4) {
-                    let bowls = Int((stats.kcal / 175).rounded())
+                    // 一块炸鸡大约 250 千卡
+                    let pieces = Int((stats.kcal / 250).rounded())
                     HStack(spacing: 2) {
                         ForEach(0..<5, id: \.self) { i in
-                            Text("🍚").font(.title3).opacity(Double(i) < Double(bowls) / 8 ? 1 : 0.25)
+                            Text("🍗").font(.title3).opacity(Double(i) < Double(pieces) / 8 ? 1 : 0.25)
                         }
                     }
-                    Text("热量约 \(bowls) 碗米饭").font(.caption).foregroundStyle(.secondary)
+                    Text("热量约 \(pieces) 块炸鸡").font(.caption).foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity)
             }
@@ -170,7 +184,20 @@ struct ActivityCard: View {
             }
             .padding(10)
             .background(RoundedRectangle(cornerRadius: 16).fill(Color(.secondarySystemGroupedBackground)))
+            Button { comparing = true } label: {
+                Label("月份对比", systemImage: "arrow.left.arrow.right").font(.subheadline.bold())
+                    .frame(maxWidth: .infinity, minHeight: 38)
+                    .background(Capsule().fill(Color(.tertiarySystemFill)))
+            }
+            .buttonStyle(.plain)
         }
+        .sheet(isPresented: $picking) {
+            MonthPicker(month: String(Day.str(month).prefix(7))) { m in
+                withAnimation(.snappy) { month = Day.date(m + "-01") }
+            }
+            .presentationDetents([.height(320)])
+        }
+        .sheet(isPresented: $comparing) { MonthCompare(a: String(Day.str(month).prefix(7))) }
         .task(id: Day.str(month).prefix(7) + (health.connected ? "1" : "0")) { await health.load(month: month) }
     }
 

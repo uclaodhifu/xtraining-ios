@@ -132,7 +132,7 @@ struct EntryView: View {
         let t = trend(x.wrappedValue, prev)
         let color = Parts.of(name).map(Parts.color) ?? Brand.pink
         // 这个动作自己最近练过的两次（不管那天练的是什么部位），旧的在左
-        let mine: [Workout] = Array(store.sorted.filter { $0.id != workout.id && $0.date <= workout.date && $0.exercises.contains { $0.name == name } }.prefix(2).reversed())
+        let mine = recent(name)
         let cols: [Workout?] = Array(repeating: nil, count: 2 - mine.count) + mine
         VStack(spacing: 0) {
             // 动作名
@@ -207,10 +207,10 @@ struct EntryView: View {
                             if let cfg = store.plateCfg[name] {
                                 plateSteppers(x, s, cfg, t)
                             } else {
-                                cellField(prevHint(prev, si, \.w, "kg"), setBinding(x, s.id, \.w), .decimalPad, t)
+                                cellField(prevHint(prev, si, \.w, "kg"), setBinding(x, s.id, \.w), .decimalPad, cmp(s.w, prev, si, \.w))
                             }
                             Text("×").font(.caption).foregroundStyle(.secondary)
-                            cellField(prevHint(prev, si, \.r, "次"), setBinding(x, s.id, \.r), .numberPad, t)
+                            cellField(prevHint(prev, si, \.r, "次"), setBinding(x, s.id, \.r), .numberPad, cmp(s.r, prev, si, \.r))
                                 .frame(maxWidth: store.plateCfg[name] != nil ? 56 : .infinity)
                         }
                         .padding(.horizontal, 6)
@@ -282,6 +282,22 @@ struct EntryView: View {
         guard let p = prev, !p.sets.isEmpty else { return fallback }
         let v = p.sets[min(i, p.sets.count - 1)][keyPath: k]
         return v.isEmpty ? fallback : v
+    }
+
+    // 这个动作最近练过的两个不同日期（同一天重复的记录只算一次），旧的在左
+    private func recent(_ name: String) -> [Workout] {
+        var seen = Set<String>(), out: [Workout] = []
+        for w in store.sorted where w.id != workout.id && w.date <= workout.date && w.exercises.contains(where: { $0.name == name }) {
+            if seen.insert(w.date).inserted { out.append(w) }
+            if out.count == 2 { break }
+        }
+        return out.reversed()
+    }
+
+    // 重量和次数分别跟上次同一组比：多了绿，少了红，一样黑
+    private func cmp(_ cur: String, _ prev: Exercise?, _ i: Int, _ k: KeyPath<SetRow, String>) -> Trend {
+        guard let a = Double(cur), let p = prev, !p.sets.isEmpty, let b = Double(p.sets[min(i, p.sets.count - 1)][keyPath: k]) else { return .none }
+        return a > b ? .up : a < b ? .down : .same
     }
 
     private func cellField(_ hint: String, _ text: Binding<String>, _ kb: UIKeyboardType, _ t: Trend) -> some View {

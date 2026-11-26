@@ -187,13 +187,15 @@ struct HomeLog: View {
     }
 }
 
-// 训练日志全屏：自动转横屏，按月显示每一天
+// 训练日志全屏：竖着横着都能看，手机转过来就跟着转
 struct LogFullScreen: View {
     @EnvironmentObject var store: Store
     @Environment(\.dismiss) private var dismiss
     @State var part: String
     @State private var month = String(Day.today.prefix(7))
     @State private var editing: Workout? = nil
+    @State private var picking = false
+    @State private var comparing = false
 
     private func shift(_ n: Int) {
         let d = Calendar.current.date(byAdding: .month, value: n, to: Day.date(month + "-01")) ?? Date()
@@ -203,10 +205,16 @@ struct LogFullScreen: View {
     var body: some View {
         NavigationStack {
             ScrollView(.vertical) {
-                MonthLogTable(part: part, month: month) { w in editing = w }
-                    .id(part + month)
-                    .card()
-                    .padding(.horizontal, 16).padding(.bottom, 20)
+                VStack(spacing: 12) {
+                    Picker("部位", selection: $part.animation(.snappy)) {
+                        ForEach(Parts.strength, id: \.self) { Text($0).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    MonthLogTable(part: part, month: month) { w in editing = w }
+                        .id(part + month)
+                        .card()
+                }
+                .padding(.horizontal, 16).padding(.bottom, 20)
             }
             .background(Color(.systemGroupedBackground))
             .navigationBarTitleDisplayMode(.inline)
@@ -214,28 +222,30 @@ struct LogFullScreen: View {
                 ToolbarItem(placement: .topBarLeading) {
                     HStack(spacing: 4) {
                         Button { shift(-1) } label: { Image(systemName: "chevron.left") }
-                        Text(monthText).font(.headline).monospacedDigit().frame(minWidth: 96)
+                        Button { picking = true } label: {
+                            HStack(spacing: 3) {
+                                Text(monthCN(month)).font(.headline).monospacedDigit()
+                                Image(systemName: "chevron.down").font(.caption2.bold())
+                            }
+                            .foregroundStyle(Color.primary)
+                        }
                         Button { shift(1) } label: { Image(systemName: "chevron.right") }
                             .disabled(month >= String(Day.today.prefix(7)))
                     }
                 }
-                ToolbarItem(placement: .principal) {
-                    Picker("部位", selection: $part.animation(.snappy)) {
-                        ForEach(Parts.strength, id: \.self) { Text($0).tag($0) }
-                    }
-                    .pickerStyle(.segmented).frame(width: 280)
-                }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { dismiss() } label: { Image(systemName: "xmark.circle.fill").font(.title3).foregroundStyle(.secondary) }
+                    HStack(spacing: 14) {
+                        Button { comparing = true } label: { Label("对比", systemImage: "arrow.left.arrow.right") }
+                        Button { dismiss() } label: { Image(systemName: "xmark.circle.fill").font(.title3).foregroundStyle(.secondary) }
+                    }
                 }
             }
             .sheet(item: $editing) { w in EntryView(workout: w) }
+            .sheet(isPresented: $picking) { MonthPicker(month: month) { month = $0 }.presentationDetents([.height(320)]) }
+            .sheet(isPresented: $comparing) { MonthCompare(a: month) }
         }
-        .onAppear { Orientation.set(.landscape) }
+        // 不强制横屏：竖着看，把手机转横就自动变横屏
+        .onAppear { Orientation.allow(.allButUpsideDown) }
         .onDisappear { Orientation.set(.portrait) }
-    }
-
-    private var monthText: String {
-        let p = month.split(separator: "-"); return p.count == 2 ? "\(p[0])年\(Int(p[1]) ?? 0)月" : month
     }
 }

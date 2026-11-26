@@ -17,6 +17,13 @@ enum Orientation {
         scene.windows.first?.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
         scene.requestGeometryUpdate(.iOS(interfaceOrientations: mask)) { _ in }
     }
+    // 只放开允许的方向，不主动转，跟着手机重力感应转
+    static func allow(_ mask: UIInterfaceOrientationMask) {
+        guard UIDevice.current.userInterfaceIdiom == .phone else { return }
+        AppDelegate.lock = mask
+        UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first?
+            .windows.first?.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
+    }
 }
 
 @main

@@ -121,24 +121,34 @@ struct VolumeTile: View {
 // 个人纪录：最近一次破纪录的动作
 struct PRTile: View {
     @EnvironmentObject var store: Store
+    @AppStorage("prPinned") private var pinned = ""
+    @State private var picking = false
     private struct PR { let name: String; let kg: Double; let date: String; let gain: Double }
     private var latest: PR? {
         var best: [String: Double] = [:]
         var last: PR? = nil
+        var mine: PR? = nil
         for w in store.workouts.sorted(by: { $0.date < $1.date }) {
             for x in w.exercises where !x.isCardio && x.best > 0 {
                 let old = best[x.name]
                 if old == nil || x.best > old! {
                     if let o = old { last = PR(name: x.name, kg: x.best, date: w.date, gain: x.best - o) }
+                    if x.name == pinned { mine = PR(name: x.name, kg: x.best, date: old == nil ? "" : w.date, gain: x.best - (old ?? x.best)) }
                     best[x.name] = x.best
                 }
             }
         }
+        if let mine { return mine }
         if last == nil, let m = best.max(by: { $0.value < $1.value }) { return PR(name: m.key, kg: m.value, date: "", gain: 0) }
         return last
     }
     var body: some View {
-        Tile(title: "个人纪录", icon: "trophy.fill", tint: Color(hex: 0xffcc00)) {
+        Button { Haptic.tap(); picking = true } label: { tile.foregroundStyle(Color.primary) }
+            .buttonStyle(PressScale())
+            .sheet(isPresented: $picking) { PRPicker() }
+    }
+    private var tile: some View {
+        Tile(title: pinned.isEmpty ? "个人纪录" : "个人纪录 · 固定", icon: "trophy.fill", tint: Color(hex: 0xffcc00)) {
             if let p = latest {
                 Text(p.name).font(.subheadline.bold()).lineLimit(1).foregroundStyle(Color.primary)
                 HStack(alignment: .firstTextBaseline, spacing: 3) {

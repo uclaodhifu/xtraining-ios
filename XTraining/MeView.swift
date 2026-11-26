@@ -32,6 +32,9 @@ struct MeView: View {
                     NavigationLink { ExerciseLibView() } label: {
                         Label("动作库 · 要领和练哪块肌肉", systemImage: "books.vertical.fill")
                     }
+                    NavigationLink { AnchorView() } label: {
+                        Label("阶段对比 · 增肌减脂期按锚点看升降", systemImage: "scope")
+                    }
                     NavigationLink { CreatorsView() } label: {
                         Label("健身博主 · 我关注的抖音主页", systemImage: "person.2.fill")
                     }
