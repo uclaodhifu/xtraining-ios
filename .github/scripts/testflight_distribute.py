@@ -71,6 +71,8 @@ groups = r.get("data", []) if s == 200 else []
 external = False
 for g in groups:
     a = g["attributes"]; name = a.get("name")
+    if a.get("publicLinkEnabled") and a.get("publicLink"):
+        print(f"公开测试链接 {name}: {a['publicLink']}")
     if a.get("isInternalGroup") and a.get("hasAccessToAllBuilds"):
         print(f"内部群组 {name}: 自动获得所有构建"); continue
     s, r = call("POST", f"/betaGroups/{g['id']}/relationships/builds",
