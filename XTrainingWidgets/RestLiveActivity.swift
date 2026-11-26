@@ -8,7 +8,7 @@ struct XTrainingWidgets: WidgetBundle {
 }
 
 struct RestLiveActivity: Widget {
-    private let accent = Color(red: 1, green: 0.42, blue: 0.2)
+    private let accent = Color(red: 0.07, green: 0.72, blue: 0.53)   // 和 App 里的休息卡一样的绿色
 
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: RestAttributes.self) { ctx in
