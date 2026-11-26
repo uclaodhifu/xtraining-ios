@@ -92,7 +92,7 @@ struct HandPad: View {
             }
             ZStack {
                 RoundedRectangle(cornerRadius: 16, style: .continuous).fill(scheme == .dark ? Color.white.opacity(0.06) : Color.white.opacity(0.75))
-                Rectangle().fill(Paper.rule).frame(height: 1.5).offset(y: 34)
+                Rectangle().fill(Paper.rule).frame(height: 1.5).offset(y: 60)
                 if empty {
                     Text(textMode ? "在这里写动作名，比如 杠铃卧推" : "在这里用手指写数字")
                         .font(.subheadline).foregroundStyle(Paper.pencil.opacity(0.7)).allowsHitTesting(false)
@@ -100,7 +100,7 @@ struct HandPad: View {
                 InkCanvas(canvas: canvas, dark: scheme == .dark) { empty = canvas.drawing.strokes.isEmpty; scheduleRecognize() }
                     .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
-            .frame(height: 150)
+            .frame(height: 230)
             .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Paper.ink.opacity(0.15)))
             HStack(spacing: 8) {
                 if !textMode { key(".", wide: false) { dot() } }
