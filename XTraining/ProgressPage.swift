@@ -2,8 +2,15 @@ import SwiftUI
 import Charts
 
 // 进步页：按部位左右滑动看
+// 进步页上哪张图的长按弹框开着（同一时间只开一个，点空白处收起）
+final class ChartPopup: ObservableObject {
+    static let shared = ChartPopup()
+    @Published var owner: String? = nil
+}
+
 struct ProgressPage: View {
     @EnvironmentObject var store: Store
+    @ObservedObject private var popup = ChartPopup.shared
     @State private var part = "胸"
 
     var body: some View {
@@ -20,6 +27,14 @@ struct ProgressPage: View {
                     }
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
+                // 长按弹框开着时，点屏幕任意地方（包括空白处）都收起
+                .overlay {
+                    if popup.owner != nil {
+                        Color.black.opacity(0.001).contentShape(Rectangle())
+                            .onTapGesture { popup.owner = nil }
+                            .gesture(DragGesture(minimumDistance: 8).onEnded { _ in popup.owner = nil })
+                    }
+                }
             }
             .background(Color(.systemGroupedBackground))
             .navigationTitle("进步")
@@ -266,6 +281,7 @@ struct LiftChart: View {
     let options: [String]
     @State private var sel: Int? = nil   // 点中的柱子（在 shown 里的位置）
     @State private var press: Int? = nil // 长按中的柱子：弹出那次练了什么
+    private var popKey: String { "\(part)-\(index)" }
 
     private var resolved: String {
         if name == "__first" { return options.first ?? "" }
@@ -295,7 +311,7 @@ struct LiftChart: View {
             if xs.count > 6 { Text("还有 \(xs.count - 6) 个动作").font(.caption2).foregroundStyle(.secondary) }
         }
         .padding(10)
-        .frame(maxWidth: 200, alignment: .leading)
+        .frame(maxWidth: 196, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color(.systemBackground)))
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color(hex: 0x0a84ff).opacity(0.5), lineWidth: 1.5))
         .shadow(color: .black.opacity(0.25), radius: 12, y: 4)
@@ -366,9 +382,6 @@ struct LiftChart: View {
                     if let press, press < shown.count {
                         RuleMark(x: .value("次", "\(press + pad)"))
                             .foregroundStyle(accent.opacity(0.25))
-                            .annotation(position: .top, spacing: 2, overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
-                                dayPopup(shown[press].date)
-                            }
                     }
                 }
                 .chartXScale(domain: (0..<8).map { "\($0)" })
@@ -391,7 +404,7 @@ struct LiftChart: View {
                                 let x = loc.x - g[f].origin.x
                                 guard let s: String = proxy.value(atX: x), let k = Int(s) else { return }
                                 let i = k - pad
-                                withAnimation(.snappy) { sel = (i < 0 || i >= shown.count || sel == i) ? nil : i }
+                                withAnimation(.easeInOut(duration: 0.2)) { sel = (i < 0 || i >= shown.count || sel == i) ? nil : i }
                                 Haptic.tap()
                             }
                             // 长按：弹出小方框，那天练了什么；松手就收起
@@ -408,7 +421,27 @@ struct LiftChart: View {
                                     }
                                     // 松手后弹框留着；点一下任意地方才收起
                             )
+                        // 弹框放在图表外面一层，不再挤动图表（以前会闪一下）
+                        if let press, press < shown.count, let f = proxy.plotFrame,
+                           let px = proxy.position(forX: "\(press + pad)") {
+                            let w: CGFloat = 196
+                            let cx = g[f].origin.x + px
+                            dayPopup(shown[press].date)
+                                .frame(width: w, alignment: .leading)
+                                .offset(x: min(max(0, cx - w / 2), max(0, g.size.width - w)), y: -6)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                                .allowsHitTesting(false)
+                                .transition(.opacity.combined(with: .scale(scale: 0.95, anchor: .bottom)))
+                                .zIndex(2)
+                        }
                     }
+                }
+                .onChange(of: press) { _, p in
+                    if p != nil { ChartPopup.shared.owner = popKey }
+                    else if ChartPopup.shared.owner == popKey { ChartPopup.shared.owner = nil }
+                }
+                .onReceive(ChartPopup.shared.$owner) { o in
+                    if o != popKey && press != nil { withAnimation(.easeOut(duration: 0.15)) { press = nil } }
                 }
                 .chartYAxis(.hidden)
                 .frame(height: 190)
