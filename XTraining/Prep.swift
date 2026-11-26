@@ -7,6 +7,9 @@ struct PrepEx: Codable, Identifiable, Hashable {
     var sets = 4
     var reps = "8-12"          // 目标次数，可以写范围
     var note = ""
+    var rows: [SetRow]? = nil  // 每组的重量、次数、挂片（和训练本一样）；旧数据没有，按 sets 补空行
+    var cardio: Bool { Parts.of(name) == "有氧" }
+    var setRows: [SetRow] { rows ?? (0..<max(1, cardio ? 1 : sets)).map { _ in SetRow() } }
 }
 struct PrepDay: Codable, Identifiable, Hashable {
     var id = UUID()
@@ -34,7 +37,8 @@ final class PrepStore: ObservableObject {
         var w = Workout()
         w.title = "备赛 · " + day.name
         w.exercises = day.exercises.filter { !$0.name.isEmpty }.map { x in
-            Exercise(name: x.name, sets: (0..<(Parts.of(x.name) == "有氧" ? 1 : max(1, x.sets))).map { _ in SetRow() })
+            // 计划里填好的重量、次数、挂片直接带进来
+            Exercise(name: x.name, sets: x.cardio ? [SetRow(min: x.setRows.first?.min ?? "")] : x.setRows.map { SetRow(w: $0.w, r: $0.r, p: $0.p) })
         }
         var ps: [String] = []
         for x in w.exercises { if let p = Parts.of(x.name), !ps.contains(p) { ps.append(p) } }
@@ -220,6 +224,8 @@ struct PrepDayEditor: View {
     }
 
     @State private var dragging: UUID? = nil
+    @State private var plateFor: String? = nil
+    @State private var infoFor: LibEx? = nil
 
     var body: some View {
         NavigationStack {
@@ -278,7 +284,12 @@ struct PrepDayEditor: View {
             .safeAreaInset(edge: .bottom) { RestBar(exercise: day.exercises.first?.name ?? "") }
             .background(Color(.systemGroupedBackground))
             .navigationTitle(day.name).navigationBarTitleDisplayMode(.inline)
+            .sheet(item: $infoFor) { ExerciseInfoSheet(ex: $0) }
+            .sheet(item: Binding(get: { plateFor.map(StrID.init) }, set: { plateFor = $0?.id })) { m in
+                PlateSettings(name: m.id).presentationDetents([.medium])
+            }
             .toolbar {
+                ToolbarItemGroup(placement: .keyboard) { Spacer(); Button("完成") { hideKeyboard() } }
                 ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("保存") {
@@ -296,30 +307,104 @@ struct PrepDayEditor: View {
         let color = Parts.of(x.name).map(Parts.color) ?? Brand.pink
         let cardio = Parts.of(x.name) == "有氧"
         let lifting = dragging == x.id
-        return VStack(alignment: .leading, spacing: 10) {
+        let rows = x.setRows
+        let hist = recent(x.name)
+        let cols: [Workout?] = Array(repeating: nil, count: 2 - hist.count) + hist
+        let cfg = cardio ? nil : store.plateCfg[x.name]
+        let line = Color.primary.opacity(0.12)
+        return VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
                 Text("\(i + 1)").font(.caption.bold()).foregroundStyle(.white)
                     .frame(width: 22, height: 22).background(Circle().fill(color))
                 TextField("动作", text: bind(x.id, \.name)).font(.subheadline.bold())
+                if let lib = ExerciseLib.find(x.name) {
+                    Button { infoFor = lib } label: { Image(systemName: "info.circle").foregroundStyle(.secondary) }
+                        .buttonStyle(.plain)
+                }
+                if !cardio {
+                    Button { plateFor = x.name } label: {
+                        Label("挂片", systemImage: cfg != nil ? "circle.grid.2x1.fill" : "circle.grid.2x1")
+                            .font(.caption.bold()).labelStyle(.titleAndIcon)
+                            .padding(.horizontal, 8).padding(.vertical, 4)
+                            .foregroundStyle(cfg != nil ? Color(.systemBackground) : Color.secondary)
+                            .background(Capsule().fill(cfg != nil ? Color.primary : Color(.tertiarySystemFill)))
+                    }
+                    .buttonStyle(.plain)
+                }
                 Button(role: .destructive) {
                     withAnimation(.snappy) { day.exercises.removeAll { $0.id == x.id } }
                 } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.tertiary) }
                 .buttonStyle(.plain)
             }
-            HStack {
-                if !cardio {
-                    Stepper("\(x.sets) 组", value: bindInt(x.id), in: 1...10).fixedSize()
-                    Text("×").foregroundStyle(.secondary)
+            .padding(.horizontal, 10).padding(.vertical, 8)
+            if cardio {
+                HStack {
+                    Text("时长").font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                    TextField("30", text: rowBind(x.id, rows[0].id, \.min))
+                        .keyboardType(.decimalPad).multilineTextAlignment(.center).frame(width: 70)
+                        .padding(.vertical, 6).background(RoundedRectangle(cornerRadius: 8).fill(Color(.tertiarySystemFill)))
+                    Text("分钟").font(.caption).foregroundStyle(.secondary)
                 }
-                TextField(cardio ? "时长，如 30分钟" : "次数，如 8-12", text: bind(x.id, \.reps))
-                    .multilineTextAlignment(.trailing)
-                    .padding(.horizontal, 10).padding(.vertical, 6)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(Color(.tertiarySystemFill)))
+                .padding(.horizontal, 12).padding(.bottom, 10)
+            } else {
+                // 表头：上上次 / 上次 / 计划
+                HStack(spacing: 0) {
+                    Text("").frame(width: 40)
+                    ForEach(Array(cols.enumerated()), id: \.offset) { _, w in
+                        Text(w.map { slashDate($0.date) } ?? "").font(.caption.bold()).monospacedDigit().foregroundStyle(.secondary)
+                            .frame(width: 68, height: 24)
+                            .overlay(alignment: .leading) { Rectangle().fill(line).frame(width: 1) }
+                    }
+                    Text("计划").font(.caption.bold()).foregroundStyle(color)
+                        .frame(maxWidth: .infinity, minHeight: 24)
+                        .overlay(alignment: .leading) { Rectangle().fill(line).frame(width: 1) }
+                }
+                .padding(.leading, 6)
+                ForEach(Array(rows.enumerated()), id: \.element.id) { si, r in
+                    HStack(spacing: 0) {
+                        Text("组\(si + 1)").font(.caption.bold()).foregroundStyle(.secondary).frame(width: 40)
+                        ForEach(Array(cols.enumerated()), id: \.offset) { _, w in
+                            let hs = w?.exercises.first { $0.name == x.name }?.sets
+                            Text(hs.flatMap { si < $0.count ? setLabel($0[si]) : nil } ?? "")
+                                .font(.system(size: 16, weight: .semibold, design: .rounded)).monospacedDigit()
+                                .foregroundStyle(Color.primary.opacity(0.8))
+                                .lineLimit(1).minimumScaleFactor(0.6)
+                                .frame(width: 68, height: 46)
+                                .overlay(alignment: .leading) { Rectangle().fill(line).frame(width: 1) }
+                        }
+                        HStack(spacing: 4) {
+                            if let cfg { plates(x.id, r, cfg) }
+                            else { cell("kg", rowBind(x.id, r.id, \.w), .decimalPad) }
+                            Text("×").font(.caption).foregroundStyle(.secondary)
+                            cell(x.reps.isEmpty ? "次" : x.reps, rowBind(x.id, r.id, \.r), .numberPad)
+                                .frame(maxWidth: cfg != nil ? 56 : .infinity)
+                        }
+                        .padding(.horizontal, 6)
+                        .frame(maxWidth: .infinity, minHeight: 50)
+                        .overlay(alignment: .leading) { Rectangle().fill(line).frame(width: 1) }
+                    }
+                    .padding(.leading, 6)
+                    .overlay(alignment: .top) { Rectangle().fill(Color.primary.opacity(0.06)).frame(height: 1) }
+                    .contextMenu {
+                        if rows.count > 1 {
+                            Button("删掉这一组", role: .destructive) { editRows(x.id) { $0.removeAll { $0.id == r.id } } }
+                        }
+                    }
+                }
+                Button {
+                    editRows(x.id) { $0.append($0.last.map { SetRow(w: $0.w, r: $0.r, p: $0.p) } ?? SetRow()) }
+                    Haptic.tap()
+                } label: {
+                    Label("加一组", systemImage: "plus").font(.caption.bold()).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, minHeight: 32)
+                }
+                .buttonStyle(.plain)
             }
-            .font(.subheadline)
             TextField("备注（可不填）", text: bind(x.id, \.note)).font(.caption)
+                .padding(.horizontal, 12).padding(.bottom, 10)
         }
-        .padding(14)
+        .padding(.vertical, 4)
         .background(shape.fill(Color(.secondarySystemGroupedBackground)))
         .overlay(shape.strokeBorder(lifting ? color : Color.primary.opacity(0.1), lineWidth: lifting ? 2 : 1))
         .opacity(lifting ? 0.55 : 1)
@@ -354,6 +439,77 @@ struct PrepDayEditor: View {
     private func bind(_ id: UUID, _ k: WritableKeyPath<PrepEx, String>) -> Binding<String> {
         Binding(get: { day.exercises.first { $0.id == id }?[keyPath: k] ?? "" },
                 set: { v in if let i = day.exercises.firstIndex(where: { $0.id == id }) { day.exercises[i][keyPath: k] = v } })
+    }
+    // 改某个动作的组（第一次改时把旧数据的组数变成空行）
+    private func editRows(_ id: UUID, _ f: (inout [SetRow]) -> Void) {
+        guard let i = day.exercises.firstIndex(where: { $0.id == id }) else { return }
+        var r = day.exercises[i].setRows
+        withAnimation(.snappy) {
+            f(&r)
+            day.exercises[i].rows = r
+            day.exercises[i].sets = r.count
+        }
+    }
+    private func rowBind(_ id: UUID, _ rid: UUID, _ k: WritableKeyPath<SetRow, String>) -> Binding<String> {
+        Binding(get: { day.exercises.first { $0.id == id }?.setRows.first { $0.id == rid }?[keyPath: k] ?? "" },
+                set: { v in
+                    guard let i = day.exercises.firstIndex(where: { $0.id == id }) else { return }
+                    var r = day.exercises[i].setRows
+                    if let j = r.firstIndex(where: { $0.id == rid }) { r[j][keyPath: k] = v; day.exercises[i].rows = r }
+                })
+    }
+    // 这个动作最近练过的两个不同日期，旧的在左
+    private func recent(_ name: String) -> [Workout] {
+        var seen = Set<String>(), out: [Workout] = []
+        for w in store.sorted where w.exercises.contains(where: { $0.name == name }) {
+            if seen.insert(w.date).inserted { out.append(w) }
+            if out.count == 2 { break }
+        }
+        return out.reversed()
+    }
+    private func cell(_ hint: String, _ text: Binding<String>, _ kb: UIKeyboardType) -> some View {
+        TextField("", text: text)
+            .keyboardType(kb).multilineTextAlignment(.center)
+            .font(.system(size: 19, weight: .bold, design: .rounded)).monospacedDigit()
+            .overlay {
+                if text.wrappedValue.isEmpty {
+                    Text(hint).font(.system(size: 13, weight: .medium)).foregroundStyle(Color.primary.opacity(0.3))
+                        .lineLimit(1).minimumScaleFactor(0.6).allowsHitTesting(false)
+                }
+            }
+            .padding(.vertical, 8)
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color(.tertiarySystemFill)))
+    }
+    // 挂片：每根挂杆一行 − 2 +
+    private func plates(_ id: UUID, _ r: SetRow, _ cfg: PlateCfg) -> some View {
+        let p = r.p ?? Array(repeating: 0, count: cfg.pegs)
+        return VStack(spacing: 3) {
+            ForEach(0..<cfg.pegs, id: \.self) { k in
+                HStack(spacing: 4) {
+                    Text(cfg.labels[k]).font(.caption2).foregroundStyle(.secondary).frame(width: 16)
+                    Button { bump(id, r.id, k, -1, cfg) } label: { Image(systemName: "minus.circle.fill") }
+                        .buttonStyle(.plain).foregroundStyle(Color(.systemGray3))
+                    Text("\(k < p.count ? p[k] : 0)").font(.system(size: 16, weight: .bold, design: .rounded)).monospacedDigit()
+                        .frame(minWidth: 18)
+                    Button { bump(id, r.id, k, 1, cfg) } label: { Image(systemName: "plus.circle.fill") }
+                        .buttonStyle(.plain).foregroundStyle(Color.primary)
+                }
+                .font(.system(size: 18))
+            }
+            if r.p != nil { Text("\(fmtNum(cfg.total(p)))kg").font(.system(size: 9)).foregroundStyle(.secondary) }
+        }
+        .padding(.vertical, 4).frame(maxWidth: .infinity)
+    }
+    private func bump(_ id: UUID, _ rid: UUID, _ k: Int, _ d: Int, _ cfg: PlateCfg) {
+        editRows(id) { rows in
+            guard let j = rows.firstIndex(where: { $0.id == rid }) else { return }
+            var p = rows[j].p ?? []
+            if p.count < cfg.pegs { p += Array(repeating: 0, count: cfg.pegs - p.count) }
+            p[k] = max(0, p[k] + d)
+            rows[j].p = p
+            rows[j].w = fmtNum(cfg.total(p))
+        }
+        Haptic.tap()
     }
     private func bindInt(_ id: UUID) -> Binding<Int> {
         Binding(get: { day.exercises.first { $0.id == id }?.sets ?? 4 },
