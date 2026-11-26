@@ -90,11 +90,11 @@ struct MeView: View {
                     Button { importing = true } label: { Label("从文件导入备份", systemImage: "doc.badge.plus") }
                     Button { syncing = true } label: { Label("用同步码找回（含头像）", systemImage: "arrow.triangle.2.circlepath") }
                     Button { pasteImport() } label: { Label("粘贴备份内容", systemImage: "doc.on.clipboard") }
-                    ShareLink(item: BackupFile(data: store.exportBackup()), preview: SharePreview("X Training 备份.json")) {
+                    ShareLink(item: BackupFile { store.exportBackup() }, preview: SharePreview("X Training 备份.json")) {
                         Label("导出备份", systemImage: "square.and.arrow.up")
                     }
                 } header: { Text("数据") } footer: {
-                    Text("推荐「用同步码找回」：在网页版「我 → 同步码」点复制，回来填上网站密码就行，训练记录和头像都会搬过来。体重记录要用导出的 .json 文件导入。重复导入不会重复添加。")
+                    Text("推荐「用同步码找回」：在网页版「我 → 同步码」点复制，回来填上网站密码就行，训练记录和头像都会搬过来。导出的 .json 备份里带着体重和手写笔迹，导回来笔迹照样显示。重复导入不会重复添加。")
                 }
                 Section {
                     Button(role: .destructive) { clearing = true } label: {
@@ -147,9 +147,9 @@ extension MeView {
 }
 
 struct BackupFile: Transferable {
-    let data: Data
+    let make: @MainActor () -> Data     // 点分享时才打包（里面有手写笔迹，别每次刷新页面都打一遍）
     static var transferRepresentation: some TransferRepresentation {
-        DataRepresentation(exportedContentType: .json) { $0.data }
+        DataRepresentation(exportedContentType: .json) { await $0.make() }
             .suggestedFileName("XTraining-backup.json")
     }
 }
@@ -208,7 +208,7 @@ struct ClearDataView: View {
                         Toggle("打卡和休息日", isOn: $days)
                     } header: { Text("要清除哪些") }
                     Section {
-                        ShareLink(item: BackupFile(data: store.exportBackup()), preview: SharePreview("X Training 备份.json")) {
+                        ShareLink(item: BackupFile { store.exportBackup() }, preview: SharePreview("X Training 备份.json")) {
                             Label("先导出备份（推荐）", systemImage: "square.and.arrow.up")
                         }
                     } footer: { Text("备份文件可以在「我 → 从文件导入备份」导回来。") }

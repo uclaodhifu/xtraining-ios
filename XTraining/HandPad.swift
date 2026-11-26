@@ -43,6 +43,15 @@ enum InkStore {
         known[id] = ok
         return ok ? id : nil
     }
+    // 备份用：原始笔迹数据读出来 / 写回去
+    static func raw(_ id: String) -> Data? { try? Data(contentsOf: dir.appendingPathComponent(id)) }
+    static func restore(_ id: String, _ data: Data) {
+        guard !id.isEmpty, !id.contains("/"), (try? PKDrawing(data: data)) != nil else { return }
+        let url = dir.appendingPathComponent(id)
+        if FileManager.default.fileExists(atPath: url.path) { return }
+        try? data.write(to: url)
+        known[id] = true
+    }
     static func load(_ id: String) -> PKDrawing? {
         guard let data = try? Data(contentsOf: dir.appendingPathComponent(id)) else { return nil }
         return try? PKDrawing(data: data)
