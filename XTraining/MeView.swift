@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 struct MeView: View {
     @EnvironmentObject var store: Store
     @AppStorage("theme") private var theme = "system"
+    @AppStorage(InputMode.key) private var inputMode = 0
     @AppStorage("brandTitle") private var brandTitle = ""
     @AppStorage("skin") private var skin = "ins"
     @State private var notesImport = false
@@ -43,6 +44,18 @@ struct MeView: View {
                 Section {
                     ActivityCard()
                         .padding(.vertical, 6)
+                }
+                Section {
+                    Picker("记录训练的输入方式", selection: $inputMode) {
+                        Text("数字手写").tag(0)
+                        Text("全部手写").tag(1)
+                        Text("键盘").tag(2)
+                    }
+                    .pickerStyle(.segmented)
+                } header: { Text("输入方式") } footer: {
+                    Text(inputMode == 0 ? "重量和次数用手指写，动作名、备注用键盘。"
+                         : inputMode == 1 ? "重量、次数、动作名都手写，格子里留着你写的原样笔迹，像一本电子手写笔记。数字照样会认出来，涨跌和统计不受影响。"
+                         : "都用系统键盘打字。")
                 }
                 Section("主题配色") {
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
