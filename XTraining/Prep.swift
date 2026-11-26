@@ -208,53 +208,63 @@ struct PrepDayEditor: View {
         return Array((q.isEmpty ? pool : pool.filter { $0.contains(q) }).prefix(14))
     }
 
+    @State private var dragging: UUID? = nil
+
     var body: some View {
         NavigationStack {
-            Form {
-                Section("这一天叫什么") { TextField("比如 胸 + 三头", text: $day.name) }
-                Section {
-                    ForEach($day.exercises) { $x in
-                        VStack(alignment: .leading, spacing: 8) {
-                            TextField("动作", text: $x.name).font(.subheadline.bold())
-                            HStack {
-                                if Parts.of(x.name) != "有氧" {
-                                    Stepper("\(x.sets) 组", value: $x.sets, in: 1...10).fixedSize()
-                                    Text("×").foregroundStyle(.secondary)
-                                }
-                                TextField(Parts.of(x.name) == "有氧" ? "时长，如 30分钟" : "次数，如 8-12", text: $x.reps)
-                                    .multilineTextAlignment(.trailing)
-                            }
-                            .font(.subheadline)
-                            TextField("备注（可不填）", text: $x.note).font(.caption)
-                        }
+            ScrollView {
+                VStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("这一天叫什么").font(.caption.bold()).foregroundStyle(.secondary)
+                        TextField("比如 胸 + 三头", text: $day.name).font(.headline)
                     }
-                    .onDelete { day.exercises.remove(atOffsets: $0) }
-                    .onMove { day.exercises.move(fromOffsets: $0, toOffset: $1) }
-                } header: { Text("动作（左滑删除，长按拖动排序）") }
-                Section("加动作") {
-                    HStack {
-                        TextField("动作名", text: $newName).onSubmit { add(newName) }
-                        Button { add(newName) } label: { Image(systemName: "plus.circle.fill").font(.title3) }
-                            .disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .frame(maxWidth: .infinity, alignment: .leading).card()
+
+                    if day.exercises.count > 1 {
+                        Label("按住动作卡片的空白处，可以拖动换顺序", systemImage: "hand.draw")
+                            .font(.caption2).foregroundStyle(.secondary)
                     }
-                    ScrollView(.horizontal, showsIndicators: false) {
+                    ForEach(Array(day.exercises.enumerated()), id: \.element.id) { i, x in
+                        exCard(i, x)
+                    }
+
+                    VStack(alignment: .leading, spacing: 10) {
                         HStack {
-                            ForEach(suggestions, id: \.self) { n in
-                                Button(n) { add(n) }.buttonStyle(.bordered).buttonBorderShape(.capsule).font(.footnote)
+                            TextField("加动作，比如 卧推", text: $newName).onSubmit { add(newName) }
+                            Button { add(newName) } label: { Image(systemName: "plus.circle.fill").font(.title2).foregroundStyle(Color.primary) }
+                                .disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty)
+                        }
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 6) {
+                                ForEach(suggestions, id: \.self) { n in
+                                    Button { add(n) } label: {
+                                        HStack(spacing: 6) {
+                                            Circle().fill(Parts.of(n).map(Parts.color) ?? .gray).frame(width: 7, height: 7)
+                                            Text(n).font(.footnote.weight(.medium)).foregroundStyle(Color.primary)
+                                        }
+                                        .padding(.horizontal, 12).padding(.vertical, 7)
+                                        .background(Capsule().fill(Color(.tertiarySystemFill)))
+                                    }
+                                    .buttonStyle(PressScale())
+                                }
                             }
                         }
                     }
-                }
-                if ps.plan.days.count > 1 {
-                    Section {
+                    .card()
+
+                    if ps.plan.days.count > 1 {
                         Button("删掉这一天", role: .destructive) {
                             ps.plan.days.removeAll { $0.id == day.id }
                             ps.plan.next = min(ps.plan.next, max(ps.plan.days.count - 1, 0))
                             dismiss()
                         }
+                        .padding(.top, 6)
                     }
                 }
+                .padding(.horizontal, 14).padding(.bottom, 30)
             }
+            .scrollDismissesKeyboard(.interactively)
+            .background(Color(.systemGroupedBackground))
             .navigationTitle(day.name).navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
@@ -266,6 +276,76 @@ struct PrepDayEditor: View {
                 }
             }
         }
+    }
+
+    // 一个动作一张卡片：按住空白处拖动换顺序
+    private func exCard(_ i: Int, _ x: PrepEx) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 18, style: .continuous)
+        let color = Parts.of(x.name).map(Parts.color) ?? Brand.pink
+        let cardio = Parts.of(x.name) == "有氧"
+        let lifting = dragging == x.id
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Text("\(i + 1)").font(.caption.bold()).foregroundStyle(.white)
+                    .frame(width: 22, height: 22).background(Circle().fill(color))
+                TextField("动作", text: bind(x.id, \.name)).font(.subheadline.bold())
+                Button(role: .destructive) {
+                    withAnimation(.snappy) { day.exercises.removeAll { $0.id == x.id } }
+                } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.tertiary) }
+                .buttonStyle(.plain)
+            }
+            HStack {
+                if !cardio {
+                    Stepper("\(x.sets) 组", value: bindInt(x.id), in: 1...10).fixedSize()
+                    Text("×").foregroundStyle(.secondary)
+                }
+                TextField(cardio ? "时长，如 30分钟" : "次数，如 8-12", text: bind(x.id, \.reps))
+                    .multilineTextAlignment(.trailing)
+                    .padding(.horizontal, 10).padding(.vertical, 6)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(Color(.tertiarySystemFill)))
+            }
+            .font(.subheadline)
+            TextField("备注（可不填）", text: bind(x.id, \.note)).font(.caption)
+        }
+        .padding(14)
+        .background(shape.fill(Color(.secondarySystemGroupedBackground)))
+        .overlay(shape.strokeBorder(lifting ? color : Color.primary.opacity(0.1), lineWidth: lifting ? 2 : 1))
+        .opacity(lifting ? 0.55 : 1)
+        .contentShape(.dragPreview, shape)
+        .draggable(beginDrag(x.id)) {
+            HStack(spacing: 8) {
+                Text("\(i + 1)").font(.caption.bold()).foregroundStyle(.white)
+                    .frame(width: 24, height: 24).background(Circle().fill(color))
+                Text(x.name).font(.headline)
+            }
+            .padding(.horizontal, 16).padding(.vertical, 12)
+            .background(Capsule().fill(Color(.systemBackground)))
+        }
+        .dropDestination(for: String.self) { _, _ in
+            dragging = nil; Haptic.success(); return true
+        } isTargeted: { on in
+            guard on, let d = dragging, d != x.id,
+                  let from = day.exercises.firstIndex(where: { $0.id == d }),
+                  let to = day.exercises.firstIndex(where: { $0.id == x.id }) else { return }
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                day.exercises.move(fromOffsets: IndexSet(integer: from), toOffset: to > from ? to + 1 : to)
+            }
+            Haptic.tap()
+        }
+        .transition(.opacity.combined(with: .move(edge: .top)))
+    }
+
+    private func beginDrag(_ id: UUID) -> String {
+        DispatchQueue.main.async { dragging = id; Haptic.tap(.medium) }
+        return id.uuidString
+    }
+    private func bind(_ id: UUID, _ k: WritableKeyPath<PrepEx, String>) -> Binding<String> {
+        Binding(get: { day.exercises.first { $0.id == id }?[keyPath: k] ?? "" },
+                set: { v in if let i = day.exercises.firstIndex(where: { $0.id == id }) { day.exercises[i][keyPath: k] = v } })
+    }
+    private func bindInt(_ id: UUID) -> Binding<Int> {
+        Binding(get: { day.exercises.first { $0.id == id }?.sets ?? 4 },
+                set: { v in if let i = day.exercises.firstIndex(where: { $0.id == id }) { day.exercises[i].sets = v } })
     }
 
     private func add(_ n: String) {
