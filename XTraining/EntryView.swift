@@ -409,8 +409,12 @@ struct EntryView: View {
                     withAnimation(.snappy) { addingByHand = false; writing = cell }
                 } label: {
                     ZStack {
-                        if inputMode == 1, let ink, !text.wrappedValue.isEmpty {
+                        if inputMode == 1, let ink {
                             InkView(id: ink, height: 32).id("\(ink)-\(inkTick)")    // 原样笔迹
+                                .overlay(alignment: .topTrailing) {
+                                    // 没认出数字：小红点提醒，这一组暂时不算进统计
+                                    if text.wrappedValue.isEmpty { Circle().fill(Tone.down).frame(width: 6, height: 6) }
+                                }
                         } else if text.wrappedValue.isEmpty {
                             Text(hint)
                                 .font(unit ? .system(size: 13, weight: .medium) : Paper.hand(22))

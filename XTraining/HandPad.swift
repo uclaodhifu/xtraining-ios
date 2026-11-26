@@ -8,6 +8,17 @@ enum InputMode { static let key = "xt.inputMode" }
 struct WriteCell: Equatable { var ex: UUID; var set: UUID; var weight: Bool }
 
 // 笔迹存在本机文件里（每格一个小文件），训练数据里只记编号
+// PencilKit 在夜间模式会自动把颜色反过来（黑变白），画成图时固定按白天模式画，颜色才是我们指定的
+func lightTrait<T>(_ f: () -> T) -> T {
+    var out: T!
+    UITraitCollection(userInterfaceStyle: .light).performAsCurrent { out = f() }
+    return out
+}
+enum InkColor {
+    static let day = UIColor(red: 0.114, green: 0.227, blue: 0.431, alpha: 1)
+    static let night = UIColor(red: 0.72, green: 0.83, blue: 1, alpha: 1)
+}
+
 enum InkStore {
     private static let dir: URL = {
         let d = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("ink", isDirectory: true)
@@ -28,9 +39,9 @@ enum InkStore {
         let k = "\(id)-\(dark)" as NSString
         if let i = cache.object(forKey: k) { return i }
         guard let d = load(id), !d.strokes.isEmpty else { return nil }
-        let color = dark ? UIColor(red: 0.62, green: 0.75, blue: 1, alpha: 1) : UIColor(red: 0.114, green: 0.227, blue: 0.431, alpha: 1)
+        let color = dark ? InkColor.night : InkColor.day
         let re = PKDrawing(strokes: d.strokes.map { var s = $0; s.ink = PKInk(.pen, color: color); return s })
-        let img = re.image(from: re.bounds.insetBy(dx: -6, dy: -6), scale: 2)
+        let img = lightTrait { re.image(from: re.bounds.insetBy(dx: -6, dy: -6), scale: 2) }
         cache.setObject(img, forKey: k)
         return img
     }
@@ -62,6 +73,7 @@ struct HandPad: View {
     @State private var dotAt: Int? = nil     // 点「.」时前面已经写了几位数字
     @State private var job: DispatchWorkItem? = nil
     @State private var empty = true
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         VStack(spacing: 10) {
@@ -77,13 +89,13 @@ struct HandPad: View {
                 }
             }
             ZStack {
-                RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color(.systemBackground).opacity(0.7))
+                RoundedRectangle(cornerRadius: 16, style: .continuous).fill(scheme == .dark ? Color.white.opacity(0.06) : Color.white.opacity(0.75))
                 Rectangle().fill(Paper.rule).frame(height: 1.5).offset(y: 34)
                 if empty {
                     Text(textMode ? "在这里写动作名，比如 杠铃卧推" : "在这里用手指写数字")
                         .font(.subheadline).foregroundStyle(Paper.pencil.opacity(0.7)).allowsHitTesting(false)
                 }
-                InkCanvas(canvas: canvas) { empty = canvas.drawing.strokes.isEmpty; scheduleRecognize() }
+                InkCanvas(canvas: canvas, dark: scheme == .dark) { empty = canvas.drawing.strokes.isEmpty; scheduleRecognize() }
                     .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
             .frame(height: 150)
@@ -129,7 +141,8 @@ struct HandPad: View {
         job?.cancel(); job = nil
         let d = canvas.drawing
         let r = HandPad.read(d, text: textMode)
-        if !r.isEmpty { apply(r); onInk?(d) }
+        if !r.isEmpty { apply(r) }
+        onInk?(d)
     }
     private func scheduleRecognize() {
         job?.cancel()
@@ -140,7 +153,8 @@ struct HandPad: View {
                 let r = HandPad.read(d, text: tm)
                 DispatchQueue.main.async {
                     job = nil
-                    if !r.isEmpty { apply(r); onInk?(d); Haptic.tap() }
+                    if !r.isEmpty { apply(r); Haptic.tap() }
+                    onInk?(d)   // 认不出来也先把笔迹留下
                 }
             }
         }
@@ -153,7 +167,7 @@ struct HandPad: View {
         let d = PKDrawing(strokes: drawing.strokes.map { var s = $0; s.ink = PKInk(.pen, color: .black); return s })
         let rect = d.bounds.insetBy(dx: -24, dy: -24)
         guard !rect.isEmpty else { return "" }
-        let ink = d.image(from: rect, scale: 3)
+        let ink = lightTrait { d.image(from: rect, scale: 3) }
         let img = UIGraphicsImageRenderer(size: ink.size).image { ctx in
             UIColor.white.setFill(); ctx.fill(CGRect(origin: .zero, size: ink.size)); ink.draw(at: .zero)
         }
@@ -186,17 +200,23 @@ struct HandPad: View {
 // PencilKit 画布：手指也能写
 struct InkCanvas: UIViewRepresentable {
     let canvas: PKCanvasView
+    var dark = false
     var onChange: () -> Void
     func makeUIView(context: Context) -> PKCanvasView {
         canvas.drawingPolicy = .anyInput
         canvas.backgroundColor = .clear
         canvas.isOpaque = false
-        canvas.tool = PKInkingTool(.pen, color: UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.62, green: 0.75, blue: 1, alpha: 1) : UIColor(red: 0.114, green: 0.227, blue: 0.431, alpha: 1) }, width: 9)
+        canvas.overrideUserInterfaceStyle = .light   // 不让 PencilKit 自己反色，颜色我们按白天/夜间指定
+        canvas.tool = PKInkingTool(.pen, color: dark ? InkColor.night : InkColor.day, width: 10)
         canvas.delegate = context.coordinator
         canvas.isScrollEnabled = false
         return canvas
     }
-    func updateUIView(_ v: PKCanvasView, context: Context) { context.coordinator.onChange = onChange }
+    func updateUIView(_ v: PKCanvasView, context: Context) {
+        context.coordinator.onChange = onChange
+        let want = dark ? InkColor.night : InkColor.day
+        if (v.tool as? PKInkingTool)?.color != want { v.tool = PKInkingTool(.pen, color: want, width: 10) }
+    }
     func makeCoordinator() -> Coord { Coord(onChange) }
     final class Coord: NSObject, PKCanvasViewDelegate {
         var onChange: () -> Void
