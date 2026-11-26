@@ -92,13 +92,13 @@ final class RestTimer: ObservableObject {
 struct RestBar: View {
     @ObservedObject private var t = RestTimer.shared
     var exercise: String = ""
-    private let presets = [60, 90, 120, 180]
+    private let presets = [60, 90, 120, 180, 300]
     @Namespace private var ns
     @State private var tapped: Int? = nil       // 刚点的那个时长（放大弹一下）
     @State private var wave: CGFloat = -1       // 开始计时时扫过卡片的一道光
     @State private var ring = false             // 计时圈外扩散的波纹
 
-    private static let green = [Color(hex: 0x12b886), Color(hex: 0x0ca678)]
+    private static let green = [Color(hex: 0x34548a), Color(hex: 0x1d3a6e)]   // 墨蓝，和训练本的钢笔色一致
     private static let idle = green
     private static func colors(_ left: Double, _ total: Double) -> [Color] {
         let f = total > 0 ? left / total : 0
@@ -107,6 +107,7 @@ struct RestBar: View {
         return green                                                              // 其余时间：绿
     }
 
+    @State private var chipsW: CGFloat = 0      // 时长按钮那一排有多宽（滑动选择用）
     @State private var keyboard = false         // 键盘弹出来时先把计时条收起来，免得和键盘叠在一起
 
     var body: some View {
@@ -170,20 +171,36 @@ struct RestBar: View {
                 }
             } else {
                 HStack(spacing: 8) {
-                    Label("休息", systemImage: "timer").font(.subheadline.bold())
-                    Spacer()
-                    ForEach(presets, id: \.self) { p in
-                        Button { start(p) } label: {
-                            Text(p % 60 == 0 ? "\(p / 60)分" : "\(p / 60):\(String(format: "%02d", p % 60))")
-                                .font(.subheadline.bold()).padding(.horizontal, 12).padding(.vertical, 8)
-                                .foregroundStyle(p == t.preset ? Color(hex: 0x0ca678) : .white)
-                                .background(p == t.preset ? Color.white : Color.white.opacity(0.22), in: Capsule())
-                                .matchedGeometryEffect(id: p == t.preset ? "time" : "chip\(p)", in: ns)
-                                .scaleEffect(tapped == p ? 1.3 : 1)
-                                .rotationEffect(.degrees(tapped == p ? -6 : 0))
+                    Image(systemName: "timer").font(.subheadline.bold())
+                    // 手指在这排上左右滑：只换选中的时长，不开始；点一下才开始计时
+                    HStack(spacing: 6) {
+                        ForEach(presets, id: \.self) { p in
+                            Button { start(p) } label: {
+                                Text(p % 60 == 0 ? "\(p / 60)分" : "\(p / 60):\(String(format: "%02d", p % 60))")
+                                    .font(.subheadline.bold()).lineLimit(1).minimumScaleFactor(0.8)
+                                    .frame(maxWidth: .infinity).padding(.vertical, 8)
+                                    .foregroundStyle(p == t.preset ? Color(hex: 0x1d3a6e) : .white)
+                                    .background(p == t.preset ? Color.white : Color.white.opacity(0.22), in: Capsule())
+                                    .matchedGeometryEffect(id: p == t.preset ? "time" : "chip\(p)", in: ns)
+                                    .scaleEffect(tapped == p ? 1.3 : 1)
+                                    .rotationEffect(.degrees(tapped == p ? -6 : 0))
+                            }
+                            .buttonStyle(PressScale())
                         }
-                        .buttonStyle(PressScale())
                     }
+                    .background(GeometryReader { g in Color.clear.onAppear { chipsW = g.size.width }.onChange(of: g.size.width) { _, w in chipsW = w } })
+                    .simultaneousGesture(
+                        DragGesture(minimumDistance: 6)
+                            .onChanged { v in
+                                guard chipsW > 0 else { return }
+                                let i = min(presets.count - 1, max(0, Int(v.location.x / (chipsW / CGFloat(presets.count)))))
+                                let p = presets[i]
+                                if p != t.preset {
+                                    withAnimation(.snappy(duration: 0.18)) { t.preset = p }
+                                    UISelectionFeedbackGenerator().selectionChanged()
+                                }
+                            }
+                    )
                 }
                 .foregroundStyle(.white)
                 .padding(.horizontal, 14).padding(.vertical, 10)

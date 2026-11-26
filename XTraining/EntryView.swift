@@ -91,7 +91,7 @@ struct EntryView: View {
             }
             .font(.subheadline).foregroundStyle(.secondary)
         }
-        .card()
+        .paperCard()
     }
 
     // 日期 + 部位
@@ -104,7 +104,7 @@ struct EntryView: View {
             }
             PartChips(parts: Parts.all, selected: $workout.parts)
         }
-        .card()
+        .paperCard()
     }
 
     // 训练本表格
@@ -183,7 +183,11 @@ struct EntryView: View {
 
     // 开始拖的时候记下是哪张卡（draggable 的内容在按住拖起时才取值）
     private func beginDrag(_ id: UUID) -> CardDrag {
-        DispatchQueue.main.async { dragging = id; Haptic.tap(.medium) }
+        DispatchQueue.main.async {
+            dragging = id; Haptic.tap(.medium)
+            // 万一松手的地方没接住，几秒后也把描边去掉，不会一直亮着
+            DispatchQueue.main.asyncAfter(deadline: .now() + 4) { if dragging == id { withAnimation { dragging = nil } } }
+        }
         return CardDrag(id: id)
     }
 
@@ -412,7 +416,7 @@ struct EntryView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 TextField("加动作，比如 卧推", text: $newName).onSubmit { add(newName); newName = "" }
-                Button { add(newName); newName = "" } label: { Image(systemName: "plus.circle.fill").font(.title2).foregroundStyle(Color.primary) }
+                Button { add(newName); newName = "" } label: { Image(systemName: "plus.circle.fill").font(.title2).foregroundStyle(Paper.ink) }
                     .disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty)
             }
             let suggest = suggestions
@@ -426,7 +430,7 @@ struct EntryView: View {
                                     Text(n).font(.footnote.weight(.medium)).foregroundStyle(Color.primary)
                                 }
                                 .padding(.horizontal, 12).padding(.vertical, 7)
-                                .background(Capsule().fill(Color(.tertiarySystemFill)))
+                                .background(Capsule().fill(Paper.ink.opacity(0.06)))
                             }
                             .buttonStyle(PressScale())
                         }
@@ -440,28 +444,37 @@ struct EntryView: View {
                         Button {
                             for x in todo { add(x.name, sets: x.sets.count) }
                         } label: {
-                            HStack {
-                                Image(systemName: "arrow.uturn.backward.circle.fill")
-                                Text("照着上次练\(p)（\(slashDate(last.date))，\(todo.count) 个动作）")
+                            // 不再用整块部位色，统一成本子里的墨蓝描边，部位色只留一个小圆点
+                            HStack(spacing: 8) {
+                                Circle().fill(Parts.color(p)).frame(width: 8, height: 8)
+                                Text("照着上次练\(p)").font(.subheadline.bold())
+                                Text("\(slashDate(last.date)) · \(todo.count) 个动作").font(.caption).foregroundStyle(Paper.pencil)
                                 Spacer()
+                                Image(systemName: "arrow.uturn.backward").font(.footnote.bold())
                             }
-                            .font(.subheadline.bold()).foregroundStyle(.white)
-                            .padding(12)
-                            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Parts.color(p)))
+                            .foregroundStyle(Paper.ink)
+                            .padding(.horizontal, 14).padding(.vertical, 12)
+                            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Paper.ink.opacity(0.06)))
+                            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Paper.ink.opacity(0.18)))
                         }
                         .buttonStyle(PressScale())
                     }
                 }
             }
         }
-        .card()
+        .paperCard()
     }
 
     // 备注
     private var noteCard: some View {
         VStack(spacing: 0) {
-            Text("备 注").font(.headline).foregroundStyle(.white)
-                .frame(maxWidth: .infinity).padding(.vertical, 8).background(Color(hex: 0x1c1c1e))
+            HStack {
+                Text("备注").font(.system(size: 17, weight: .heavy))
+                Spacer()
+                Text("今天感觉").font(.caption.bold()).foregroundStyle(Paper.pencil)
+            }
+            .foregroundStyle(Paper.ink)
+            .padding(.horizontal, 14).padding(.top, 12)
             VStack(alignment: .leading, spacing: 10) {
                 Picker("感受", selection: Binding(get: { workout.mood ?? -1 }, set: { workout.mood = $0 < 0 ? nil : $0 })) {
                     Text("不记").tag(-1)
@@ -470,14 +483,15 @@ struct EntryView: View {
                 .pickerStyle(.segmented)
                 TextField("今天状态、哪里不舒服……", text: $workout.note, axis: .vertical).lineLimit(3...6)
                     .background(alignment: .top) {
-                        VStack(spacing: 22) { ForEach(0..<3, id: \.self) { _ in Rectangle().fill(Color.primary.opacity(0.08)).frame(height: 1) } }
+                        VStack(spacing: 22) { ForEach(0..<3, id: \.self) { _ in Rectangle().fill(Paper.rule).frame(height: 1) } }
                             .padding(.top, 21)
                     }
             }
             .padding(12)
         }
-        .background(Color(.secondarySystemGroupedBackground))
+        .background(Paper.bg)
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Color.primary.opacity(0.1)))
     }
 
     private func save() {

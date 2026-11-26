@@ -78,3 +78,15 @@ struct Stripes: View {
         }
     }
 }
+
+// 本子纸的卡片：和动作卡片同一个米白底，整页颜色统一
+struct PaperCard: ViewModifier {
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 18, style: .continuous)
+        content.padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Paper.bg, in: shape)
+            .overlay(shape.strokeBorder(Color.primary.opacity(0.1)))
+    }
+}
+extension View { func paperCard() -> some View { modifier(PaperCard()) } }
