@@ -79,12 +79,12 @@ struct HandPad: View {
     var body: some View {
         VStack(spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
-                Text(miss ? "没认出来，写大一点或点清除重写" : title).font(.caption.bold())
-                    .foregroundStyle(miss ? Tone.down : Paper.pencil).lineLimit(1)
+                Text(title).font(.caption.bold()).foregroundStyle(Paper.pencil).lineLimit(1)
                 Spacer()
-                Text(value.isEmpty ? "—" : value).font(textMode ? .system(size: 20, weight: .bold) : Paper.hand(30))
-                    .foregroundStyle(Paper.ink).lineLimit(1)
-                    .contentTransition(.numericText()).animation(.snappy, value: value)
+                if textMode {
+                    Text(value.isEmpty ? "—" : value).font(.system(size: 20, weight: .bold))
+                        .foregroundStyle(Paper.ink).lineLimit(1)
+                }
                 Button { onClose() } label: {
                     Image(systemName: "chevron.down").font(.footnote.bold()).foregroundStyle(Paper.pencil)
                         .frame(width: 30, height: 30).background(Circle().fill(Paper.ink.opacity(0.07)))
@@ -97,13 +97,16 @@ struct HandPad: View {
                     Text(textMode ? "在这里写动作名，比如 杠铃卧推" : "在这里用手指写数字")
                         .font(.subheadline).foregroundStyle(Paper.pencil.opacity(0.7)).allowsHitTesting(false)
                 }
-                InkCanvas(canvas: canvas, dark: scheme == .dark) { empty = canvas.drawing.strokes.isEmpty; scheduleRecognize() }
+                InkCanvas(canvas: canvas, dark: scheme == .dark) {
+                    empty = canvas.drawing.strokes.isEmpty
+                    if !textMode && !empty { onInk?(canvas.drawing) }   // 写一笔就直接贴到格子里，不等识别
+                    scheduleRecognize()
+                }
                     .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
             .frame(height: 230)
             .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Paper.ink.opacity(0.15)))
             HStack(spacing: 8) {
-                if !textMode { key(".", wide: false) { dot() } }
                 key("清除", wide: false) { clear() }
                 key(nextLabel, wide: true, strong: true) { flush(); onNext() }
             }
@@ -157,9 +160,9 @@ struct HandPad: View {
                 let r = HandPad.recognize(cg, text: tm)
                 DispatchQueue.main.async {
                     job = nil
-                    miss = r.isEmpty
-                    if !r.isEmpty { apply(r); Haptic.tap() }
-                    onInk?(d)   // 认不出来也先把笔迹留下
+                    // 后台悄悄认一下数字，只用来算涨跌和统计，界面上不显示
+                    if !r.isEmpty { apply(r) }
+                    if textMode { onInk?(d) }
                 }
             }
         }

@@ -411,10 +411,7 @@ struct EntryView: View {
                     ZStack {
                         if let ink {
                             InkView(id: ink, height: 32).id("\(ink)-\(inkTick)")    // 原样笔迹
-                                .overlay(alignment: .topTrailing) {
-                                    // 没认出数字：小红点提醒，这一组暂时不算进统计
-                                    if text.wrappedValue.isEmpty { Circle().fill(Tone.down).frame(width: 6, height: 6) }
-                                }
+
                         } else if text.wrappedValue.isEmpty {
                             Text(hint)
                                 .font(unit ? .system(size: 13, weight: .medium) : Paper.hand(22))
@@ -447,7 +444,8 @@ struct EntryView: View {
         inkTick += 1   // 同一格重写时让笔迹图刷新
     }
     private func addByHand() {
-        let n = newName.trimmingCharacters(in: .whitespaces)
+        var n = newName.trimmingCharacters(in: .whitespaces)
+        if n.isEmpty && nameInk != nil { n = "手写动作" }   // 没认出来也照样加，显示的是笔迹
         guard !n.isEmpty else { return }
         add(n)
         if let d = nameInk, let i = workout.exercises.lastIndex(where: { $0.name == n }) {
