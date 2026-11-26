@@ -54,7 +54,7 @@ struct MeView: View {
                     }
                     .pickerStyle(.segmented)
                 } header: { Text("输入方式") } footer: {
-                    Text(inputMode == 0 ? "重量和次数用手指写，动作名、备注用键盘。"
+                    Text(inputMode == 0 ? "重量和次数用手指写，格子里留原样笔迹；动作名、备注用键盘。"
                          : inputMode == 1 ? "重量、次数、动作名都手写，格子里留着你写的原样笔迹，像一本电子手写笔记。数字照样会认出来，涨跌和统计不受影响。"
                          : "都用系统键盘打字。")
                 }

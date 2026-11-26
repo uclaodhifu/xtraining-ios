@@ -67,7 +67,7 @@ struct EntryView: View {
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 } else if let c = writing {
                     HandPad(value: cellBinding(c), title: cellTitle(c),
-                            onInk: inputMode == 1 ? { saveInk(c, $0) } : nil,
+                            onInk: { saveInk(c, $0) },   // 只要是手写，就留原样笔迹
                             onNext: { nextCell(c) },
                             onClose: { withAnimation(.snappy) { writing = nil } })
                         .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -409,7 +409,7 @@ struct EntryView: View {
                     withAnimation(.snappy) { addingByHand = false; writing = cell }
                 } label: {
                     ZStack {
-                        if inputMode == 1, let ink {
+                        if let ink {
                             InkView(id: ink, height: 32).id("\(ink)-\(inkTick)")    // 原样笔迹
                                 .overlay(alignment: .topTrailing) {
                                     // 没认出数字：小红点提醒，这一组暂时不算进统计
