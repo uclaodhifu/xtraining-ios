@@ -9,6 +9,7 @@ struct ProgressPage: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                YesterdayCard().padding(.horizontal, 16).padding(.bottom, 12)
                 Picker("部位", selection: $part.animation(.snappy)) {
                     ForEach(Parts.strength, id: \.self) { Text($0).tag($0) }
                 }
@@ -33,6 +34,7 @@ struct PartProgress: View {
     @State private var picked: String? = nil
     @State private var showAll = false
     @State private var editing: Workout? = nil
+    @State private var setSel: String? = nil   // 平均组数图点中的月份
 
     private var sessions: [Workout] { store.workouts.filter { $0.parts.contains(part) }.sorted { $0.date < $1.date } }
     private var month: String { String(Day.today.prefix(7)) }
@@ -170,10 +172,27 @@ struct PartProgress: View {
             Text("平均组数").font(.title3.bold())
             Text("每次练\(part)平均几组，按月").font(.caption).foregroundStyle(.secondary)
             Chart(rows) { r in
+                let blue = Color(hex: 0x0a84ff)
+                let on = r.id == (setSel ?? rows.last?.id)
                 BarMark(x: .value("月", monthLabel(r.id)), y: .value("组", r.v), width: .ratio(0.45))
-                    .foregroundStyle(r.id == rows.last?.id ? Color(hex: 0x0a84ff).gradient : Color(hex: 0x0a84ff).opacity(0.45).gradient)
+                    .foregroundStyle(on ? blue.gradient : (setSel == nil ? blue.opacity(0.45).gradient : Color.gray.opacity(0.35).gradient))
                     .cornerRadius(6)
-                    .annotation(position: .top) { Text(r.v > 0 ? fmtNum(r.v) : "").font(.caption2).foregroundStyle(.secondary) }
+                    .annotation(position: .top) {
+                        Text(r.v > 0 ? fmtNum(r.v) : "").font(.caption2.weight(on && setSel != nil ? .bold : .regular))
+                            .foregroundStyle(on && setSel != nil ? Color(hex: 0x0a84ff) : .secondary)
+                    }
+            }
+            .chartOverlay { proxy in
+                GeometryReader { g in
+                    Rectangle().fill(.clear).contentShape(Rectangle())
+                        .onTapGesture { loc in
+                            guard let f = proxy.plotFrame else { return }
+                            guard let lab: String = proxy.value(atX: loc.x - g[f].origin.x),
+                                  let r = rows.first(where: { monthLabel($0.id) == lab }) else { return }
+                            withAnimation(.snappy) { setSel = setSel == r.id ? nil : r.id }
+                            Haptic.tap()
+                        }
+                }
             }
             .frame(height: 170)
         }
@@ -245,6 +264,7 @@ struct LiftChart: View {
     let index: Int
     let name: String
     let options: [String]
+    @State private var sel: Int? = nil   // 点中的柱子（在 shown 里的位置）
 
     private var resolved: String {
         if name == "__first" { return options.first ?? "" }
@@ -293,35 +313,57 @@ struct LiftChart: View {
                         Text("平均").font(.caption).foregroundStyle(.secondary)
                         kg(avgBest).foregroundStyle(.secondary)
                     }
+                    let cur = sel.flatMap { $0 < shown.count ? shown[$0] : nil } ?? latest
                     VStack(alignment: .leading, spacing: 0) {
-                        Text(latest.date == Day.today ? "今天" : "最近一次").font(.caption).foregroundStyle(accent)
-                        kg(latest.best).foregroundStyle(accent)
+                        Text(sel != nil ? slashDate(cur.date) : (latest.date == Day.today ? "今天" : "最近一次")).font(.caption).foregroundStyle(accent)
+                        kg(cur.best).foregroundStyle(accent)
                     }
                     Spacer()
                 }
+                // 固定 8 个位置，柱子窄一点；点一根柱子，其他变灰
+                let pad = 8 - shown.count
+                let hi = sel ?? (shown.count - 1)
                 Chart {
                     ForEach(Array(shown.enumerated()), id: \.offset) { i, p in
-                        let last = i == shown.count - 1
-                        BarMark(x: .value("次", "\(i)"), y: .value("最重", p.best), width: .ratio(0.62))
-                            .foregroundStyle(accent.opacity(last ? 0.3 : 0.14))
-                            .cornerRadius(7)
-                        BarMark(x: .value("次", "\(i)"), y: .value("平均", p.mean), width: .ratio(0.62))
-                            .foregroundStyle(last ? accent : accent.opacity(0.5))
-                            .cornerRadius(7)
+                        let on = i == hi
+                        let c: Color = sel == nil ? (on ? accent : accent.opacity(0.5)) : (on ? accent : Color.gray.opacity(0.35))
+                        BarMark(x: .value("次", "\(i + pad)"), y: .value("最重", p.best), width: .ratio(0.45))
+                            .foregroundStyle(c.opacity(on ? 0.3 : 0.35))
+                            .cornerRadius(6)
+                        BarMark(x: .value("次", "\(i + pad)"), y: .value("平均", p.mean), width: .ratio(0.45))
+                            .foregroundStyle(c)
+                            .cornerRadius(6)
+                            .annotation(position: .top) {
+                                if on && sel != nil { Text(fmtNum(p.best)).font(.caption2.bold()).foregroundStyle(accent) }
+                            }
                     }
                     RuleMark(y: .value("平均", avgBest))
                         .foregroundStyle(Color.gray.opacity(0.6))
                         .lineStyle(StrokeStyle(lineWidth: 2))
                         .annotation(position: .top, alignment: .trailing) { Text("平均").font(.caption2).foregroundStyle(.secondary) }
                 }
+                .chartXScale(domain: (0..<8).map { "\($0)" })
                 .chartXAxis {
                     AxisMarks { v in
                         AxisValueLabel {
-                            if let s = v.as(String.self), let i = Int(s), i < shown.count {
-                                Text(shortDate(shown[i].date)).font(.caption2)
-                                    .foregroundStyle(i == shown.count - 1 ? accent : Color.secondary)
+                            if let s = v.as(String.self), let k = Int(s), k - pad >= 0, k - pad < shown.count {
+                                Text(shortDate(shown[k - pad].date)).font(.caption2)
+                                    .foregroundStyle(k - pad == hi ? accent : Color.secondary)
                             }
                         }
+                    }
+                }
+                .chartOverlay { proxy in
+                    GeometryReader { g in
+                        Rectangle().fill(.clear).contentShape(Rectangle())
+                            .onTapGesture { loc in
+                                guard let f = proxy.plotFrame else { return }
+                                let x = loc.x - g[f].origin.x
+                                guard let s: String = proxy.value(atX: x), let k = Int(s) else { return }
+                                let i = k - pad
+                                withAnimation(.snappy) { sel = (i < 0 || i >= shown.count || sel == i) ? nil : i }
+                                Haptic.tap()
+                            }
                     }
                 }
                 .chartYAxis(.hidden)
