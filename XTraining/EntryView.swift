@@ -67,7 +67,7 @@ struct EntryView: View {
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 } else if let c = writing {
                     HandPad(value: cellBinding(c), title: cellTitle(c),
-                            onInk: inputMode == 1 ? { saveInk(c, $0) } : nil,
+                            onInk: { saveInk(c, $0) },   // 只要是手写，就留原样笔迹
                             onNext: { nextCell(c) },
                             onClose: { withAnimation(.snappy) { writing = nil } })
                         .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -77,6 +77,7 @@ struct EntryView: View {
             }
             // 打字（动作名、备注）时用系统键盘，手写板先收起
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+                if PadFix.editing { return }   // 在手写板上改数字，手写板留着
                 if writing != nil || addingByHand { withAnimation(.snappy) { writing = nil; addingByHand = false } }
             }
             .onChange(of: writing) { _, c in
@@ -238,7 +239,7 @@ struct EntryView: View {
             HStack(spacing: 8) {
                 Text("\(i + 1)").font(.caption.bold()).foregroundStyle(.white)
                     .frame(width: 22, height: 22).background(Circle().fill(color))
-                if inputMode == 1, let ink = x.wrappedValue.inkName {
+                if let ink = InkStore.has(x.wrappedValue.inkName) {   // 写过的动作名一直显示笔迹，不随输入方式变
                     InkView(id: ink, height: 26).frame(maxWidth: .infinity, alignment: .leading)   // 手写的动作名原样显示
                 } else {
                     TextField("动作名", text: x.name).font(.subheadline.bold())
@@ -409,8 +410,15 @@ struct EntryView: View {
                     withAnimation(.snappy) { addingByHand = false; writing = cell }
                 } label: {
                     ZStack {
-                        if inputMode == 1, let ink, !text.wrappedValue.isEmpty {
-                            InkView(id: ink, height: 32).id("\(ink)-\(inkTick)")    // 原样笔迹
+                        if let ink {
+                            VStack(spacing: 0) {
+                                InkView(id: ink, height: 28).id("\(ink)-\(inkTick)")    // 原样笔迹
+                                // 下面小字是认出来的数字（算涨跌用），没认出来是红色问号
+                                Text(text.wrappedValue.isEmpty ? "?" : text.wrappedValue)
+                                    .font(.system(size: 9, weight: .bold, design: .rounded)).monospacedDigit()
+                                    .foregroundStyle(text.wrappedValue.isEmpty ? Tone.down : Paper.pencil)
+                            }
+
                         } else if text.wrappedValue.isEmpty {
                             Text(hint)
                                 .font(unit ? .system(size: 13, weight: .medium) : Paper.hand(22))
@@ -443,7 +451,8 @@ struct EntryView: View {
         inkTick += 1   // 同一格重写时让笔迹图刷新
     }
     private func addByHand() {
-        let n = newName.trimmingCharacters(in: .whitespaces)
+        var n = newName.trimmingCharacters(in: .whitespaces)
+        if n.isEmpty && nameInk != nil { n = "手写动作" }   // 没认出来也照样加，显示的是笔迹
         guard !n.isEmpty else { return }
         add(n)
         if let d = nameInk, let i = workout.exercises.lastIndex(where: { $0.name == n }) {
@@ -462,8 +471,9 @@ struct EntryView: View {
         }, set: { v in
             guard let i = workout.exercises.firstIndex(where: { $0.id == c.ex }),
                   let k = workout.exercises[i].sets.firstIndex(where: { $0.id == c.set }) else { return }
+            let v = v.filter { "0123456789.".contains($0) }
             if c.weight { workout.exercises[i].sets[k].w = v } else { workout.exercises[i].sets[k].r = v }
-            if v.isEmpty { if c.weight { workout.exercises[i].sets[k].inkW = nil } else { workout.exercises[i].sets[k].inkR = nil } }
+            if v.isEmpty && !PadFix.editing { if c.weight { workout.exercises[i].sets[k].inkW = nil } else { workout.exercises[i].sets[k].inkR = nil } }
         })
     }
     private func cellTitle(_ c: WriteCell) -> String {
@@ -495,8 +505,11 @@ struct EntryView: View {
         return HStack(spacing: 0) {
                     Text("\(si + 1)").font(.system(size: 13, weight: .bold, design: .rounded)).foregroundStyle(Paper.pencil).frame(width: labelW)
                     // 上次：铅笔灰
-                    Text(ps.map(setLabel) ?? "—")
-                        .font(.system(size: 15, weight: .semibold, design: .rounded)).monospacedDigit()
+                    Group {
+                        if let ps { SetInkLabel(s: ps, h: 22, font: .system(size: 15, weight: .semibold, design: .rounded)).opacity(0.55) }   // 上次手写的也显示原样笔迹
+                        else { Text("—").font(.system(size: 15, weight: .semibold, design: .rounded)) }
+                    }
+                        .monospacedDigit()
                         .foregroundStyle(Paper.pencil)
                         .lineLimit(1).minimumScaleFactor(0.6)
                         .frame(width: histW + 10)
@@ -505,10 +518,10 @@ struct EntryView: View {
                         if let cfg = store.plateCfg[name] {
                             plateSteppers(x, s, cfg, t)
                         } else {
-                            cellField(prevHint(prev, si, \.w, "kg"), setBinding(x, s.id, \.w), WriteCell(ex: x.wrappedValue.id, set: s.id, weight: true), ink: s.inkW)
+                            cellField(prevHint(prev, si, \.w, "kg"), setBinding(x, s.id, \.w), WriteCell(ex: x.wrappedValue.id, set: s.id, weight: true), ink: InkStore.has(s.inkW))
                         }
                         Text("×").font(Paper.hand(18)).foregroundStyle(Paper.ink.opacity(0.6))
-                        cellField(prevHint(prev, si, \.r, "次"), setBinding(x, s.id, \.r), WriteCell(ex: x.wrappedValue.id, set: s.id, weight: false), ink: s.inkR)
+                        cellField(prevHint(prev, si, \.r, "次"), setBinding(x, s.id, \.r), WriteCell(ex: x.wrappedValue.id, set: s.id, weight: false), ink: InkStore.has(s.inkR))
                             .frame(maxWidth: store.plateCfg[name] != nil ? 50 : .infinity)
                     }
                     .frame(maxWidth: .infinity)

@@ -155,7 +155,8 @@ struct Workout: Codable, Identifiable, Hashable {
     var note = ""
     var mood: Int? = nil
     var createdAt: Double = Date().timeIntervalSince1970 * 1000
-    enum CodingKeys: String, CodingKey { case id, date, parts, title, exercises, note, mood, createdAt }
+    var editedAt: Double = 0     // 最后一次保存的时间（秒），iCloud 合并时用
+    enum CodingKeys: String, CodingKey { case id, date, parts, title, exercises, note, mood, createdAt, editedAt }
     init() {}
     init(from d: Decoder) throws {
         let c = try d.container(keyedBy: CodingKeys.self)
@@ -167,6 +168,7 @@ struct Workout: Codable, Identifiable, Hashable {
         note = (try? c.decode(String.self, forKey: .note)) ?? ""
         mood = try? c.decode(Int.self, forKey: .mood)
         createdAt = (try? c.decode(Double.self, forKey: .createdAt)) ?? 0
+        editedAt = (try? c.decode(Double.self, forKey: .editedAt)) ?? 0
     }
     // 有氧不算组数
     var setCount: Int { exercises.filter { !$0.isCardio }.reduce(0) { $0 + $1.sets.count } }

@@ -46,9 +46,10 @@ final class Store: ObservableObject {
         workouts.sorted { $0.date != $1.date ? $0.date > $1.date : $0.createdAt > $1.createdAt }
     }
     func upsert(_ w: Workout) {
+        var w = w; w.editedAt = Date().timeIntervalSince1970
         if let i = workouts.firstIndex(where: { $0.id == w.id }) { workouts[i] = w } else { workouts.append(w) }
     }
-    func delete(_ w: Workout) { workouts.removeAll { $0.id == w.id } }
+    func delete(_ w: Workout) { CloudSync.shared.noteDelete([w.id]); workouts.removeAll { $0.id == w.id } }
     var todays: [Workout] { workouts.filter { $0.date == Day.today } }
 
     // 每个部位上次是哪天练的
@@ -152,6 +153,7 @@ final class Store: ObservableObject {
             w.exercises.removeAll { ["体重", "称重", "晨重"].contains($0.name.replacingOccurrences(of: " ", with: "")) }
             if !have.contains(w.id) && !fresh.contains(where: { $0.id == w.id }) { fresh.append(w) }
         }
+        CloudSync.shared.forgive(fresh.map(\.id))   // 以前清掉又导回来的，别被 iCloud 当成已删除再删一次
         workouts.append(contentsOf: fresh)
         var nw = 0
         for x in weightsRaw { if let r = one(x, WeightRow.self), r.kg > 0 { logWeight(r.kg, on: r.date); nw += 1 } }

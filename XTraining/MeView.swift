@@ -45,6 +45,7 @@ struct MeView: View {
                     ActivityCard()
                         .padding(.vertical, 6)
                 }
+                CloudSection()
                 Section {
                     Picker("记录训练的输入方式", selection: $inputMode) {
                         Text("数字手写").tag(0)
@@ -53,7 +54,7 @@ struct MeView: View {
                     }
                     .pickerStyle(.segmented)
                 } header: { Text("输入方式") } footer: {
-                    Text(inputMode == 0 ? "重量和次数用手指写，动作名、备注用键盘。"
+                    Text(inputMode == 0 ? "重量和次数用手指写，格子里留原样笔迹；动作名、备注用键盘。"
                          : inputMode == 1 ? "重量、次数、动作名都手写，格子里留着你写的原样笔迹，像一本电子手写笔记。数字照样会认出来，涨跌和统计不受影响。"
                          : "都用系统键盘打字。")
                 }
@@ -192,6 +193,7 @@ struct ClearDataView: View {
                         Label("已清除", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
                         Button {
                             withAnimation {
+                                CloudSync.shared.forgive(undo.w.map(\.id))
                                 store.workouts = undo.w; store.weights = undo.kg
                                 store.restDays = undo.rest; store.doneDays = undo.done
                             }
@@ -230,7 +232,7 @@ struct ClearDataView: View {
     private func clear() {
         undo = Snap(w: store.workouts, kg: store.weights, rest: store.restDays, done: store.doneDays)
         withAnimation {
-            if workouts { store.workouts = [] }
+            if workouts { CloudSync.shared.noteDelete(store.workouts.map(\.id)); store.workouts = [] }
             if weights { store.weights = [] }
             if days { store.restDays = []; store.doneDays = [] }
         }

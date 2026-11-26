@@ -10,6 +10,7 @@ struct MonthLogTable: View {
     @State private var hx: CGFloat = 0     // 日期列左右滑了多少
     @AppStorage("xt.logOrder") private var orderData = Data()   // 每个部位自己拖好的动作顺序
     @State private var draggingRow: String? = nil
+    @AppStorage(Baseline.key) private var baseData = Data()
 
     private var order: [String: [String]] {
         get { (try? JSONDecoder().decode([String: [String]].self, from: orderData)) ?? [:] }
@@ -36,8 +37,30 @@ struct MonthLogTable: View {
     }
 
     // 这个部位练过的所有训练（全部历史，用来算“跟上次比”）
+    // 同一天练了两次（比如中途退出又开了一次）就合成一格，不然后面那次会被漏掉
     private var history: [Workout] {
-        store.workouts.filter { !$0.exercises(of: part).isEmpty }.sorted { $0.date < $1.date }
+        let ws = store.workouts.filter { !$0.exercises(of: part).isEmpty }
+            .sorted { $0.date != $1.date ? $0.date < $1.date : $0.createdAt < $1.createdAt }
+        var out: [Workout] = []
+        for w in ws {
+            guard var last = out.last, last.date == w.date else { out.append(w); continue }
+            for x in w.exercises(of: part) {
+                if let i = last.exercises.firstIndex(where: { $0.name == x.name && (Parts.of($0.name) ?? last.parts.first ?? "") == part }) {
+                    last.exercises[i].sets += x.sets
+                    if last.exercises[i].inkName == nil { last.exercises[i].inkName = x.inkName }
+                } else {
+                    var y = x
+                    last.exercises.append(y)
+                }
+            }
+            for p in w.parts where !last.parts.contains(p) { last.parts.append(p) }
+            out[out.count - 1] = last
+        }
+        return out
+    }
+    // 点格子打开的是这天最后记的那次原始训练（合并出来的那格不能直接改）
+    private func original(_ w: Workout) -> Workout {
+        store.workouts.filter { $0.date == w.date && !$0.exercises(of: part).isEmpty }.max { $0.createdAt < $1.createdAt } ?? w
     }
 
     private var days: [String] {
@@ -68,7 +91,8 @@ struct MonthLogTable: View {
         var seen = Set<String>(), rows: [String] = []
         for w in inMonth.reversed() { for x in w.exercises(of: part) where seen.insert(x.name).inserted { rows.append(x.name) } }
         rows = ordered(rows)
-        let lineH: CGFloat = 16
+        let inked = inMonth.contains { w in w.exercises(of: part).contains { $0.sets.contains { $0.inkW != nil || $0.inkR != nil } } }
+        let lineH: CGFloat = inked ? 32 : 22   // 有手写的：笔迹下面还要写认出来的数字
         let heights: [CGFloat] = rows.map { n in
             let m = inMonth.map { w in w.exercises(of: part).first { $0.name == n }?.sets.count ?? 0 }.max() ?? 1
             return CGFloat(max(1, m)) * lineH + 14 + 14
@@ -101,7 +125,8 @@ struct MonthLogTable: View {
                         ForEach(rows.indices, id: \.self) { i in
                             HStack(alignment: .top, spacing: 4) {
                                 Text("\(i + 1)").font(.caption2.bold()).foregroundStyle(Parts.color(part))
-                                Text(rows[i]).font(.caption.bold()).lineLimit(2).minimumScaleFactor(0.7)
+                                if let ink = inkName(rows[i], part: part, in: hist) { InkView(id: ink, height: 22) }
+                                else { Text(rows[i]).font(.caption.bold()).lineLimit(2).minimumScaleFactor(0.7) }
                             }
                             .padding(.top, 6)
                             .frame(width: nameW, height: heights[i], alignment: .topLeading)
@@ -152,7 +177,7 @@ struct MonthLogTable: View {
                 }
             }
             HStack(spacing: 12) {
-                Label("按住动作名可拖动排序", systemImage: "hand.draw").foregroundStyle(.secondary)
+                Label("按住动作名可拖动排序 · 长按日期设初始重量", systemImage: "hand.draw").foregroundStyle(.secondary)
                 legend("进步", Tone.fill(.up))
                 legend("退步", Tone.fill(.down))
                 legend("持平", Tone.fill(.same))
@@ -184,14 +209,23 @@ struct MonthLogTable: View {
             .frame(width: 46, height: headH)
             .overlay(alignment: .leading) { Rectangle().fill(line).frame(width: 1) }
         case .day(let d, let w):
+            let isBase = w != nil && Baseline.id(baseData, part: part, month: month) == w?.id
             VStack(spacing: 0) {
                 Text("\(dayNum(d))").font(.caption.bold()).monospacedDigit()
-                Text(weekdayCN(d)).font(.system(size: 9)).foregroundStyle(.secondary)
+                Text(isBase ? "初始" : weekdayCN(d)).font(.system(size: 9, weight: isBase ? .heavy : .regular))
+                    .foregroundStyle(isBase ? Tone.gold : Color.secondary)
             }
             .foregroundStyle(d == Day.today ? Parts.color(part) : (w == nil ? Color.secondary : Color.primary))
             .frame(width: w == nil ? 34 : 70, height: headH)
-            .background(w != nil ? Parts.color(part).opacity(0.12) : Color.primary.opacity(0.05))
+            .background(isBase ? Tone.gold.opacity(0.22) : w != nil ? Parts.color(part).opacity(0.12) : Color.primary.opacity(0.05))
             .overlay(alignment: .leading) { Rectangle().fill(line).frame(width: 1) }
+            .contextMenu {
+                if let w {
+                    Button { Baseline.toggle(&baseData, part: part, month: month, id: w.id); Haptic.success() } label: {
+                        Label(isBase ? "取消初始重量" : "设为本月初始重量", systemImage: "flag")
+                    }
+                }
+            }
         }
     }
 
@@ -217,7 +251,7 @@ struct MonthLogTable: View {
             }
             .overlay(alignment: .leading) { Rectangle().fill(line).frame(width: 1) }
             .contentShape(Rectangle())
-            .onTapGesture { if let w { onOpen(w) } }
+            .onTapGesture { if let w { onOpen(original(w)) } }
         }
     }
 
@@ -225,18 +259,19 @@ struct MonthLogTable: View {
         if let x = w.exercises(of: part).first(where: { $0.name == name }) {
             let idx = hist.firstIndex { $0.id == w.id } ?? 0
             let older = hist[..<idx].compactMap { $0.exercises(of: self.part).first { $0.name == name } }
-            let prev = older.last
+            let ref = Baseline.ref(baseData, part: part, name: name, w: w, all: hist, prev: older.last)   // 设了初始重量就跟初始那次比
+            let prev = ref.0, vsBase = ref.1
+            let isBase = Baseline.id(baseData, part: part, month: month) == w.id
             let t = prev == nil ? Trend.up : trend(x, prev)
-            let pr = prev != nil && x.best > 0 && x.best > (older.map(\.best).max() ?? 0)
+            let pr = older.last != nil && x.best > 0 && x.best > (older.map(\.best).max() ?? 0)
             // 格子底色表示涨跌，下面写差了多少
             VStack(spacing: 0) {
                 ForEach(x.sets) { s in
-                    Text(setLabel(s))
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    SetInkLabel(s: s, h: lineH - 2, font: .system(size: 12, weight: .semibold, design: .rounded), num: true)   // 手写的组显示原样笔迹 + 小字数字
                         .monospacedDigit().lineLimit(1).minimumScaleFactor(0.7)
                         .frame(height: lineH)
                 }
-                Text((pr ? "★ 新纪录" : (t == .up ? "↑ " : t == .down ? "↓ " : "= ") + deltaText(x, prev)))
+                Text(isBase ? "⚑ 初始" : pr ? "★ 新纪录" : (t == .up ? "↑ " : t == .down ? "↓ " : "= ") + (vsBase ? "比初始 " : "") + deltaText(x, prev))
                     .font(.system(size: 9, weight: .heavy, design: .rounded)).lineLimit(1).minimumScaleFactor(0.7)
                     .frame(height: 14)
             }
