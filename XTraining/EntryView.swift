@@ -10,6 +10,7 @@ struct EntryView: View {
     @State private var showMore = false
     @State private var plateFor: String? = nil
     @State private var infoFor: LibEx? = nil
+    @State private var dragging: UUID? = nil
 
     init(workout: Workout) { _workout = State(initialValue: workout) }
 
@@ -31,7 +32,6 @@ struct EntryView: View {
             ScrollView {
                 VStack(spacing: 14) {
                     topCard
-                    if workout.exercises.count > 1 { orderCard }
                     notebook
                     addCard
                     noteCard
@@ -79,85 +79,94 @@ struct EntryView: View {
         .card()
     }
 
-    // 训练顺序：单独一张卡，按住右边三条线拖动排序
-    private var orderCard: some View {
-        let rowH: CGFloat = 46
-        return VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Label("训练顺序", systemImage: "list.number").font(.headline)
-                Spacer()
-                Text("按住右边拖动").font(.caption2).foregroundStyle(.secondary)
-            }
-            List {
-                ForEach(Array(workout.exercises.enumerated()), id: \.element.id) { i, ex in
-                    HStack(spacing: 10) {
-                        Text("\(i + 1)").font(.caption.bold()).foregroundStyle(.white)
-                            .frame(width: 22, height: 22)
-                            .background(Circle().fill(Parts.of(ex.name).map(Parts.color) ?? Brand.pink))
-                        Text(ex.name.isEmpty ? "未命名动作" : ex.name).font(.subheadline.bold()).lineLimit(1)
-                        Spacer()
-                        Text(ex.isCardio ? "有氧" : "\(ex.sets.count) 组").font(.caption).foregroundStyle(.secondary)
-                    }
-                    .frame(height: rowH - 8)
-                    .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4))
-                    .listRowBackground(Color.clear)
-                }
-                .onMove { from, to in
-                    withAnimation(.snappy) { workout.exercises.move(fromOffsets: from, toOffset: to) }
-                    Haptic.tap()
-                }
-            }
-            .listStyle(.plain)
-            .environment(\.editMode, .constant(.active))
-            .scrollDisabled(true)
-            .scrollContentBackground(.hidden)
-            .frame(height: CGFloat(workout.exercises.count) * rowH)
-        }
-        .card()
-    }
-
     // 训练本表格
     private var notebook: some View {
         let hist = history
         let paper = Color(.secondarySystemGroupedBackground)
-        return VStack(spacing: 0) {
-            // 黑色标题栏
-            Text(workout.title.isEmpty ? (workout.parts.isEmpty ? "分 化" : workout.parts.joined(separator: " · ")) : workout.title)
-                .font(.headline).foregroundStyle(.white)
-                .frame(maxWidth: .infinity).padding(.vertical, 10)
-                .background(Color(hex: 0x1c1c1e))
-            // 日期行
-            HStack(spacing: 0) {
-                Text("").frame(width: labelW)
-                ForEach(["上上次", "上次"], id: \.self) { t in
-                    Text(t).font(.caption.bold()).foregroundStyle(.secondary)
-                        .frame(width: histW)
+        let shape = RoundedRectangle(cornerRadius: 18, style: .continuous)
+        return VStack(spacing: 10) {
+            VStack(spacing: 0) {
+                // 黑色标题栏
+                Text(workout.title.isEmpty ? (workout.parts.isEmpty ? "分 化" : workout.parts.joined(separator: " · ")) : workout.title)
+                    .font(.headline).foregroundStyle(.white)
+                    .frame(maxWidth: .infinity).padding(.vertical, 10)
+                    .background(Color(hex: 0x1c1c1e))
+                // 日期行
+                HStack(spacing: 0) {
+                    Text("").frame(width: labelW)
+                    ForEach(["上上次", "上次"], id: \.self) { t in
+                        Text(t).font(.caption.bold()).foregroundStyle(.secondary)
+                            .frame(width: histW)
+                            .overlay(alignment: .leading) { vline }
+                    }
+                    Text("今天 \(slashDate(workout.date))").font(.caption.bold()).foregroundStyle(workout.parts.first.map(Parts.color) ?? Color.primary)
+                        .frame(maxWidth: .infinity)
                         .overlay(alignment: .leading) { vline }
                 }
-                Text("今天 \(slashDate(workout.date))").font(.caption.bold()).foregroundStyle(workout.parts.first.map(Parts.color) ?? Color.primary)
-                    .frame(maxWidth: .infinity)
-                    .overlay(alignment: .leading) { vline }
-            }
-            .frame(height: 34)
-            .padding(.leading, 6)
-            hline
-            if workout.exercises.isEmpty {
-                VStack(spacing: 6) {
-                    Image(systemName: "square.and.pencil").font(.title).foregroundStyle(Brand.gradient)
-                    Text("在下面加动作，或者点「照着上次练」").font(.subheadline).foregroundStyle(.secondary)
+                .frame(height: 34)
+                .padding(.leading, 6)
+                if workout.exercises.isEmpty {
+                    hline
+                    VStack(spacing: 6) {
+                        Image(systemName: "square.and.pencil").font(.title).foregroundStyle(Brand.gradient)
+                        Text("在下面加动作，或者点「照着上次练」").font(.subheadline).foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity).padding(.vertical, 28)
+                } else if workout.exercises.count > 1 {
+                    hline
+                    Label("按住动作卡片的空白处，可以拖动换顺序", systemImage: "hand.draw")
+                        .font(.caption2).foregroundStyle(.secondary).padding(.vertical, 6)
                 }
-                .frame(maxWidth: .infinity).padding(.vertical, 28)
             }
+            .background(paper)
+            .clipShape(shape)
+            .overlay(shape.strokeBorder(Color.primary.opacity(0.12)))
+
+            // 每个动作一张卡片，按住拖动排序
             ForEach(Array(workout.exercises.enumerated()), id: \.element.id) { i, ex in
+                let lifting = dragging == ex.id
                 exerciseBlock(i, exBinding(ex.id), hist)
+                    .padding(.bottom, 2)
+                    .background(paper)
+                    .clipShape(shape)
+                    .overlay(shape.strokeBorder(lifting ? (Parts.of(ex.name).map(Parts.color) ?? Brand.pink) : Color.primary.opacity(0.12),
+                                                lineWidth: lifting ? 2 : 1))
+                    .shadow(color: .black.opacity(0.06), radius: 10, y: 4)
+                    .opacity(lifting ? 0.55 : 1)
+                    .contentShape(.dragPreview, shape)
+                    .draggable(beginDrag(ex.id)) {
+                        HStack(spacing: 8) {
+                            Text("\(i + 1)").font(.caption.bold()).foregroundStyle(.white)
+                                .frame(width: 24, height: 24).background(Circle().fill(Parts.of(ex.name).map(Parts.color) ?? Brand.pink))
+                            Text(ex.name).font(.headline)
+                            Text("\(ex.sets.count) 组").font(.caption).foregroundStyle(.secondary)
+                        }
+                        .padding(.horizontal, 16).padding(.vertical, 12)
+                        .background(Capsule().fill(Color(.systemBackground)))
+                    }
+                    .dropDestination(for: String.self) { _, _ in
+                        dragging = nil
+                        Haptic.success()
+                        return true
+                    } isTargeted: { on in
+                        // 拖到哪张卡上，就马上换到那个位置
+                        guard on, let d = dragging, d != ex.id,
+                              let from = workout.exercises.firstIndex(where: { $0.id == d }),
+                              let to = workout.exercises.firstIndex(where: { $0.id == ex.id }) else { return }
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                            workout.exercises.move(fromOffsets: IndexSet(integer: from), toOffset: to > from ? to + 1 : to)
+                        }
+                        Haptic.tap()
+                    }
                     .transition(.asymmetric(insertion: .move(edge: .top).combined(with: .opacity), removal: .opacity))
-                hline
             }
         }
-        .background(paper)
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Color.primary.opacity(0.12)))
-        .shadow(color: .black.opacity(0.06), radius: 10, y: 4)
+    }
+
+    // 开始拖的时候记下是哪张卡（draggable 的内容在按住拖起时才取值）
+    private func beginDrag(_ id: UUID) -> String {
+        DispatchQueue.main.async { dragging = id; Haptic.tap(.medium) }
+        return id.uuidString
     }
 
     private var hline: some View { Rectangle().fill(Color.primary.opacity(0.12)).frame(height: 1) }
