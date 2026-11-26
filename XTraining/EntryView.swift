@@ -110,38 +110,29 @@ struct EntryView: View {
     // 训练本表格
     private var notebook: some View {
         let hist = history
-        let paper = Color(.secondarySystemGroupedBackground)
+        let paper = Paper.bg
         let shape = RoundedRectangle(cornerRadius: 18, style: .continuous)
         return VStack(spacing: 10) {
             VStack(spacing: 0) {
-                // 黑色标题栏
-                Text(workout.title.isEmpty ? (workout.parts.isEmpty ? "分 化" : workout.parts.joined(separator: " · ")) : workout.title)
-                    .font(.headline).foregroundStyle(.white)
-                    .frame(maxWidth: .infinity).padding(.vertical, 10)
-                    .background(Color(hex: 0x1c1c1e))
-                // 日期行
-                HStack(spacing: 0) {
-                    Text("").frame(width: labelW)
-                    ForEach(["上上次", "上次"], id: \.self) { t in
-                        Text(t).font(.caption.bold()).foregroundStyle(.secondary)
-                            .frame(width: histW)
-                            .overlay(alignment: .leading) { vline }
-                    }
-                    Text("今天 \(slashDate(workout.date))").font(.caption.bold()).foregroundStyle(workout.parts.first.map(Parts.color) ?? Color.primary)
-                        .frame(maxWidth: .infinity)
-                        .overlay(alignment: .leading) { vline }
+                // 本子的抬头：手写日期 + 部位
+                HStack(alignment: .firstTextBaseline) {
+                    Text(slashDate(workout.date)).font(Paper.hand(26))
+                    Text(workout.title.isEmpty ? (workout.parts.isEmpty ? "今天练什么" : workout.parts.joined(separator: " + ")) : workout.title)
+                        .font(.system(size: 20, weight: .heavy))
+                    Spacer()
+                    Text("训练手记").font(.caption.bold()).foregroundStyle(Paper.pencil)
                 }
-                .frame(height: 34)
-                .padding(.leading, 6)
+                .foregroundStyle(Paper.ink)
+                .padding(.horizontal, 16).padding(.vertical, 10)
                 if workout.exercises.isEmpty {
-                    hline
+                    Rectangle().fill(Paper.rule).frame(height: 1)
                     VStack(spacing: 6) {
                         Image(systemName: "square.and.pencil").font(.title).foregroundStyle(Brand.gradient)
                         Text("在下面加动作，或者点「照着上次练」").font(.subheadline).foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: .infinity).padding(.vertical, 28)
                 } else if workout.exercises.count > 1 {
-                    hline
+                    Rectangle().fill(Paper.rule).frame(height: 1)
                     Label("按住动作卡片的空白处，可以拖动换顺序", systemImage: "hand.draw")
                         .font(.caption2).foregroundStyle(.secondary).padding(.vertical, 6)
                 }
@@ -207,7 +198,6 @@ struct EntryView: View {
         let color = Parts.of(name).map(Parts.color) ?? Brand.pink
         // 这个动作自己最近练过的两次（不管那天练的是什么部位），旧的在左
         let mine = recent(name)
-        let cols: [Workout?] = Array(repeating: nil, count: 2 - mine.count) + mine
         VStack(spacing: 0) {
             // 动作名
             HStack(spacing: 8) {
@@ -239,60 +229,38 @@ struct EntryView: View {
             }
             .padding(.horizontal, 10).padding(.vertical, 8)
             .animation(.spring, value: t == .up)
-            if !x.wrappedValue.isCardio && !mine.isEmpty {
+            if !x.wrappedValue.isCardio, let pw = mine.last {
+                // 本子的表头：组 | 上次几号 | 今天
                 HStack(spacing: 0) {
-                    Text("日期").font(.caption2).foregroundStyle(.secondary).frame(width: labelW)
-                    ForEach(Array(cols.enumerated()), id: \.offset) { _, w in
-                        Text(w.map { slashDate($0.date) } ?? "").font(.caption.bold()).monospacedDigit().foregroundStyle(.secondary)
-                            .frame(width: histW, height: 24)
-                            .overlay(alignment: .leading) { vline }
-                    }
-                    Spacer().overlay(alignment: .leading) { vline }
+                    Text("组").frame(width: labelW)
+                    Text("上次 \(slashDate(pw.date))").frame(width: histW + 10)
+                    Text("今天 · 重量 × 次数").frame(maxWidth: .infinity)
                 }
+                .font(.caption2.bold()).foregroundStyle(Paper.pencil)
+                .frame(height: 22)
                 .padding(.leading, 6)
+                .overlay(alignment: .bottom) { Rectangle().fill(Paper.rule).frame(height: 1) }
+                .overlay(alignment: .leading) { Rectangle().fill(Paper.margin).frame(width: 1.5).padding(.leading, labelW + 6) }
             }
             if x.wrappedValue.isCardio {
                 HStack {
-                    Text("时长").font(.caption).foregroundStyle(.secondary)
+                    Text("时长").font(.caption).foregroundStyle(Paper.pencil)
                     Spacer()
                     TextField("0", text: Binding(get: { x.wrappedValue.sets.first?.min ?? "" }, set: { v in
                         if x.wrappedValue.sets.isEmpty { x.wrappedValue.sets = [SetRow()] }
-                        x.wrappedValue.sets[0].min = v
+                        x.wrappedValue.sets[0].min = v.filter { "0123456789.".contains($0) }
                     }))
                     .keyboardType(.decimalPad).multilineTextAlignment(.center).frame(width: 70)
-                    .padding(.vertical, 6).background(RoundedRectangle(cornerRadius: 8).fill(Color(.tertiarySystemFill)))
-                    Text("分钟").font(.caption).foregroundStyle(.secondary)
+                    .font(Paper.hand(24)).foregroundStyle(Paper.ink)
+                    .overlay(alignment: .bottom) { Rectangle().fill(Paper.ink.opacity(0.3)).frame(height: 1.5) }
+                    Text("分钟").font(.caption).foregroundStyle(Paper.pencil)
                 }
                 .padding(.horizontal, 12).padding(.bottom, 10)
             } else {
+                let lastSets = mine.last?.exercises.first { $0.name == name }?.sets
                 ForEach(Array(x.wrappedValue.sets.enumerated()), id: \.element.id) { si, s in
-                    HStack(spacing: 0) {
-                        Text("组\(si + 1)").font(.caption.bold()).foregroundStyle(.secondary).frame(width: labelW)
-                        ForEach(Array(cols.enumerated()), id: \.offset) { _, w in
-                            let hs = w?.exercises.first { $0.name == name }?.sets
-                            Text(hs.flatMap { si < $0.count ? setLabel($0[si]) : nil } ?? "")
-                                .font(.system(size: 16, weight: .semibold, design: .rounded)).monospacedDigit()
-                                .foregroundStyle(Color.primary.opacity(0.8))
-                                .lineLimit(1).minimumScaleFactor(0.6)
-                                .frame(width: histW, height: 46)
-                                .overlay(alignment: .leading) { vline }
-                        }
-                        HStack(spacing: 4) {
-                            if let cfg = store.plateCfg[name] {
-                                plateSteppers(x, s, cfg, t)
-                            } else {
-                                cellField(prevHint(prev, si, \.w, "kg"), setBinding(x, s.id, \.w), .decimalPad, cmp(s.w, prev, si, \.w))
-                            }
-                            Text("×").font(.caption).foregroundStyle(.secondary)
-                            cellField(prevHint(prev, si, \.r, "次"), setBinding(x, s.id, \.r), .numberPad, cmp(s.r, prev, si, \.r))
-                                .frame(maxWidth: store.plateCfg[name] != nil ? 56 : .infinity)
-                        }
-                        .padding(.horizontal, 6)
-                        .frame(maxWidth: .infinity, minHeight: 50)
-                        .overlay(alignment: .leading) { vline }
-                    }
-                    .padding(.leading, 6)
-                    .overlay(alignment: .top) { Rectangle().fill(Color.primary.opacity(0.06)).frame(height: 1) }
+                    let ps: SetRow? = lastSets.flatMap { si < $0.count ? $0[si] : nil }
+                    setLine(x, si, s, ps, prev, t, name)
                     .contextMenu {
                         Button("删掉这一组", role: .destructive) { withAnimation { x.wrappedValue.sets.removeAll { $0.id == s.id } } }
                     }
@@ -378,23 +346,65 @@ struct EntryView: View {
     }
 
     private func cellField(_ hint: String, _ text: Binding<String>, _ kb: UIKeyboardType, _ t: Trend) -> some View {
-        // 没填时显示上次的数字（亮一点的灰），填了按进步/退步变色，字号大，一眼能读
+        // 像在本子上写：没有灰框，只有一条底线；数字用手写体、钢笔蓝；没填时淡淡显示上次的数字
         let unit = hint == "kg" || hint == "次"
         return TextField("", text: text)
             .keyboardType(kb).multilineTextAlignment(.center)
-            .font(.system(size: 19, weight: .bold, design: .rounded)).monospacedDigit()
-            .foregroundStyle(trendColor(t))
+            .font(Paper.hand(24)).monospacedDigit()
+            .foregroundStyle(Paper.ink)
             .overlay {
                 if text.wrappedValue.isEmpty {
                     Text(hint)
-                        .font(unit ? .system(size: 13, weight: .medium) : .system(size: 17, weight: .semibold, design: .rounded))
-                        .monospacedDigit()
-                        .foregroundStyle(Color.primary.opacity(unit ? 0.3 : 0.45))
+                        .font(unit ? .system(size: 13, weight: .medium) : Paper.hand(22))
+                        .foregroundStyle(Paper.pencil.opacity(unit ? 0.6 : 0.55))
                         .allowsHitTesting(false)
                 }
             }
-            .padding(.vertical, 8)
-            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color(.tertiarySystemFill)))
+            .padding(.vertical, 4)
+            .overlay(alignment: .bottom) { Rectangle().fill(Paper.ink.opacity(text.wrappedValue.isEmpty ? 0.15 : 0.3)).frame(height: 1.5).padding(.horizontal, 6) }
+    }
+
+    // 本子里的一行：组号 | 上次（铅笔灰）| 今天（钢笔蓝手写）| 小章
+    private func setLine(_ x: Binding<Exercise>, _ si: Int, _ s: SetRow, _ ps: SetRow?, _ prev: Exercise?, _ t: Trend, _ name: String) -> some View {
+        let d = setDelta(s, ps)
+        let isPR = (Double(s.w) ?? 0) > 0 && allBest(name).map { (Double(s.w) ?? 0) > $0 } == true
+        return HStack(spacing: 0) {
+                    Text("\(si + 1)").font(.system(size: 13, weight: .bold, design: .rounded)).foregroundStyle(Paper.pencil).frame(width: labelW)
+                    // 上次：铅笔灰
+                    Text(ps.map(setLabel) ?? "—")
+                        .font(.system(size: 15, weight: .semibold, design: .rounded)).monospacedDigit()
+                        .foregroundStyle(Paper.pencil)
+                        .lineLimit(1).minimumScaleFactor(0.6)
+                        .frame(width: histW + 10)
+                    // 今天：钢笔蓝手写
+                    HStack(spacing: 2) {
+                        if let cfg = store.plateCfg[name] {
+                            plateSteppers(x, s, cfg, t)
+                        } else {
+                            cellField(prevHint(prev, si, \.w, "kg"), setBinding(x, s.id, \.w), .decimalPad, cmp(s.w, prev, si, \.w))
+                        }
+                        Text("×").font(Paper.hand(18)).foregroundStyle(Paper.ink.opacity(0.6))
+                        cellField(prevHint(prev, si, \.r, "次"), setBinding(x, s.id, \.r), .numberPad, cmp(s.r, prev, si, \.r))
+                            .frame(maxWidth: store.plateCfg[name] != nil ? 50 : .infinity)
+                    }
+                    .frame(maxWidth: .infinity)
+                    // 写完自动盖个小章：+2.5kg / 持平 / 新纪录
+                    Group {
+                        if let d { DeltaTag(text: d.0, t: d.1, pr: isPR && ps != nil).transition(.scale.combined(with: .opacity)) }
+                    }
+                    .frame(width: 62, alignment: .trailing)
+                    .animation(.spring(response: 0.3, dampingFraction: 0.7), value: d?.0)
+                }
+                .padding(.leading, 6).padding(.trailing, 8)
+                .frame(minHeight: 48)
+                .overlay(alignment: .bottom) { Rectangle().fill(Paper.rule).frame(height: 1) }
+                .overlay(alignment: .leading) { Rectangle().fill(Paper.margin).frame(width: 1.5).padding(.leading, labelW + 6) }
+    }
+
+    // 这个动作以前（今天以前）最重的一次，用来判断新纪录
+    private func allBest(_ name: String) -> Double? {
+        store.workouts.filter { $0.id != workout.id && $0.date <= workout.date }
+            .compactMap { $0.exercises.first { $0.name == name } }.map(\.best).filter { $0 > 0 }.max()
     }
 
     // 加动作 + 照着上次练

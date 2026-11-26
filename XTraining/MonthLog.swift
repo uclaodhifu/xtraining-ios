@@ -71,7 +71,7 @@ struct MonthLogTable: View {
         let lineH: CGFloat = 16
         let heights: [CGFloat] = rows.map { n in
             let m = inMonth.map { w in w.exercises(of: part).first { $0.name == n }?.sets.count ?? 0 }.max() ?? 1
-            return CGFloat(max(1, m)) * lineH + 14
+            return CGFloat(max(1, m)) * lineH + 14 + 14
         }
         let nameW: CGFloat = 96, headH: CGFloat = 36
         let line = Color.primary.opacity(0.1)
@@ -153,13 +153,18 @@ struct MonthLogTable: View {
             }
             HStack(spacing: 12) {
                 Label("按住动作名可拖动排序", systemImage: "hand.draw").foregroundStyle(.secondary)
-                Label("进步", systemImage: "arrow.up").foregroundStyle(.green)
-                Label("退步", systemImage: "arrow.down").foregroundStyle(.red)
-                Label("持平", systemImage: "equal")
-                Text("灰色 = 没练").foregroundStyle(.secondary)
+                legend("进步", Tone.fill(.up))
+                legend("退步", Tone.fill(.down))
+                legend("持平", Tone.fill(.same))
+                legend("新纪录", Tone.gold.opacity(0.3))
+                Text("斜纹 = 没练").foregroundStyle(.secondary)
             }
             .font(.caption2)
         }
+    }
+
+    private func legend(_ t: String, _ c: Color) -> some View {
+        HStack(spacing: 4) { RoundedRectangle(cornerRadius: 3).fill(c).frame(width: 12, height: 12); Text(t) }
     }
 
     private func beginRowDrag(_ name: String) -> CardDrag {
@@ -195,7 +200,7 @@ struct MonthLogTable: View {
         switch c {
         case .gap(let a, let b):
             VStack(spacing: 0) {
-                Rectangle().fill(Color.primary.opacity(0.05)).frame(width: 46, height: heights.reduce(0, +))
+                Stripes().frame(width: 46, height: heights.reduce(0, +))
             }
             .foregroundStyle(.secondary)
             .overlay(alignment: .leading) { Rectangle().fill(line).frame(width: 1) }
@@ -204,7 +209,7 @@ struct MonthLogTable: View {
             VStack(spacing: 0) {
                 ForEach(rows.indices, id: \.self) { i in
                     Group {
-                        if let w { cell(rows[i], w, hist, lineH) } else { Color.primary.opacity(0.05) }
+                        if let w { cell(rows[i], w, hist, lineH) } else { Stripes() }
                     }
                     .frame(width: wide, height: heights[i])
                     .overlay(alignment: .top) { Rectangle().fill(line).frame(height: 1) }
@@ -219,24 +224,27 @@ struct MonthLogTable: View {
     @ViewBuilder private func cell(_ name: String, _ w: Workout, _ hist: [Workout], _ lineH: CGFloat) -> some View {
         if let x = w.exercises(of: part).first(where: { $0.name == name }) {
             let idx = hist.firstIndex { $0.id == w.id } ?? 0
-            let prev = hist[..<idx].reversed().lazy.compactMap { $0.exercises(of: self.part).first { $0.name == name } }.first
-            let t = trend(x, prev)
+            let older = hist[..<idx].compactMap { $0.exercises(of: self.part).first { $0.name == name } }
+            let prev = older.last
+            let t = prev == nil ? Trend.up : trend(x, prev)
+            let pr = prev != nil && x.best > 0 && x.best > (older.map(\.best).max() ?? 0)
+            // 格子底色表示涨跌，下面写差了多少
             VStack(spacing: 0) {
                 ForEach(x.sets) { s in
                     Text(setLabel(s))
-                        .font(.system(size: 12, weight: t == .none || t == .same ? .regular : .semibold, design: .rounded))
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
                         .monospacedDigit().lineLimit(1).minimumScaleFactor(0.7)
                         .frame(height: lineH)
                 }
+                Text((pr ? "★ 新纪录" : (t == .up ? "↑ " : t == .down ? "↓ " : "= ") + deltaText(x, prev)))
+                    .font(.system(size: 9, weight: .heavy, design: .rounded)).lineLimit(1).minimumScaleFactor(0.7)
+                    .frame(height: 14)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .foregroundStyle(trendColor(t))
-            .overlay(alignment: .topTrailing) {
-                if t == .up || t == .down {
-                    Image(systemName: t == .up ? "arrow.up" : "arrow.down").font(.system(size: 9, weight: .heavy))
-                        .foregroundStyle(trendColor(t)).padding(3)
-                }
-            }
+            .foregroundStyle(Tone.text(t, pr: pr))
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Tone.fill(t, pr: pr)))
+            .overlay { if pr { RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Tone.gold, lineWidth: 1.5) } }
+            .padding(3)
         } else {
             Color.clear
         }
