@@ -45,7 +45,7 @@ struct MonthPicker: View {
     }
 }
 
-func monthCN(_ m: String) -> String {
+func ymCN(_ m: String) -> String {
     let p = m.split(separator: "-"); return p.count >= 2 ? "\(p[0])年\(Int(p[1]) ?? 0)月" : m
 }
 func prevMonth(_ m: String) -> String {
@@ -164,7 +164,7 @@ struct MonthCompare: View {
     private func monthButton(_ m: String, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 4) {
-                Text(monthCN(m)).font(.headline)
+                Text(ymCN(m)).font(.headline)
                 Image(systemName: "chevron.down").font(.caption2.bold()).foregroundStyle(.secondary)
             }
             .padding(.horizontal, 12).padding(.vertical, 8)

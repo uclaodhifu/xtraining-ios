@@ -224,7 +224,7 @@ struct LogFullScreen: View {
                         Button { shift(-1) } label: { Image(systemName: "chevron.left") }
                         Button { picking = true } label: {
                             HStack(spacing: 3) {
-                                Text(monthCN(month)).font(.headline).monospacedDigit()
+                                Text(ymCN(month)).font(.headline).monospacedDigit()
                                 Image(systemName: "chevron.down").font(.caption2.bold())
                             }
                             .foregroundStyle(Color.primary)
