@@ -3,7 +3,8 @@ import SwiftUI
 // 所有数据存在本机（UserDefaults），改了就自动保存
 @MainActor
 final class Store: ObservableObject {
-    @Published var workouts: [Workout] = [] { didSet { save(workouts, "workouts") } }
+    @Published var workouts: [Workout] = [] { didSet { rev &+= 1; save(workouts, "workouts") } }
+    private(set) var rev = 0     // 训练记录改一次加 1，表格用它强制刷新
     @Published var weights: [WeightRow] = [] { didSet { save(weights, "weights") } }
     @Published var food: [String: [String: Meal]] = [:] { didSet { save(food, "food") } }
     @Published var restDays: [String] = [] { didSet { save(restDays, "restDays") } }
