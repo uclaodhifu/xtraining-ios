@@ -8,6 +8,24 @@ struct MonthLogTable: View {
     let month: String            // "2026-11"
     var onOpen: (Workout) -> Void = { _ in }
     @State private var hx: CGFloat = 0     // 日期列左右滑了多少
+    @AppStorage("xt.logOrder") private var orderData = Data()   // 每个部位自己拖好的动作顺序
+    @State private var draggingRow: String? = nil
+
+    private var order: [String: [String]] {
+        get { (try? JSONDecoder().decode([String: [String]].self, from: orderData)) ?? [:] }
+    }
+    private func saveOrder(_ rows: [String]) {
+        var o = order; o[part] = rows
+        if let d = try? JSONEncoder().encode(o) { orderData = d }
+    }
+    // 按拖好的顺序排，没排过的动作（新练的）跟在后面
+    private func ordered(_ rows: [String]) -> [String] {
+        let saved = order[part] ?? []
+        return rows.enumerated().sorted { a, b in
+            let ia = saved.firstIndex(of: a.element) ?? Int.max, ib = saved.firstIndex(of: b.element) ?? Int.max
+            return ia != ib ? ia < ib : a.offset < b.offset
+        }.map(\.element)
+    }
 
     enum Col: Identifiable {
         case day(String, Workout?)
@@ -49,6 +67,7 @@ struct MonthLogTable: View {
         let inMonth = hist.filter { $0.date.hasPrefix(month) }
         var seen = Set<String>(), rows: [String] = []
         for w in inMonth.reversed() { for x in w.exercises(of: part) where seen.insert(x.name).inserted { rows.append(x.name) } }
+        rows = ordered(rows)
         let lineH: CGFloat = 16
         let heights: [CGFloat] = rows.map { n in
             let m = inMonth.map { w in w.exercises(of: part).first { $0.name == n }?.sets.count ?? 0 }.max() ?? 1
@@ -86,7 +105,25 @@ struct MonthLogTable: View {
                             }
                             .padding(.top, 6)
                             .frame(width: nameW, height: heights[i], alignment: .topLeading)
+                            .background(draggingRow == rows[i] ? Parts.color(part).opacity(0.12) : .clear)
                             .overlay(alignment: .top) { Rectangle().fill(line).frame(height: 1) }
+                            .contentShape(Rectangle())
+                            // 按住动作名拖动，换上下顺序（每个部位单独记住）
+                            .draggable(beginRowDrag(rows[i])) {
+                                Text(rows[i]).font(.subheadline.bold())
+                                    .padding(.horizontal, 14).padding(.vertical, 8)
+                                    .background(Capsule().fill(Color(.systemBackground)))
+                            }
+                            .dropDestination(for: CardDrag.self) { _, _ in
+                                draggingRow = nil; Haptic.success(); return true
+                            } isTargeted: { on in
+                                guard on, let d = draggingRow, d != rows[i],
+                                      let from = rows.firstIndex(of: d), let to = rows.firstIndex(of: rows[i]) else { return }
+                                var r = rows
+                                r.move(fromOffsets: IndexSet(integer: from), toOffset: to > from ? to + 1 : to)
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) { saveOrder(r) }
+                                Haptic.tap()
+                            }
                         }
                     }
                     .background(Color(.secondarySystemGroupedBackground))
@@ -115,13 +152,19 @@ struct MonthLogTable: View {
                 }
             }
             HStack(spacing: 12) {
+                Label("按住动作名可拖动排序", systemImage: "hand.draw").foregroundStyle(.secondary)
                 Label("进步", systemImage: "arrow.up").foregroundStyle(.green)
                 Label("退步", systemImage: "arrow.down").foregroundStyle(.red)
                 Label("持平", systemImage: "equal")
-                Text("灰色列 = 连续多天没练").foregroundStyle(.secondary)
+                Text("灰色 = 没练").foregroundStyle(.secondary)
             }
             .font(.caption2)
         }
+    }
+
+    private func beginRowDrag(_ name: String) -> CardDrag {
+        DispatchQueue.main.async { draggingRow = name; Haptic.tap(.medium) }
+        return CardDrag(id: UUID())
     }
 
     @ViewBuilder
@@ -142,7 +185,7 @@ struct MonthLogTable: View {
             }
             .foregroundStyle(d == Day.today ? Parts.color(part) : (w == nil ? Color.secondary : Color.primary))
             .frame(width: w == nil ? 34 : 70, height: headH)
-            .background(w != nil ? Parts.color(part).opacity(0.12) : .clear)
+            .background(w != nil ? Parts.color(part).opacity(0.12) : Color.primary.opacity(0.05))
             .overlay(alignment: .leading) { Rectangle().fill(line).frame(width: 1) }
         }
     }
@@ -161,7 +204,7 @@ struct MonthLogTable: View {
             VStack(spacing: 0) {
                 ForEach(rows.indices, id: \.self) { i in
                     Group {
-                        if let w { cell(rows[i], w, hist, lineH) } else { Color.clear }
+                        if let w { cell(rows[i], w, hist, lineH) } else { Color.primary.opacity(0.05) }
                     }
                     .frame(width: wide, height: heights[i])
                     .overlay(alignment: .top) { Rectangle().fill(line).frame(height: 1) }
