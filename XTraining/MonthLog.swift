@@ -37,8 +37,30 @@ struct MonthLogTable: View {
     }
 
     // 这个部位练过的所有训练（全部历史，用来算“跟上次比”）
+    // 同一天练了两次（比如中途退出又开了一次）就合成一格，不然后面那次会被漏掉
     private var history: [Workout] {
-        store.workouts.filter { !$0.exercises(of: part).isEmpty }.sorted { $0.date < $1.date }
+        let ws = store.workouts.filter { !$0.exercises(of: part).isEmpty }
+            .sorted { $0.date != $1.date ? $0.date < $1.date : $0.createdAt < $1.createdAt }
+        var out: [Workout] = []
+        for w in ws {
+            guard var last = out.last, last.date == w.date else { out.append(w); continue }
+            for x in w.exercises(of: part) {
+                if let i = last.exercises.firstIndex(where: { $0.name == x.name && (Parts.of($0.name) ?? last.parts.first ?? "") == part }) {
+                    last.exercises[i].sets += x.sets
+                    if last.exercises[i].inkName == nil { last.exercises[i].inkName = x.inkName }
+                } else {
+                    var y = x
+                    last.exercises.append(y)
+                }
+            }
+            for p in w.parts where !last.parts.contains(p) { last.parts.append(p) }
+            out[out.count - 1] = last
+        }
+        return out
+    }
+    // 点格子打开的是这天最后记的那次原始训练（合并出来的那格不能直接改）
+    private func original(_ w: Workout) -> Workout {
+        store.workouts.filter { $0.date == w.date && !$0.exercises(of: part).isEmpty }.max { $0.createdAt < $1.createdAt } ?? w
     }
 
     private var days: [String] {
@@ -229,7 +251,7 @@ struct MonthLogTable: View {
             }
             .overlay(alignment: .leading) { Rectangle().fill(line).frame(width: 1) }
             .contentShape(Rectangle())
-            .onTapGesture { if let w { onOpen(w) } }
+            .onTapGesture { if let w { onOpen(original(w)) } }
         }
     }
 
