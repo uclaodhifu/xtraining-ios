@@ -8,6 +8,7 @@ struct HomeView: View {
     @State private var celebrate = false
     @State private var picked: [String]? = nil
     @State private var editing: Workout? = nil
+    @State private var hasDraft = EntryDraft.load() != nil
     @State private var showCycle = false
     @State private var showPrep = false
     @ObservedObject private var prep = PrepStore.shared
@@ -41,7 +42,8 @@ struct HomeView: View {
             .toolbar(.hidden, for: .navigationBar)
             .overlay { if celebrate && !Motion.reduce { Confetti() } }
             .sheet(isPresented: $editTitle) { TitleEditor() }
-            .sheet(item: $editing) { w in EntryView(workout: w) }
+            .sheet(item: $editing, onDismiss: { hasDraft = EntryDraft.load() != nil }) { w in EntryView(workout: w) }
+            .onAppear { hasDraft = EntryDraft.load() != nil }
             .sheet(isPresented: $showCycle) { CycleEditor() }
             .sheet(isPresented: $showPrep) { PrepView() }
             .sheet(isPresented: $showWeight) { WeightView() }
@@ -119,7 +121,7 @@ struct HomeView: View {
         } else {
             BigCard {
                 HeroBanner(tag: "今天练什么", title: heroTitle, sub: why,
-                           button: chosen.wrappedValue.isEmpty ? "开始训练" : "开始训练 · " + chosen.wrappedValue.joined(separator: " + "),
+                           button: hasDraft ? "继续训练" : (chosen.wrappedValue.isEmpty ? "开始训练" : "开始训练 · " + chosen.wrappedValue.joined(separator: " + ")),
                            action: { Haptic.tap(.medium); editing = newWorkout(chosen.wrappedValue) }) {
                     HStack(spacing: 8) {
                         Button { showCycle = true } label: {
