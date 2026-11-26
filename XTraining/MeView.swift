@@ -11,6 +11,7 @@ struct MeView: View {
     @State private var importing = false
     @State private var message: String? = nil
     @State private var syncing = false
+    @State private var clearing = false
 
     var body: some View {
         NavigationStack {
@@ -82,10 +83,16 @@ struct MeView: View {
                     Text("推荐「用同步码找回」：在网页版「我 → 同步码」点复制，回来填上网站密码就行，训练记录和头像都会搬过来。体重记录要用导出的 .json 文件导入。重复导入不会重复添加。")
                 }
                 Section {
+                    Button(role: .destructive) { clearing = true } label: {
+                        Label("一键清除训练记录", systemImage: "trash").foregroundStyle(.red)
+                    }
+                } footer: { Text("清除前可以先导出备份，清掉以后还能导回来。") }
+                Section {
                     LabeledContent("版本", value: "测试版 1.0")
                 }
             }
             .sheet(isPresented: $notesImport) { NotesImportView() }
+            .sheet(isPresented: $clearing) { ClearDataView().presentationDetents([.medium, .large]) }
             .navigationTitle("我")
             .sheet(isPresented: $syncing) { SyncRestoreView() }
             .sheet(isPresented: $importing) {
@@ -149,5 +156,71 @@ struct DocPicker: UIViewControllerRepresentable {
         init(done: @escaping (URL?) -> Void) { self.done = done }
         func documentPicker(_ c: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) { done(urls.first) }
         func documentPickerWasCancelled(_ c: UIDocumentPickerViewController) { done(nil) }
+    }
+}
+
+
+// 一键清除：选清哪些 → 可先导出备份 → 再确认一次；清完马上可以撤销
+struct ClearDataView: View {
+    @EnvironmentObject var store: Store
+    @Environment(\.dismiss) private var dismiss
+    @State private var workouts = true
+    @State private var weights = false
+    @State private var days = false
+    @State private var confirm = false
+    @State private var undo: Snap? = nil
+    struct Snap { var w: [Workout]; var kg: [WeightRow]; var rest: [String]; var done: [String] }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                if let undo {
+                    Section {
+                        Label("已清除", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                        Button {
+                            withAnimation {
+                                store.workouts = undo.w; store.weights = undo.kg
+                                store.restDays = undo.rest; store.doneDays = undo.done
+                            }
+                            self.undo = nil
+                            Haptic.success()
+                        } label: { Label("撤销，恢复刚才的记录", systemImage: "arrow.uturn.backward") }
+                    } footer: { Text("关掉这个页面后就不能撤销了。") }
+                } else {
+                    Section {
+                        Toggle("训练记录（\(store.workouts.count) 次）", isOn: $workouts)
+                        Toggle("体重记录（\(store.weights.count) 条）", isOn: $weights)
+                        Toggle("打卡和休息日", isOn: $days)
+                    } header: { Text("要清除哪些") }
+                    Section {
+                        ShareLink(item: BackupFile(data: store.exportBackup()), preview: SharePreview("X Training 备份.json")) {
+                            Label("先导出备份（推荐）", systemImage: "square.and.arrow.up")
+                        }
+                    } footer: { Text("备份文件可以在「我 → 从文件导入备份」导回来。") }
+                    Section {
+                        Button(role: .destructive) { confirm = true } label: {
+                            Text("清除").bold().frame(maxWidth: .infinity)
+                        }
+                        .disabled(!workouts && !weights && !days)
+                    }
+                }
+            }
+            .navigationTitle("清除训练记录").navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button(undo == nil ? "取消" : "完成") { dismiss() } } }
+            .alert("确定清除？", isPresented: $confirm) {
+                Button("清除", role: .destructive) { clear() }
+                Button("取消", role: .cancel) {}
+            } message: { Text("清除后这台手机上的这些记录就没有了。") }
+        }
+    }
+
+    private func clear() {
+        undo = Snap(w: store.workouts, kg: store.weights, rest: store.restDays, done: store.doneDays)
+        withAnimation {
+            if workouts { store.workouts = [] }
+            if weights { store.weights = [] }
+            if days { store.restDays = []; store.doneDays = [] }
+        }
+        Haptic.success()
     }
 }
