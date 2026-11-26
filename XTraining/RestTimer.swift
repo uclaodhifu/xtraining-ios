@@ -88,60 +88,90 @@ final class RestTimer: ObservableObject {
 }
 
 // 记录页底部的休息条
+// 休息条：醒目的彩色卡片。没计时是橙粉渐变；计时中按剩余时间从绿变橙再变红，最后 10 秒会跳动
 struct RestBar: View {
     @ObservedObject private var t = RestTimer.shared
     var exercise: String = ""
     private let presets = [60, 90, 120, 180]
 
+    private static let idle = [Color(hex: 0xff7a18), Color(hex: 0xff3d7f)]
+    private static func colors(_ left: Double, _ total: Double) -> [Color] {
+        let f = total > 0 ? left / total : 0
+        if left <= 10 { return [Color(hex: 0xff3b30), Color(hex: 0xd6246e)] }   // 快到了：红
+        if f > 0.5 { return [Color(hex: 0x12b886), Color(hex: 0x0ca678).opacity(0.9)] } // 刚开始：绿
+        return [Color(hex: 0xffa94d), Color(hex: 0xff6b00)]                       // 过半：橙
+    }
+
     var body: some View {
         Group {
             if let s = t.start, let e = t.end, t.running {
-                HStack(spacing: 12) {
-                    ZStack {
-                        ProgressView(timerInterval: s...e, countsDown: true) { EmptyView() } currentValueLabel: { EmptyView() }
-                            .progressViewStyle(.circular).tint(Brand.pink).scaleEffect(1.3)
-                        Image(systemName: "timer").font(.caption.bold())
+                TimelineView(.periodic(from: .now, by: 1)) { ctx in
+                    let left = max(0, e.timeIntervalSince(ctx.date))
+                    let total = e.timeIntervalSince(s)
+                    let urgent = left <= 10
+                    HStack(spacing: 12) {
+                        ZStack {
+                            ProgressView(timerInterval: s...e, countsDown: true) { EmptyView() } currentValueLabel: { EmptyView() }
+                                .progressViewStyle(.circular).tint(.white).scaleEffect(1.3)
+                            Image(systemName: "timer").font(.caption.bold())
+                        }
+                        .frame(width: 40, height: 40)
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text(urgent ? "准备下一组" : "休息中").font(.caption2.bold()).opacity(0.85)
+                            Text(timerInterval: s...e, countsDown: true)
+                                .font(.system(size: 32, weight: .heavy, design: .rounded)).monospacedDigit()
+                                .scaleEffect(urgent && Int(left) % 2 == 0 ? 1.08 : 1, anchor: .leading)
+                                .animation(.spring(duration: 0.3), value: Int(left))
+                        }
+                        Spacer()
+                        pill("−15") { t.add(-15) }
+                        pill("+15") { t.add(15) }
+                        Button { t.stop() } label: {
+                            Image(systemName: "xmark").font(.footnote.bold()).frame(width: 34, height: 34)
+                                .background(Color.white.opacity(0.22), in: Circle())
+                        }
                     }
-                    .frame(width: 40, height: 40)
-                    Text(timerInterval: s...e, countsDown: true)
-                        .font(.system(size: 30, weight: .heavy, design: .rounded)).monospacedDigit()
-                    Spacer()
-                    pill("−15") { t.add(-15) }
-                    pill("+15") { t.add(15) }
-                    Button { t.stop() } label: {
-                        Image(systemName: "xmark").font(.footnote.bold()).frame(width: 34, height: 34)
-                            .background(Color.primary.opacity(0.1), in: Circle())
-                    }
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 14).padding(.vertical, 10)
+                    .background(card(Self.colors(left, total)))
+                    .animation(.easeInOut(duration: 0.8), value: left <= 10)
+                    .animation(.easeInOut(duration: 0.8), value: total > 0 && left / total > 0.5)
                 }
             } else {
                 HStack(spacing: 8) {
-                    Label("休息", systemImage: "timer").font(.subheadline.bold()).foregroundStyle(.secondary)
+                    Label("休息", systemImage: "timer").font(.subheadline.bold())
                     Spacer()
                     ForEach(presets, id: \.self) { p in
                         Button { t.begin(p, exercise: exercise) } label: {
                             Text(p % 60 == 0 ? "\(p / 60)分" : "\(p / 60):\(String(format: "%02d", p % 60))")
                                 .font(.subheadline.bold()).padding(.horizontal, 12).padding(.vertical, 8)
-                                .foregroundStyle(p == t.preset ? Brand.ink : Color.primary)
-                                .background(p == t.preset ? AnyShapeStyle(Brand.gradient) : AnyShapeStyle(Color.primary.opacity(0.08)), in: Capsule())
+                                .foregroundStyle(p == t.preset ? Color(hex: 0xff3d7f) : .white)
+                                .background(p == t.preset ? Color.white : Color.white.opacity(0.22), in: Capsule())
                         }
                         .buttonStyle(PressScale())
                     }
                 }
+                .foregroundStyle(.white)
+                .padding(.horizontal, 14).padding(.vertical, 10)
+                .background(card(Self.idle))
             }
         }
-        .padding(.horizontal, 14).padding(.vertical, 10)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .shadow(color: .black.opacity(0.12), radius: 10, y: 4)
+        .shadow(color: .black.opacity(0.18), radius: 12, y: 5)
         .padding(.horizontal, 14).padding(.bottom, 6)
         .animation(.snappy, value: t.running)
+    }
+
+    private func card(_ c: [Color]) -> some View {
+        RoundedRectangle(cornerRadius: 22, style: .continuous)
+            .fill(LinearGradient(colors: c, startPoint: .topLeading, endPoint: .bottomTrailing))
+            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(.white.opacity(0.25)))
     }
 
     private func pill(_ s: String, _ a: @escaping () -> Void) -> some View {
         Button(action: a) {
             Text(s).font(.footnote.bold()).padding(.horizontal, 10).frame(height: 34)
-                .background(Color.primary.opacity(0.1), in: Capsule())
+                .background(Color.white.opacity(0.22), in: Capsule())
         }
-        .foregroundStyle(.primary)
+        .foregroundStyle(.white)
     }
 }
