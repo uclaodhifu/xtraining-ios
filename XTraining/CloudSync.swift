@@ -94,7 +94,8 @@ final class CloudSync: ObservableObject {
         let gone = deleted.union(r.deleted)
         deleted = gone
         var byID = Dictionary(s.workouts.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-        for w in r.workouts { byID[w.id] = w }
+        // 同一次训练两边都有：用后保存的那份（一样新就留本机的，免得刚写的笔迹被旧的盖掉）
+        for w in r.workouts { if let mine = byID[w.id], mine.editedAt >= w.editedAt { continue }; byID[w.id] = w }
         let merged = byID.values.filter { !gone.contains($0.id) }
         if Set(merged.map(\.self)) != Set(s.workouts) { s.workouts = merged.sorted { $0.date != $1.date ? $0.date < $1.date : $0.createdAt < $1.createdAt } }
         if r.weights != s.weights { s.weights = r.weights }

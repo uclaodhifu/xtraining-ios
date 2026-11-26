@@ -33,6 +33,10 @@ enum InkStore {
         try? d.dataRepresentation().write(to: dir.appendingPathComponent(id))
         cache.removeAllObjects()
     }
+    static func has(_ id: String?) -> String? {
+        guard let id, FileManager.default.fileExists(atPath: dir.appendingPathComponent(id).path) else { return nil }
+        return id
+    }
     static func load(_ id: String) -> PKDrawing? {
         guard let data = try? Data(contentsOf: dir.appendingPathComponent(id)) else { return nil }
         return try? PKDrawing(data: data)
@@ -288,7 +292,7 @@ struct SetInkLabel: View {
     var font: Font = .caption
     var num = false        // 笔迹下面用小字写上认出来的数字（改过「认成」就显示改后的）
     var body: some View {
-        if s.inkW == nil && s.inkR == nil {
+        if InkStore.has(s.inkW) == nil && InkStore.has(s.inkR) == nil {
             Text(setLabel(s)).font(font)
         } else if num {
             VStack(spacing: 0) {
@@ -308,6 +312,6 @@ struct SetInkLabel: View {
         }
     }
     @ViewBuilder private func part(_ id: String?, _ text: String, _ h: CGFloat) -> some View {
-        if let id { InkView(id: id, height: h) } else { Text(text.isEmpty ? "—" : text).font(font) }
+        if let id = InkStore.has(id) { InkView(id: id, height: h) } else { Text(text.isEmpty ? "—" : text).font(font) }
     }
 }

@@ -44,7 +44,7 @@ enum Baseline {
 
 // 动作名的手写笔迹（最近一次写过的）
 func inkName(_ name: String, part: String, in ws: [Workout]) -> String? {
-    for w in ws.reversed() { if let x = w.exercises(of: part).first(where: { $0.name == name }), let ink = x.inkName { return ink } }
+    for w in ws.reversed() { if let x = w.exercises(of: part).first(where: { $0.name == name }), let ink = InkStore.has(x.inkName) { return ink } }
     return nil
 }
 

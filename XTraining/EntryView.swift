@@ -239,7 +239,7 @@ struct EntryView: View {
             HStack(spacing: 8) {
                 Text("\(i + 1)").font(.caption.bold()).foregroundStyle(.white)
                     .frame(width: 22, height: 22).background(Circle().fill(color))
-                if let ink = x.wrappedValue.inkName {   // 写过的动作名一直显示笔迹，不随输入方式变
+                if let ink = InkStore.has(x.wrappedValue.inkName) {   // 写过的动作名一直显示笔迹，不随输入方式变
                     InkView(id: ink, height: 26).frame(maxWidth: .infinity, alignment: .leading)   // 手写的动作名原样显示
                 } else {
                     TextField("动作名", text: x.name).font(.subheadline.bold())
@@ -518,10 +518,10 @@ struct EntryView: View {
                         if let cfg = store.plateCfg[name] {
                             plateSteppers(x, s, cfg, t)
                         } else {
-                            cellField(prevHint(prev, si, \.w, "kg"), setBinding(x, s.id, \.w), WriteCell(ex: x.wrappedValue.id, set: s.id, weight: true), ink: s.inkW)
+                            cellField(prevHint(prev, si, \.w, "kg"), setBinding(x, s.id, \.w), WriteCell(ex: x.wrappedValue.id, set: s.id, weight: true), ink: InkStore.has(s.inkW))
                         }
                         Text("×").font(Paper.hand(18)).foregroundStyle(Paper.ink.opacity(0.6))
-                        cellField(prevHint(prev, si, \.r, "次"), setBinding(x, s.id, \.r), WriteCell(ex: x.wrappedValue.id, set: s.id, weight: false), ink: s.inkR)
+                        cellField(prevHint(prev, si, \.r, "次"), setBinding(x, s.id, \.r), WriteCell(ex: x.wrappedValue.id, set: s.id, weight: false), ink: InkStore.has(s.inkR))
                             .frame(maxWidth: store.plateCfg[name] != nil ? 50 : .infinity)
                     }
                     .frame(maxWidth: .infinity)
