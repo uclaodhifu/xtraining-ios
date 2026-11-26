@@ -2,17 +2,26 @@
 name: TestFlight
 
 on:
-  workflow_dispatch:      # 有了苹果开发者账号、填好 Secrets 后，在 Actions 页面手动点 “Run workflow”
+  push:                   # 推送到 main 就自动编译、上传、分发给测试员
+    branches: [main]
+    paths-ignore: ['**.md', 'docs/**']
+  workflow_dispatch:      # 也可以在 Actions 页面手动点 “Run workflow”
+
+concurrency:
+  group: testflight
+  cancel-in-progress: false
 
 jobs:
   build:
     runs-on: macos-26
-    timeout-minutes: 40
+    timeout-minutes: 90
     env:
       TEAM_ID: ${{ secrets.TEAM_ID }}
       APP_BUNDLE_ID: ${{ vars.BUNDLE_ID || 'com.kaigreen.xtraining' }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 50
 
       - name: 选最新的 Xcode
         run: |
@@ -55,6 +64,23 @@ jobs:
             -authenticationKeyPath "$RUNNER_TEMP/keys/AuthKey.p8" \
             -authenticationKeyID "${{ secrets.ASC_KEY_ID }}" \
             -authenticationKeyIssuerID "${{ secrets.ASC_ISSUER_ID }}"
+
+      - name: 自动分发（测试说明 + 测试群组 + 外部审核）
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_PATH: ${{ runner.temp }}/keys/AuthKey.p8
+          BUILD_NO: ${{ github.run_number }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if [ -n "$BEFORE" ] && git cat-file -e "$BEFORE" 2>/dev/null; then
+            NOTES=$(git log --no-merges --pretty='• %s' "$BEFORE..HEAD" | head -15)
+          else
+            NOTES=$(git log --no-merges --pretty='• %s' -1)
+          fi
+          export NOTES
+          python3 -m pip install --quiet --break-system-packages pyjwt cryptography || python3 -m pip install --quiet --user pyjwt cryptography
+          python3 .github/scripts/testflight_distribute.py
 
       - name: 清理密钥
         if: always()
