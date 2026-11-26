@@ -30,9 +30,9 @@ struct YesterdayCard: View {
             Spacer(minLength: 14)
             HStack(alignment: .bottom) {
                 VStack(alignment: .leading, spacing: 2) {
+                    row(parts, "", small: parts.count > 3)
                     row(String(format: "%.1f", hours), "小时")
                     row("\(sets)", "组")
-                    row(parts, "", small: parts.count > 3)
                 }
                 Spacer(minLength: 12)
                 timeline.frame(maxWidth: 190)
