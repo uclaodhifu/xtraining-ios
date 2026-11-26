@@ -186,7 +186,7 @@ struct RestBar: View {
 
     private func start(_ p: Int) {
         Haptic.tap(.medium)
-        withAnimation(.spring(response: 0.25, dampingFraction: 0.45)) { tapped = p }
+        withAnimation(.spring(response: 0.25, dampingFraction: 0.45)) { t.preset = p; tapped = p }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             wave = -0.5; ring = false
             withAnimation(.spring(response: 0.55, dampingFraction: 0.75)) {
