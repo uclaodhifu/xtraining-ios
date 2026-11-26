@@ -31,6 +31,7 @@ struct EntryView: View {
             ScrollView {
                 VStack(spacing: 14) {
                     topCard
+                    if workout.exercises.count > 1 { orderCard }
                     notebook
                     addCard
                     noteCard
@@ -74,6 +75,43 @@ struct EntryView: View {
                 TextField("分化名（可不填）", text: $workout.title).multilineTextAlignment(.trailing).font(.subheadline)
             }
             PartChips(parts: Parts.all, selected: $workout.parts)
+        }
+        .card()
+    }
+
+    // 训练顺序：单独一张卡，按住右边三条线拖动排序
+    private var orderCard: some View {
+        let rowH: CGFloat = 46
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Label("训练顺序", systemImage: "list.number").font(.headline)
+                Spacer()
+                Text("按住右边拖动").font(.caption2).foregroundStyle(.secondary)
+            }
+            List {
+                ForEach(Array(workout.exercises.enumerated()), id: \.element.id) { i, ex in
+                    HStack(spacing: 10) {
+                        Text("\(i + 1)").font(.caption.bold()).foregroundStyle(.white)
+                            .frame(width: 22, height: 22)
+                            .background(Circle().fill(Parts.of(ex.name).map(Parts.color) ?? Brand.pink))
+                        Text(ex.name.isEmpty ? "未命名动作" : ex.name).font(.subheadline.bold()).lineLimit(1)
+                        Spacer()
+                        Text(ex.isCardio ? "有氧" : "\(ex.sets.count) 组").font(.caption).foregroundStyle(.secondary)
+                    }
+                    .frame(height: rowH - 8)
+                    .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4))
+                    .listRowBackground(Color.clear)
+                }
+                .onMove { from, to in
+                    withAnimation(.snappy) { workout.exercises.move(fromOffsets: from, toOffset: to) }
+                    Haptic.tap()
+                }
+            }
+            .listStyle(.plain)
+            .environment(\.editMode, .constant(.active))
+            .scrollDisabled(true)
+            .scrollContentBackground(.hidden)
+            .frame(height: CGFloat(workout.exercises.count) * rowH)
         }
         .card()
     }
