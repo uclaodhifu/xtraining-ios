@@ -158,9 +158,9 @@ struct PartProgress: View {
             let v = byMonth[k] ?? (0, 0)
             byMonth[k] = (v.0 + n, v.1 + 1)
         }
-        // 固定显示最近 6 个月（没练的月份是 0）
+        // 固定显示最近 8 个月（没练的月份是 0）
         let start = Day.date(String(Day.today.prefix(7)) + "-01")
-        let rows: [Pt] = (0..<6).reversed().map { back in
+        let rows: [Pt] = (0..<8).reversed().map { back in
             let d = Calendar.current.date(byAdding: .month, value: -back, to: start) ?? start
             let k = String(Day.str(d).prefix(7))
             let v = byMonth[k] ?? (0, 0)
@@ -170,7 +170,7 @@ struct PartProgress: View {
             Text("平均组数").font(.title3.bold())
             Text("每次练\(part)平均几组，按月").font(.caption).foregroundStyle(.secondary)
             Chart(rows) { r in
-                BarMark(x: .value("月", monthLabel(r.id)), y: .value("组", r.v))
+                BarMark(x: .value("月", monthLabel(r.id)), y: .value("组", r.v), width: .ratio(0.45))
                     .foregroundStyle(r.id == rows.last?.id ? Color(hex: 0x0a84ff).gradient : Color(hex: 0x0a84ff).opacity(0.45).gradient)
                     .cornerRadius(6)
                     .annotation(position: .top) { Text(r.v > 0 ? fmtNum(r.v) : "").font(.caption2).foregroundStyle(.secondary) }
