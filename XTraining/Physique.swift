@@ -41,6 +41,22 @@ final class PhotoStore: ObservableObject {
     }
 }
 
+// 抖音风格配色：黑底 + 青色 + 洋红
+enum TT {
+    static let cyan = Color(hex: 0x25F4EE)
+    static let red = Color(hex: 0xFE2C55)
+    static let bg = Color(hex: 0x000000)
+    static let card = Color(hex: 0x161823)
+}
+// 字后面一层青、一层红错位，像抖音的“故障”效果
+struct Glitch: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .background(content.foregroundStyle(TT.cyan).offset(x: -1.5, y: -1))
+            .background(content.foregroundStyle(TT.red).offset(x: 1.5, y: 1))
+    }
+}
+
 struct PhysiqueView: View {
     @ObservedObject private var st = PhotoStore.shared
     @ObservedObject private var ps = PrepStore.shared
@@ -71,12 +87,13 @@ struct PhysiqueView: View {
                         .pickerStyle(.segmented)
                     PhotosPicker(selection: $picks, maxSelectionCount: 6, matching: .images) {
                         Label("从相册加照片", systemImage: "photo.badge.plus").font(.subheadline.bold())
-                            .frame(maxWidth: .infinity, minHeight: 42).foregroundStyle(.white)
-                            .background(Capsule().fill(Brand.gradient))
+                            .frame(maxWidth: .infinity, minHeight: 44).foregroundStyle(.white)
+                            .background(RoundedRectangle(cornerRadius: 12).fill(TT.red))
                     }
                     Text("照片只存在这台手机上，不会上传。").font(.caption2).foregroundStyle(.secondary)
                 }
-                .card()
+                .padding(16)
+                .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(TT.card))
 
                 // 筛选
                 Picker("姿势", selection: $pose) {
@@ -87,10 +104,11 @@ struct PhysiqueView: View {
 
                 if st.list.isEmpty {
                     VStack(spacing: 8) {
-                        Image(systemName: "figure.arms.open").font(.largeTitle).foregroundStyle(Brand.gradient)
+                        Image(systemName: "figure.arms.open").font(.largeTitle).foregroundStyle(.white).modifier(Glitch())
                         Text("每周同一时间、同样光线拍一组，备赛进度一眼看清").font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
                     }
-                    .frame(maxWidth: .infinity).padding(.vertical, 30).card()
+                    .frame(maxWidth: .infinity).padding(.vertical, 30)
+                    .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(TT.card))
                 } else {
                     Text(selected.count == 2 ? "已选两张，点下面「对比」" : "点两张照片选中，就可以对比").font(.caption).foregroundStyle(.secondary)
                 }
@@ -98,8 +116,8 @@ struct PhysiqueView: View {
                 ForEach(groups, id: \.0) { d, ps in
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
-                            Text(Day.label(d)).font(.headline)
-                            if let c = contestLeft(d) { Text(c).font(.caption.bold()).foregroundStyle(Brand.pink) }
+                            Text(Day.label(d)).font(.headline.weight(.heavy)).modifier(Glitch())
+                            if let c = contestLeft(d) { Text(c).font(.caption.bold()).foregroundStyle(TT.cyan) }
                         }
                         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
                             ForEach(ps) { p in thumb(p) }
@@ -110,14 +128,17 @@ struct PhysiqueView: View {
             }
             .padding(.horizontal, 16).padding(.bottom, 90)
         }
-        .background(Color(.systemGroupedBackground))
+        .background(TT.bg)
+        .tint(TT.red)
+        .preferredColorScheme(.dark)
         .navigationTitle("体态对比")
         .safeAreaInset(edge: .bottom) {
             if selected.count == 2 {
                 Button { comparing = true } label: {
                     Label("对比这两张", systemImage: "rectangle.split.2x1").font(.headline)
-                        .frame(maxWidth: .infinity, minHeight: 50).foregroundStyle(.white)
-                        .background(Capsule().fill(Brand.gradient))
+                        .frame(maxWidth: .infinity, minHeight: 52).foregroundStyle(.white)
+                        .background(RoundedRectangle(cornerRadius: 14).fill(TT.red))
+                        .shadow(color: TT.red.opacity(0.5), radius: 12, y: 4)
                 }
                 .padding(.horizontal, 16).padding(.bottom, 8)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -165,9 +186,10 @@ struct PhysiqueView: View {
                 }
                 .overlay(alignment: .topTrailing) {
                     Image(systemName: on ? "checkmark.circle.fill" : "circle").font(.title3)
-                        .foregroundStyle(on ? Brand.pink : .white).shadow(radius: 2).padding(6)
+                        .foregroundStyle(on ? TT.red : .white).shadow(radius: 2).padding(6)
                 }
-                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(on ? Brand.pink : .clear, lineWidth: 3))
+                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(on ? TT.red : .clear, lineWidth: 3))
+                .shadow(color: on ? TT.cyan.opacity(0.6) : .clear, radius: 6, x: -2, y: -2)
         }
         .buttonStyle(PressScale())
         .contextMenu {
@@ -209,7 +231,7 @@ struct PhotoCompare: View {
                             Rectangle().fill(.white).frame(width: 3).shadow(radius: 3)
                                 .offset(x: g.size.width * split - 1.5)
                             Image(systemName: "arrow.left.and.right.circle.fill").font(.system(size: 40))
-                                .foregroundStyle(.white, Brand.pink).shadow(radius: 4)
+                                .foregroundStyle(.white, TT.red).shadow(color: TT.cyan, radius: 0, x: -2, y: -2)
                                 .offset(x: g.size.width * split - 20)
                         }
                         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
@@ -222,9 +244,13 @@ struct PhotoCompare: View {
                     }
                     .padding(.horizontal, 12)
                 }
-                Text("相隔 \(Day.between(a.date, b.date)) 天").font(.headline).foregroundStyle(Brand.gradient)
+                Text("相隔 \(Day.between(a.date, b.date)) 天").font(.title2.weight(.heavy)).foregroundStyle(.white)
+                    .modifier(Glitch())
                     .padding(.bottom, 8)
             }
+            .background(TT.bg)
+            .preferredColorScheme(.dark)
+            .tint(TT.red)
             .navigationTitle("体态对比").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
         }
