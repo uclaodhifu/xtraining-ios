@@ -137,15 +137,75 @@ struct CreatorsView: View {
     private func open(_ s: String) { openCreator(s, openURL) }
 }
 
-// 从截图里读二维码，返回里面的链接（抖音主页二维码里就是主页链接）
+// 从截图里读二维码，返回里面的链接（普通二维码；小图会放大再试一次）
 func readQR(_ cg: CGImage) -> String? {
-    let req = VNDetectBarcodesRequest()
-    req.symbologies = [.qr]
-    try? VNImageRequestHandler(cgImage: cg).perform([req])
-    for o in req.results ?? [] {
-        if let s = o.payloadStringValue, let r = s.range(of: #"https?://\S+"#, options: .regularExpression) { return String(s[r]) }
+    func scan(_ img: CGImage) -> String? {
+        let req = VNDetectBarcodesRequest()
+        try? VNImageRequestHandler(cgImage: img).perform([req])
+        for o in req.results ?? [] {
+            if let s = o.payloadStringValue, let r = s.range(of: #"https?://\S+"#, options: .regularExpression) { return String(s[r]) }
+        }
+        return nil
     }
+    if let u = scan(cg) { return u }
+    if cg.width < 1500, let big = scaled(cg, 2) { return scan(big) }
     return nil
+}
+
+private func scaled(_ cg: CGImage, _ k: CGFloat) -> CGImage? {
+    let w = Int(CGFloat(cg.width) * k), h = Int(CGFloat(cg.height) * k)
+    guard let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
+                              space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+    ctx.interpolationQuality = .high
+    ctx.draw(cg, in: CGRect(x: 0, y: 0, width: w, height: h))
+    return ctx.makeImage()
+}
+
+// 抖音“主页二维码”卡片是抖音自家的圆形码，系统扫不出来。
+// 改成读卡片上的字：@名字、抖音号、简介，并把中间的头像裁下来。
+struct DouyinCard { var name: String?; var id: String?; var bio: String?; var avatar: Data? }
+
+func readDouyinCard(_ cg: CGImage) -> DouyinCard? {
+    let req = VNRecognizeTextRequest()
+    req.recognitionLevel = .accurate
+    req.recognitionLanguages = ["zh-Hans", "en-US"]
+    req.usesLanguageCorrection = false
+    try? VNImageRequestHandler(cgImage: cg).perform([req])
+    let obs = (req.results ?? []).compactMap { o -> (String, CGRect)? in
+        guard let t = o.topCandidates(1).first?.string else { return nil }
+        return (t.trimmingCharacters(in: .whitespaces), o.boundingBox)
+    }
+    var card = DouyinCard()
+    var nameBox: CGRect? = nil, idBox: CGRect? = nil
+    for (t, b) in obs {
+        if card.id == nil, let r = t.range(of: #"抖音号\s*[:：]?\s*"#, options: .regularExpression) {
+            let v = t[r.upperBound...].trimmingCharacters(in: .whitespaces)
+            if !v.isEmpty { card.id = v; idBox = b }
+        } else if card.name == nil, t.hasPrefix("@") || t.hasPrefix("＠") {
+            card.name = String(t.dropFirst()).trimmingCharacters(in: .whitespaces); nameBox = b
+        }
+    }
+    guard card.id != nil || card.name != nil else { return nil }
+    // 简介：抖音号正下方最近的一行
+    if let ib = idBox {
+        let below = obs.filter { $0.1.midY < ib.minY && ib.minY - $0.1.maxY < ib.height * 2.5
+                                 && !$0.0.contains("保存") && !$0.0.contains("扫一扫") }
+        if let b = below.max(by: { $0.1.midY < $1.1.midY }) {
+            card.bio = b.0.trimmingCharacters(in: CharacterSet(charactersIn: "⭐️★☆ "))
+        }
+    }
+    // 头像：在名字上方、圆形码正中间。用“名字到抖音号”的行距做尺子，截图大小不同也能对上。
+    if let nb = nameBox {
+        let W = CGFloat(cg.width), H = CGFloat(cg.height)
+        let gap = (idBox.map { (nb.midY - $0.midY) * H }) ?? (W * 0.078)
+        let side = gap * 3.2
+        let cx = nb.midX * W, cy = (1 - nb.midY) * H - gap * 5.1
+        let rect = CGRect(x: cx - side / 2, y: cy - side / 2, width: side, height: side).integral
+        if gap > 0, rect.minX >= 0, rect.minY >= 0, rect.maxX <= W, rect.maxY <= H, let crop = cg.cropping(to: rect) {
+            card.avatar = UIImage(cgImage: crop).jpegData(compressionQuality: 0.85)
+        }
+    }
+    return card
 }
 
 // 链接就直接打开；填的是抖音号或名字就拉起抖音搜索
@@ -212,6 +272,7 @@ struct CreatorEditor: View {
     @State private var raw = ""
     @State private var qrPick: PhotosPickerItem? = nil
     @State private var qrMsg = ""
+    @State private var avatar: Data? = nil
 
     var body: some View {
         NavigationStack {
@@ -223,12 +284,17 @@ struct CreatorEditor: View {
                         Label("从剪贴板粘贴", systemImage: "doc.on.clipboard")
                     }
                     PhotosPicker(selection: $qrPick, matching: .images) {
-                        Label("识别主页二维码截图", systemImage: "qrcode.viewfinder")
+                        Label("识别主页二维码卡片截图", systemImage: "qrcode.viewfinder")
                     }
                     if !qrMsg.isEmpty { Text(qrMsg).font(.footnote).foregroundStyle(.secondary) }
                 } footer: { Text("会自动取出里面的链接。有链接点“抖音看”直接进主页；只填抖音号会打开抖音搜索。主页二维码：博主主页右上角“…”里找二维码，截图后点上面识别。") }
                 Section {
-                    TextField("名字", text: $name)
+                    HStack(spacing: 12) {
+                        if let a = avatar, let ui = UIImage(data: a) {
+                            Image(uiImage: ui).resizable().scaledToFill().frame(width: 44, height: 44).clipShape(Circle())
+                        }
+                        TextField("名字", text: $name)
+                    }
                     TextField("备注，比如：练背、备赛", text: $note)
                     TextField("主页链接（直达主页）或 抖音号（打开搜索）", text: $link).textInputAutocapitalization(.never).autocorrectionDisabled()
                         .font(.footnote)
@@ -242,9 +308,9 @@ struct CreatorEditor: View {
                     Button("保存") {
                         let n = name.trimmingCharacters(in: .whitespaces)
                         if var old = c, let i = cs.list.firstIndex(where: { $0.id == old.id }) {
-                            old.name = n; old.note = note; old.link = link; cs.list[i] = old
+                            old.name = n; old.note = note; old.link = link; if let avatar { old.avatar = avatar }; cs.list[i] = old
                         } else {
-                            cs.list.append(Creator(name: n, note: note, link: link))
+                            var new = Creator(name: n, note: note, link: link); new.avatar = avatar; cs.list.append(new)
                         }
                         Haptic.success(); dismiss()
                     }
@@ -257,7 +323,14 @@ struct CreatorEditor: View {
                     guard let d = try? await p?.loadTransferable(type: Data.self), let cg = UIImage(data: d)?.cgImage else { return }
                     let found = await Task.detached { readQR(cg) }.value
                     if let u = found { link = u; qrMsg = "识别成功，点“抖音看”会直接进主页" }
-                    else { qrMsg = "没识别到二维码，换一张清楚点的截图试试" }
+                    else if let card = await Task.detached(operation: { readDouyinCard(cg) }).value {
+                        if let n = card.name, name.isEmpty || c == nil { name = n }
+                        if let i = card.id { link = i }
+                        if let b = card.bio, note.isEmpty { note = b }
+                        if let a = card.avatar { avatar = a }
+                        qrMsg = "识别到：\(card.name ?? "") 抖音号 \(card.id ?? "没读到")" + (card.avatar != nil ? "，头像已取" : "")
+                    }
+                    else { qrMsg = "没识别到，换一张清楚点的截图试试" }
                     qrPick = nil
                 }
             }
