@@ -94,6 +94,16 @@ struct PrepView: View {
                     .foregroundStyle(.primary)
                 } footer: { Text("备赛计划是单独的一套训练，不会改动周期计划和首页选的部位。") }
 
+                Section {
+                    NavigationLink { PhysiqueView() } label: {
+                        HStack {
+                            Label("体态照片对比", systemImage: "figure.arms.open")
+                            Spacer()
+                            Text("\(PhotoStore.shared.list.count) 张").font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
                 if ps.plan.days.isEmpty {
                     Section("从模板开始") {
                         ForEach(Self.presets, id: \.0) { name, days in
