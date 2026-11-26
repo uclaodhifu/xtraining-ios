@@ -163,31 +163,48 @@ struct HandPad: View {
     }
 
     // 笔画画成白底黑字的图，交给 iPhone 自带的文字识别（不联网）
+    // 手写的短数字系统有时认不出，所以：放在一张宽一点的白纸中间、笔画加粗，认不出再换几种设置多试几次
     static func read(_ drawing: PKDrawing, text: Bool) -> String {
-        let d = PKDrawing(strokes: drawing.strokes.map { var s = $0; s.ink = PKInk(.pen, color: .black); return s })
-        let rect = d.bounds.insetBy(dx: -24, dy: -24)
-        guard !rect.isEmpty else { return "" }
-        let ink = lightTrait { d.image(from: rect, scale: 3) }
-        let img = UIGraphicsImageRenderer(size: ink.size).image { ctx in
-            UIColor.white.setFill(); ctx.fill(CGRect(origin: .zero, size: ink.size)); ink.draw(at: .zero)
+        let d = PKDrawing(strokes: drawing.strokes.map { var s = $0; s.ink = PKInk(.marker, color: .black); return s })
+        let b = d.bounds
+        guard !b.isEmpty else { return "" }
+        let ink = lightTrait { d.image(from: b.insetBy(dx: -8, dy: -8), scale: 2) }
+        // 统一缩放到字高约 120 像素，左右留足白边
+        let k = 120 / max(ink.size.height, 1)
+        let w = ink.size.width * k, h = ink.size.height * k
+        let page = CGSize(width: max(w + 160, h * 4), height: h + 120)
+        let fmt = UIGraphicsImageRendererFormat(); fmt.scale = 1
+        let img = UIGraphicsImageRenderer(size: page, format: fmt).image { ctx in
+            UIColor.white.setFill(); ctx.fill(CGRect(origin: .zero, size: page))
+            ink.draw(in: CGRect(x: (page.width - w) / 2, y: (page.height - h) / 2, width: w, height: h))
         }
         guard let cg = img.cgImage else { return "" }
-        let req = VNRecognizeTextRequest()
-        req.recognitionLevel = .accurate
-        req.usesLanguageCorrection = text
-        req.recognitionLanguages = text ? ["zh-Hans", "en-US"] : ["en-US"]
-        try? VNImageRequestHandler(cgImage: cg).perform([req])
-        let obs = (req.results ?? []).sorted { $0.boundingBox.minX < $1.boundingBox.minX }
-        if text {
-            return obs.compactMap { $0.topCandidates(1).first?.string }.joined().trimmingCharacters(in: .whitespaces)
+        let tries: [([String], Bool, VNRequestTextRecognitionLevel)] = text
+            ? [(["zh-Hans", "en-US"], true, .accurate), (["zh-Hans"], false, .accurate)]
+            : [(["en-US"], false, .accurate), (["zh-Hans", "en-US"], false, .accurate), (["en-US"], true, .accurate), (["en-US"], false, .fast)]
+        for (langs, correct, level) in tries {
+            let req = VNRecognizeTextRequest()
+            req.recognitionLevel = level
+            req.usesLanguageCorrection = correct
+            req.recognitionLanguages = langs
+            req.minimumTextHeight = 0.05
+            try? VNImageRequestHandler(cgImage: cg, options: [:]).perform([req])
+            let obs = (req.results ?? []).sorted { $0.boundingBox.minX < $1.boundingBox.minX }
+            if text {
+                let r = obs.compactMap { $0.topCandidates(1).first?.string }.joined().trimmingCharacters(in: .whitespaces)
+                if !r.isEmpty { return r }
+                continue
+            }
+            let raw = obs.compactMap { o in o.topCandidates(5).first { fix($0.string).contains(where: \.isNumber) } ?? o.topCandidates(1).first }
+                .map { fix($0.string) }.joined()
+            var seenDot = false
+            let r = String(raw.filter { c in
+                if c == "." { if seenDot { return false }; seenDot = true; return true }
+                return c.isNumber
+            })
+            if !r.isEmpty { return r }
         }
-        let raw = obs.compactMap { o in o.topCandidates(3).first { fix($0.string).contains(where: \.isNumber) } ?? o.topCandidates(1).first }
-            .map { fix($0.string) }.joined()
-        var seenDot = false
-        return String(raw.filter { c in
-            if c == "." { if seenDot { return false }; seenDot = true; return true }
-            return c.isNumber
-        })
+        return ""
     }
     private static func fix(_ s: String) -> String {
         let map: [Character: Character] = ["O": "0", "o": "0", "D": "0", "Q": "0", "l": "1", "I": "1", "|": "1", "i": "1", "!": "1",
