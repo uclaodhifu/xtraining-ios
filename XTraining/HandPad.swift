@@ -31,11 +31,26 @@ enum InkStore {
     private static let cache = NSCache<NSString, UIImage>()
     static func save(_ d: PKDrawing, id: String) {
         try? d.dataRepresentation().write(to: dir.appendingPathComponent(id))
-        cache.removeAllObjects()
+        known[id] = true
+        cache.removeObject(forKey: "\(id)-true" as NSString); cache.removeObject(forKey: "\(id)-false" as NSString)   // 只清这一格，别的笔迹图不用重画
     }
+    // 有没有这张笔迹（记在内存里，滑动表格时不用一遍遍查文件，免得掉帧）
+    private static var known: [String: Bool] = [:]
     static func has(_ id: String?) -> String? {
-        guard let id, FileManager.default.fileExists(atPath: dir.appendingPathComponent(id).path) else { return nil }
-        return id
+        guard let id else { return nil }
+        if let k = known[id] { return k ? id : nil }
+        let ok = FileManager.default.fileExists(atPath: dir.appendingPathComponent(id).path)
+        known[id] = ok
+        return ok ? id : nil
+    }
+    // 备份用：原始笔迹数据读出来 / 写回去
+    static func raw(_ id: String) -> Data? { try? Data(contentsOf: dir.appendingPathComponent(id)) }
+    static func restore(_ id: String, _ data: Data) {
+        guard !id.isEmpty, !id.contains("/"), (try? PKDrawing(data: data)) != nil else { return }
+        let url = dir.appendingPathComponent(id)
+        if FileManager.default.fileExists(atPath: url.path) { return }
+        try? data.write(to: url)
+        known[id] = true
     }
     static func load(_ id: String) -> PKDrawing? {
         guard let data = try? Data(contentsOf: dir.appendingPathComponent(id)) else { return nil }

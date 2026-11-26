@@ -218,6 +218,7 @@ struct Cycle: Codable, Hashable {
 struct Backup: Codable {
     var entries: [Workout]?
     var weights: [WeightRow]?
+    var ink: [String: String]? = nil   // 手写笔迹：编号 → 笔迹数据（base64），导回来照样显示原样笔迹
 }
 
 // 挂片器械的设置（按动作名存）：几根挂杆、每片多重、器械本身多重

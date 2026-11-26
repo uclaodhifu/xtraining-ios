@@ -8,6 +8,8 @@ struct EntryView: View {
     @State var workout: Workout
     @State private var newName = ""
     @State private var confirmDelete = false
+    @State private var original: Workout          // 打开时的样子，用来判断改没改
+    @State private var closed = false            // 已经保存或删除了
     @State private var showMore = false
     @State private var plateFor: String? = nil
     @State private var infoFor: LibEx? = nil
@@ -21,6 +23,7 @@ struct EntryView: View {
 
     init(workout: Workout) {
         _workout = State(initialValue: workout)
+        _original = State(initialValue: workout)
         _restored = State(initialValue: !workout.exercises.isEmpty && EntryDraft.load()?.id == workout.id)
     }
 
@@ -90,10 +93,11 @@ struct EntryView: View {
                 guard isNew else { return }
                 if w.exercises.isEmpty && w.note.isEmpty { EntryDraft.clear() } else { EntryDraft.save(w) }
             }
+            .onDisappear { autoSave() }
             .navigationTitle(isNew ? "开始训练" : "修改训练")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button(isNew ? "取消" : "关闭") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("保存") { save() }.bold()
                         .disabled(workout.exercises.isEmpty && workout.parts.isEmpty)
@@ -105,7 +109,7 @@ struct EntryView: View {
                 PlateSettings(name: m.id).presentationDetents([.medium])
             }
             .confirmationDialog("确定删除？", isPresented: $confirmDelete, titleVisibility: .visible) {
-                Button("删除", role: .destructive) { store.delete(workout); dismiss() }
+                Button("删除", role: .destructive) { closed = true; store.delete(workout); dismiss() }
             }
         }
     }
@@ -640,6 +644,17 @@ struct EntryView: View {
     }
 
     private func save() {
+        commit()
+        Haptic.success()
+        dismiss()
+    }
+    // 修改以前的训练：关掉（下滑、点关闭）也自动保存，手写改的数字和笔迹不会丢
+    private func autoSave() {
+        guard !closed, !isNew, workout != original else { return }
+        commit()
+    }
+    private func commit() {
+        closed = true
         for i in workout.exercises.indices {
             workout.exercises[i].name = workout.exercises[i].name.trimmingCharacters(in: .whitespaces)
         }
@@ -649,8 +664,6 @@ struct EntryView: View {
         workout.parts = Parts.all.filter { workout.parts.contains($0) }
         store.upsert(workout)
         EntryDraft.clear()
-        Haptic.success()
-        dismiss()
     }
 
     private func add(_ name: String, sets: Int = 1) {

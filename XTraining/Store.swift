@@ -3,7 +3,8 @@ import SwiftUI
 // 所有数据存在本机（UserDefaults），改了就自动保存
 @MainActor
 final class Store: ObservableObject {
-    @Published var workouts: [Workout] = [] { didSet { save(workouts, "workouts") } }
+    @Published var workouts: [Workout] = [] { didSet { rev &+= 1; save(workouts, "workouts") } }
+    private(set) var rev = 0     // 训练记录改一次加 1，表格用它强制刷新
     @Published var weights: [WeightRow] = [] { didSet { save(weights, "weights") } }
     @Published var food: [String: [String: Meal]] = [:] { didSet { save(food, "food") } }
     @Published var restDays: [String] = [] { didSet { save(restDays, "restDays") } }
@@ -137,6 +138,10 @@ final class Store: ObservableObject {
             weightsRaw = obj["weights"] as? [Any] ?? []
         }
         guard !entries.isEmpty || !weightsRaw.isEmpty else { throw ImportError.empty }
+        // 备份里带的手写笔迹先放回去（本机已有的不覆盖）
+        if let obj = json as? [String: Any], let ink = obj["ink"] as? [String: String] {
+            for (id, b64) in ink { if let d = Data(base64Encoded: b64) { InkStore.restore(id, d) } }
+        }
         let dec = JSONDecoder()
         func one<T: Decodable>(_ x: Any, _ t: T.Type) -> T? {
             guard JSONSerialization.isValidJSONObject(x), let d = try? JSONSerialization.data(withJSONObject: x) else { return nil }
@@ -161,7 +166,14 @@ final class Store: ObservableObject {
     }
     func exportBackup() -> Data {
         let enc = JSONEncoder(); enc.outputFormatting = [.prettyPrinted, .sortedKeys]
-        return (try? enc.encode(Backup(entries: workouts, weights: weights))) ?? Data()
+        // 用到的手写笔迹一起打包进去
+        var ink: [String: String] = [:]
+        for w in workouts { for x in w.exercises {
+            for id in [x.inkName] + x.sets.flatMap({ [$0.inkW, $0.inkR] }) {
+                if let id, ink[id] == nil, let d = InkStore.raw(id) { ink[id] = d.base64EncodedString() }
+            }
+        } }
+        return (try? enc.encode(Backup(entries: workouts, weights: weights, ink: ink.isEmpty ? nil : ink))) ?? Data()
     }
 }
 

@@ -224,7 +224,7 @@ struct HomeLog: View {
             }
             .pickerStyle(.segmented)
             TrainingLogTable(part: p, onOpen: onOpen, onExpand: { Haptic.tap(); full = true })
-                .id(p)
+                .id("\(p)-\(store.rev)")   // 改完训练回来马上刷新（不用切部位）
                 .transition(.opacity)
         }
         .card()
@@ -257,7 +257,7 @@ struct LogFullScreen: View {
                 }
                 .pickerStyle(.segmented)
                 MonthLogTable(part: part, month: month) { w in editing = w }
-                    .id(part + month)
+                    .id("\(part)\(month)-\(store.rev)")
                     .frame(maxHeight: .infinity, alignment: .top)
                     .card()
             }
