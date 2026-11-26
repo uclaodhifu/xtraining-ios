@@ -296,9 +296,9 @@ struct LiftChart: View {
         }
         .padding(10)
         .frame(maxWidth: 200, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.regularMaterial))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color.primary.opacity(0.1)))
-        .shadow(color: .black.opacity(0.15), radius: 8, y: 3)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color(.systemBackground)))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color(hex: 0x0a84ff).opacity(0.5), lineWidth: 1.5))
+        .shadow(color: .black.opacity(0.25), radius: 12, y: 4)
     }
 
     var body: some View {
@@ -386,6 +386,7 @@ struct LiftChart: View {
                     GeometryReader { g in
                         Rectangle().fill(.clear).contentShape(Rectangle())
                             .onTapGesture { loc in
+                                if press != nil { withAnimation(.easeOut(duration: 0.15)) { press = nil }; return }
                                 guard let f = proxy.plotFrame else { return }
                                 let x = loc.x - g[f].origin.x
                                 guard let s: String = proxy.value(atX: x), let k = Int(s) else { return }
@@ -405,7 +406,7 @@ struct LiftChart: View {
                                         let n: Int? = (i >= 0 && i < shown.count) ? i : nil
                                         if n != press { press = n; if n != nil { Haptic.tap(.medium) } }
                                     }
-                                    .onEnded { _ in withAnimation(.easeOut(duration: 0.15)) { press = nil } }
+                                    // 松手后弹框留着；点一下任意地方才收起
                             )
                     }
                 }
