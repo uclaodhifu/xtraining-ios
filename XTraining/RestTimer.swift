@@ -93,6 +93,10 @@ struct RestBar: View {
     @ObservedObject private var t = RestTimer.shared
     var exercise: String = ""
     private let presets = [60, 90, 120, 180]
+    @Namespace private var ns
+    @State private var tapped: Int? = nil       // 刚点的那个时长（放大弹一下）
+    @State private var wave: CGFloat = -1       // 开始计时时扫过卡片的一道光
+    @State private var ring = false             // 计时圈外扩散的波纹
 
     private static let green = [Color(hex: 0x12b886), Color(hex: 0x0ca678)]
     private static let idle = green
@@ -115,12 +119,16 @@ struct RestBar: View {
                             ProgressView(timerInterval: s...e, countsDown: true) { EmptyView() } currentValueLabel: { EmptyView() }
                                 .progressViewStyle(.circular).tint(.white).scaleEffect(1.3)
                             Image(systemName: "timer").font(.caption.bold())
+                                .symbolEffect(.bounce, value: ring)
+                            Circle().stroke(.white.opacity(ring ? 0 : 0.8), lineWidth: 3)
+                                .scaleEffect(ring ? 2.4 : 1)
                         }
                         .frame(width: 40, height: 40)
                         VStack(alignment: .leading, spacing: 0) {
                             Text(urgent ? "准备下一组" : "休息中").font(.caption2.bold()).opacity(0.85)
                             Text(timerInterval: s...e, countsDown: true)
                                 .font(.system(size: 32, weight: .heavy, design: .rounded)).monospacedDigit()
+                                .matchedGeometryEffect(id: "time", in: ns)
                                 .scaleEffect(urgent && Int(left) % 2 == 0 ? 1.08 : 1, anchor: .leading)
                                 .animation(.spring(duration: 0.3), value: Int(left))
                         }
@@ -135,6 +143,18 @@ struct RestBar: View {
                     .foregroundStyle(.white)
                     .padding(.horizontal, 14).padding(.vertical, 10)
                     .background(card(Self.colors(left, total)))
+                    .overlay {
+                        // 一道光从左扫到右
+                        GeometryReader { g in
+                            LinearGradient(colors: [.clear, .white.opacity(0.55), .clear], startPoint: .leading, endPoint: .trailing)
+                                .frame(width: g.size.width * 0.35)
+                                .rotationEffect(.degrees(18))
+                                .offset(x: wave * g.size.width * 1.2)
+                        }
+                        .allowsHitTesting(false)
+                        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                        .blendMode(.plusLighter)
+                    }
                     .animation(.easeInOut(duration: 0.8), value: left <= 10)
                 }
             } else {
@@ -142,11 +162,14 @@ struct RestBar: View {
                     Label("休息", systemImage: "timer").font(.subheadline.bold())
                     Spacer()
                     ForEach(presets, id: \.self) { p in
-                        Button { t.begin(p, exercise: exercise) } label: {
+                        Button { start(p) } label: {
                             Text(p % 60 == 0 ? "\(p / 60)分" : "\(p / 60):\(String(format: "%02d", p % 60))")
                                 .font(.subheadline.bold()).padding(.horizontal, 12).padding(.vertical, 8)
                                 .foregroundStyle(p == t.preset ? Color(hex: 0x0ca678) : .white)
                                 .background(p == t.preset ? Color.white : Color.white.opacity(0.22), in: Capsule())
+                                .matchedGeometryEffect(id: p == t.preset ? "time" : "chip\(p)", in: ns)
+                                .scaleEffect(tapped == p ? 1.3 : 1)
+                                .rotationEffect(.degrees(tapped == p ? -6 : 0))
                         }
                         .buttonStyle(PressScale())
                     }
@@ -159,6 +182,20 @@ struct RestBar: View {
         .shadow(color: .black.opacity(0.18), radius: 12, y: 5)
         .padding(.horizontal, 14).padding(.bottom, 6)
         .animation(.snappy, value: t.running)
+    }
+
+    private func start(_ p: Int) {
+        Haptic.tap(.medium)
+        withAnimation(.spring(response: 0.25, dampingFraction: 0.45)) { tapped = p }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            wave = -0.5; ring = false
+            withAnimation(.spring(response: 0.55, dampingFraction: 0.75)) {
+                t.begin(p, exercise: exercise)
+                tapped = nil
+            }
+            withAnimation(.easeOut(duration: 0.9).delay(0.25)) { wave = 1.1 }
+            withAnimation(.easeOut(duration: 1.1).delay(0.3)) { ring = true }
+        }
     }
 
     private func card(_ c: [Color]) -> some View {
