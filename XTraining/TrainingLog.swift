@@ -224,6 +224,7 @@ struct LogFullScreen: View {
                 }
                 .padding(.horizontal, 16).padding(.bottom, 20)
             }
+            .coordinateSpace(name: "logv")
             .background(Color(.systemGroupedBackground))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

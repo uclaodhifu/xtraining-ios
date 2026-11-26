@@ -7,6 +7,8 @@ struct MonthLogTable: View {
     let part: String
     let month: String            // "2026-11"
     var onOpen: (Workout) -> Void = { _ in }
+    @State private var hx: CGFloat = 0     // 日期列左右滑了多少
+    @State private var pinY: CGFloat = 0   // 表格顶部被滑出屏幕多少（日期行往下补回来）
 
     enum Col: Identifiable {
         case day(String, Workout?)
@@ -60,33 +62,67 @@ struct MonthLogTable: View {
                 Text("这个月还没练\(part)").font(.subheadline).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity).padding(.vertical, 30)
             }
-            HStack(alignment: .top, spacing: 0) {
-                VStack(alignment: .leading, spacing: 0) {
-                    Text("动作").font(.caption.bold()).foregroundStyle(.secondary)
-                        .frame(width: nameW, height: headH, alignment: .leading)
-                    ForEach(rows.indices, id: \.self) { i in
-                        HStack(alignment: .top, spacing: 4) {
-                            Text("\(i + 1)").font(.caption2.bold()).foregroundStyle(Parts.color(part))
-                            Text(rows[i]).font(.caption.bold()).lineLimit(2).minimumScaleFactor(0.7)
-                        }
-                        .padding(.top, 6)
-                        .frame(width: nameW, height: heights[i], alignment: .topLeading)
-                        .overlay(alignment: .top) { Rectangle().fill(line).frame(height: 1) }
-                    }
-                }
-                ScrollViewReader { proxy in
-                    ScrollView(.horizontal, showsIndicators: true) {
-                        HStack(alignment: .top, spacing: 0) {
-                            ForEach(cols) { c in
-                                column(c, rows: rows, heights: heights, hist: hist, lineH: lineH, headH: headH, line: line)
-                                    .id(c.id)
+            // 冻结表头：左边动作列左右滑时不动；顶上日期行上下滑时一直停在顶上，左右跟着日期走
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(alignment: .top, spacing: 0) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Color.clear.frame(width: nameW, height: headH)
+                        ForEach(rows.indices, id: \.self) { i in
+                            HStack(alignment: .top, spacing: 4) {
+                                Text("\(i + 1)").font(.caption2.bold()).foregroundStyle(Parts.color(part))
+                                Text(rows[i]).font(.caption.bold()).lineLimit(2).minimumScaleFactor(0.7)
                             }
+                            .padding(.top, 6)
+                            .frame(width: nameW, height: heights[i], alignment: .topLeading)
+                            .overlay(alignment: .top) { Rectangle().fill(line).frame(height: 1) }
                         }
                     }
-                    .onAppear {
-                        if month == String(Day.today.prefix(7)) { proxy.scrollTo(Day.today, anchor: .trailing) }
+                    .background(Color(.secondarySystemGroupedBackground))
+                    .overlay(alignment: .trailing) { Rectangle().fill(Color.primary.opacity(0.18)).frame(width: 1) }
+                    .shadow(color: .black.opacity(hx < -1 ? 0.12 : 0), radius: 4, x: 3)
+                    .zIndex(1)
+                    ScrollViewReader { proxy in
+                        ScrollView(.horizontal, showsIndicators: true) {
+                            HStack(alignment: .top, spacing: 0) {
+                                ForEach(cols) { c in
+                                    column(c, rows: rows, heights: heights, hist: hist, lineH: lineH, headH: headH, line: line)
+                                        .id(c.id)
+                                }
+                            }
+                            .background(GeometryReader { g in
+                                Color.clear.preference(key: MLHOffset.self, value: g.frame(in: .named("mlh")).minX)
+                            })
+                        }
+                        .coordinateSpace(name: "mlh")
+                        .onPreferenceChange(MLHOffset.self) { hx = $0 }
+                        .onAppear {
+                            if month == String(Day.today.prefix(7)) { proxy.scrollTo(Day.today, anchor: .trailing) }
+                        }
                     }
                 }
+                .overlay(alignment: .topLeading) {
+                    // 日期行：盖在最上面，上下滑时钉住
+                    HStack(spacing: 0) {
+                        Text("动作").font(.caption.bold()).foregroundStyle(.secondary)
+                            .frame(width: nameW, height: headH, alignment: .leading)
+                            .background(Color(.secondarySystemGroupedBackground))
+                            .zIndex(1)
+                        HStack(spacing: 0) {
+                            ForEach(cols) { c in header(c, headH: headH, line: line) }
+                        }
+                        .offset(x: hx)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .clipped()
+                    }
+                    .background(Color(.secondarySystemGroupedBackground))
+                    .overlay(alignment: .bottom) { Rectangle().fill(Color.primary.opacity(0.18)).frame(height: 1) }
+                    .shadow(color: .black.opacity(pinY > 1 ? 0.12 : 0), radius: 4, y: 3)
+                    .offset(y: pinY)
+                }
+                .background(GeometryReader { g in
+                    Color.clear.preference(key: MLVOffset.self, value: g.frame(in: .named("logv")).minY)
+                })
+                .onPreferenceChange(MLVOffset.self) { v in pinY = min(max(0, -v), heights.reduce(0, +)) }
             }
             HStack(spacing: 12) {
                 Label("进步", systemImage: "arrow.up").foregroundStyle(.green)
@@ -95,6 +131,29 @@ struct MonthLogTable: View {
                 Text("灰色列 = 连续多天没练").foregroundStyle(.secondary)
             }
             .font(.caption2)
+        }
+    }
+
+    @ViewBuilder
+    private func header(_ c: Col, headH: CGFloat, line: Color) -> some View {
+        switch c {
+        case .gap(let a, let b):
+            VStack(spacing: 0) {
+                Text("\(dayNum(a))–\(dayNum(b))").font(.caption2.bold()).monospacedDigit()
+                Text("休\(Day.between(a, b) + 1)天").font(.system(size: 9)).foregroundStyle(.secondary)
+            }
+            .foregroundStyle(.secondary)
+            .frame(width: 46, height: headH)
+            .overlay(alignment: .leading) { Rectangle().fill(line).frame(width: 1) }
+        case .day(let d, let w):
+            VStack(spacing: 0) {
+                Text("\(dayNum(d))").font(.caption.bold()).monospacedDigit()
+                Text(weekdayCN(d)).font(.system(size: 9)).foregroundStyle(.secondary)
+            }
+            .foregroundStyle(d == Day.today ? Parts.color(part) : (w == nil ? Color.secondary : Color.primary))
+            .frame(width: w == nil ? 34 : 70, height: headH)
+            .background(w != nil ? Parts.color(part).opacity(0.12) : .clear)
+            .overlay(alignment: .leading) { Rectangle().fill(line).frame(width: 1) }
         }
     }
 
@@ -164,4 +223,13 @@ struct MonthLogTable: View {
     }
 
     private func dayNum(_ d: String) -> Int { Int(d.suffix(2)) ?? 0 }
+}
+
+private struct MLHOffset: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+}
+private struct MLVOffset: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }
