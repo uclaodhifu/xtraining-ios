@@ -96,8 +96,10 @@ final class CloudSync: ObservableObject {
         var byID = Dictionary(s.workouts.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         // 同一次训练两边都有：用后保存的那份（一样新就留本机的，免得刚写的笔迹被旧的盖掉）
         for w in r.workouts { if let mine = byID[w.id], mine.editedAt >= w.editedAt { continue }; byID[w.id] = w }
-        let merged = byID.values.filter { !gone.contains($0.id) }
-        if Set(merged.map(\.self)) != Set(s.workouts) { s.workouts = merged.sorted { $0.date != $1.date ? $0.date < $1.date : $0.createdAt < $1.createdAt } }
+        let merged = byID.values.filter { !gone.contains($0.id) }.sorted { $0.date != $1.date ? $0.date < $1.date : $0.createdAt < $1.createdAt }
+        // 按内容比（每次读出来的内部编号都不一样，不能直接比），内容一样就不动，免得整页重画
+        let enc = JSONEncoder(); enc.outputFormatting = .sortedKeys
+        if (try? enc.encode(merged)) != (try? enc.encode(s.workouts)) { s.workouts = merged }
         if r.weights != s.weights { s.weights = r.weights }
         if r.food != s.food { s.food = r.food }
         if r.restDays != s.restDays { s.restDays = r.restDays }
