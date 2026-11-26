@@ -212,19 +212,18 @@ struct LogFullScreen: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView(.vertical) {
-                VStack(spacing: 12) {
-                    Picker("部位", selection: $part.animation(.snappy)) {
-                        ForEach(Parts.strength, id: \.self) { Text($0).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
-                    MonthLogTable(part: part, month: month) { w in editing = w }
-                        .id(part + month)
-                        .card()
+            // 表格自己上下滚，日期行固定在表格顶上
+            VStack(spacing: 12) {
+                Picker("部位", selection: $part.animation(.snappy)) {
+                    ForEach(Parts.strength, id: \.self) { Text($0).tag($0) }
                 }
-                .padding(.horizontal, 16).padding(.bottom, 20)
+                .pickerStyle(.segmented)
+                MonthLogTable(part: part, month: month) { w in editing = w }
+                    .id(part + month)
+                    .frame(maxHeight: .infinity, alignment: .top)
+                    .card()
             }
-            .coordinateSpace(name: "logv")
+            .padding(.horizontal, 16).padding(.bottom, 8)
             .background(Color(.systemGroupedBackground))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

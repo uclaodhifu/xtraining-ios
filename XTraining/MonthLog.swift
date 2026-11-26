@@ -8,7 +8,6 @@ struct MonthLogTable: View {
     let month: String            // "2026-11"
     var onOpen: (Workout) -> Void = { _ in }
     @State private var hx: CGFloat = 0     // 日期列左右滑了多少
-    @State private var pinY: CGFloat = 0   // 表格顶部被滑出屏幕多少（日期行往下补回来）
 
     enum Col: Identifiable {
         case day(String, Workout?)
@@ -62,11 +61,24 @@ struct MonthLogTable: View {
                 Text("这个月还没练\(part)").font(.subheadline).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity).padding(.vertical, 30)
             }
-            // 冻结表头：左边动作列左右滑时不动；顶上日期行上下滑时一直停在顶上，左右跟着日期走
-            VStack(alignment: .leading, spacing: 0) {
+            // 冻结表头：日期行放在上下滚动区外面，永远停在顶上；左右滑时跟着日期一起走
+            HStack(spacing: 0) {
+                Text("动作").font(.caption.bold()).foregroundStyle(.secondary)
+                    .frame(width: nameW, height: headH, alignment: .leading)
+                    .background(Color(.secondarySystemGroupedBackground))
+                    .zIndex(1)
+                HStack(spacing: 0) {
+                    ForEach(cols) { c in header(c, headH: headH, line: line) }
+                }
+                .offset(x: hx)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .clipped()
+            }
+            .overlay(alignment: .bottom) { Rectangle().fill(Color.primary.opacity(0.18)).frame(height: 1) }
+            ScrollView(.vertical, showsIndicators: true) {
                 HStack(alignment: .top, spacing: 0) {
+                    // 动作列：左右滑时不动
                     VStack(alignment: .leading, spacing: 0) {
-                        Color.clear.frame(width: nameW, height: headH)
                         ForEach(rows.indices, id: \.self) { i in
                             HStack(alignment: .top, spacing: 4) {
                                 Text("\(i + 1)").font(.caption2.bold()).foregroundStyle(Parts.color(part))
@@ -95,34 +107,12 @@ struct MonthLogTable: View {
                         }
                         .coordinateSpace(name: "mlh")
                         .onPreferenceChange(MLHOffset.self) { hx = $0 }
+                        .modifier(HScrollWatch(hx: $hx))
                         .onAppear {
                             if month == String(Day.today.prefix(7)) { proxy.scrollTo(Day.today, anchor: .trailing) }
                         }
                     }
                 }
-                .overlay(alignment: .topLeading) {
-                    // 日期行：盖在最上面，上下滑时钉住
-                    HStack(spacing: 0) {
-                        Text("动作").font(.caption.bold()).foregroundStyle(.secondary)
-                            .frame(width: nameW, height: headH, alignment: .leading)
-                            .background(Color(.secondarySystemGroupedBackground))
-                            .zIndex(1)
-                        HStack(spacing: 0) {
-                            ForEach(cols) { c in header(c, headH: headH, line: line) }
-                        }
-                        .offset(x: hx)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .clipped()
-                    }
-                    .background(Color(.secondarySystemGroupedBackground))
-                    .overlay(alignment: .bottom) { Rectangle().fill(Color.primary.opacity(0.18)).frame(height: 1) }
-                    .shadow(color: .black.opacity(pinY > 1 ? 0.12 : 0), radius: 4, y: 3)
-                    .offset(y: pinY)
-                }
-                .background(GeometryReader { g in
-                    Color.clear.preference(key: MLVOffset.self, value: g.frame(in: .named("logv")).minY)
-                })
-                .onPreferenceChange(MLVOffset.self) { v in pinY = min(max(0, -v), heights.reduce(0, +)) }
             }
             HStack(spacing: 12) {
                 Label("进步", systemImage: "arrow.up").foregroundStyle(.green)
@@ -161,13 +151,7 @@ struct MonthLogTable: View {
     private func column(_ c: Col, rows: [String], heights: [CGFloat], hist: [Workout], lineH: CGFloat, headH: CGFloat, line: Color) -> some View {
         switch c {
         case .gap(let a, let b):
-            let n = Day.between(a, b) + 1
             VStack(spacing: 0) {
-                VStack(spacing: 0) {
-                    Text("\(dayNum(a))–\(dayNum(b))").font(.caption2.bold()).monospacedDigit()
-                    Text("休\(n)天").font(.system(size: 9)).foregroundStyle(.secondary)
-                }
-                .frame(width: 46, height: headH)
                 Rectangle().fill(Color.primary.opacity(0.05)).frame(width: 46, height: heights.reduce(0, +))
             }
             .foregroundStyle(.secondary)
@@ -175,13 +159,6 @@ struct MonthLogTable: View {
         case .day(let d, let w):
             let wide: CGFloat = w == nil ? 34 : 70
             VStack(spacing: 0) {
-                VStack(spacing: 0) {
-                    Text("\(dayNum(d))").font(.caption.bold()).monospacedDigit()
-                    Text(weekdayCN(d)).font(.system(size: 9)).foregroundStyle(.secondary)
-                }
-                .foregroundStyle(d == Day.today ? Parts.color(part) : (w == nil ? Color.secondary : Color.primary))
-                .frame(width: wide, height: headH)
-                .background(w != nil ? Parts.color(part).opacity(0.12) : .clear)
                 ForEach(rows.indices, id: \.self) { i in
                     Group {
                         if let w { cell(rows[i], w, hist, lineH) } else { Color.clear }
@@ -229,7 +206,12 @@ private struct MLHOffset: PreferenceKey {
     static var defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }
-private struct MLVOffset: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+// iOS 18 起直接读横向滚动位置（比 GeometryReader 稳）
+private struct HScrollWatch: ViewModifier {
+    @Binding var hx: CGFloat
+    func body(content: Content) -> some View {
+        if #available(iOS 18.0, *) {
+            content.onScrollGeometryChange(for: CGFloat.self) { -$0.contentOffset.x - $0.contentInsets.leading } action: { _, v in hx = v }
+        } else { content }
+    }
 }
