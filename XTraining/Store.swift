@@ -117,7 +117,7 @@ final class Store: ObservableObject {
     // MARK: 追赛
     func toggleFollow(_ e: Race) {
         if follow.contains(e.id) { follow.removeAll { $0 == e.id }; Reminders.cancel(e) }
-        else { follow.append(e.id); Reminders.schedule(e) }
+        else { follow.append(e.id); Reminders.schedule(e, confirm: true) }
     }
 
     // MARK: 从网页版备份导入

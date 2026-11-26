@@ -136,7 +136,7 @@ final class RaceFeed: ObservableObject {
 
 // MARK: 提醒（前一天 + 开赛前 30 分钟 + 开赛时）
 enum Reminders {
-    static func schedule(_ e: Race) {
+    static func schedule(_ e: Race, confirm: Bool = false) {
         guard let t = e.startAt else { return }
         let c = UNUserNotificationCenter.current()
         c.requestAuthorization(options: [.alert, .sound, .badge]) { ok, _ in
@@ -148,12 +148,23 @@ enum Reminders {
             if let eve = Calendar.current.date(bySettingHour: 20, minute: 0, second: 0, of: t.addingTimeInterval(-86400)) {
                 items.insert(("d", eve, "明天比赛"), at: 0)
             }
-            for (k, when, body) in items where when > Date() {
+            let future = items.filter { $0.1 > Date() }
+            for (k, when, body) in future {
                 let n = UNMutableNotificationContent()
                 n.title = e.name; n.body = "\(body) · \(e.city ?? "")"; n.sound = .default
                 let comps = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: when)
                 c.add(UNNotificationRequest(identifier: "race-\(e.id)-\(k)", content: n,
                                             trigger: UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)))
+            }
+            // 点“追赛”时马上来一条确认通知，告诉你会在什么时候提醒
+            if confirm, !future.isEmpty {
+                let f = DateFormatter(); f.locale = Locale(identifier: "zh_CN"); f.dateFormat = "M月d日 HH:mm"
+                let n = UNMutableNotificationContent()
+                n.title = "已追：\(e.name)"
+                n.body = "会在 " + future.map { f.string(from: $0.1) }.joined(separator: "、") + " 提醒你"
+                n.sound = .default
+                c.add(UNNotificationRequest(identifier: "race-\(e.id)-ok", content: n,
+                                            trigger: UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)))
             }
         }
     }
@@ -307,6 +318,16 @@ struct RaceCard: View {
     let e: Race
     let open: Bool
     let onTap: () -> Void
+    @State private var denied = false
+
+    // 通知被关掉时提示去设置里打开，不然追了也收不到
+    private func checkPermission() {
+        Task {
+            try? await Task.sleep(for: .seconds(1.2))
+            let s = await UNUserNotificationCenter.current().notificationSettings()
+            if s.authorizationStatus == .denied { denied = true }
+        }
+    }
 
     var body: some View {
         let followed = store.follow.contains(e.id)
@@ -328,6 +349,7 @@ struct RaceCard: View {
                 Button {
                     store.toggleFollow(e)
                     Haptic.tap(.medium)
+                    if !followed { checkPermission() }
                 } label: {
                     Label(followed ? "已追" : "追赛", systemImage: followed ? "bell.fill" : "bell")
                         .symbolEffect(.bounce, value: followed)
@@ -360,6 +382,10 @@ struct RaceCard: View {
         .card()
         .contentShape(Rectangle())
         .onTapGesture(perform: onTap)
+        .alert("通知被关掉了", isPresented: $denied) {
+            Button("去设置") { if let u = URL(string: UIApplication.openSettingsURLString) { openURL(u) } }
+            Button("先不用", role: .cancel) {}
+        } message: { Text("打开 X Training 的通知，追的比赛才能按时提醒你。") }
     }
 
     private func douyin() {
