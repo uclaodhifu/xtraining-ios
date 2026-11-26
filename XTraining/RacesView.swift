@@ -134,16 +134,20 @@ final class RaceFeed: ObservableObject {
     }
 }
 
-// MARK: 提醒（开赛前 30 分钟 + 开赛时）
+// MARK: 提醒（前一天 + 开赛前 30 分钟 + 开赛时）
 enum Reminders {
     static func schedule(_ e: Race) {
         guard let t = e.startAt else { return }
         let c = UNUserNotificationCenter.current()
         c.requestAuthorization(options: [.alert, .sound, .badge]) { ok, _ in
             guard ok else { return }
-            let items: [(String, Date, String)] = e.hasTime
+            var items: [(String, Date, String)] = e.hasTime
                 ? [("0", t.addingTimeInterval(-1800), "30 分钟后开赛"), ("1", t, "开赛了")]
                 : [("1", t, "今天比赛")]
+            // 前一天晚上 8 点再提醒一次
+            if let eve = Calendar.current.date(bySettingHour: 20, minute: 0, second: 0, of: t.addingTimeInterval(-86400)) {
+                items.insert(("d", eve, "明天比赛"), at: 0)
+            }
             for (k, when, body) in items where when > Date() {
                 let n = UNMutableNotificationContent()
                 n.title = e.name; n.body = "\(body) · \(e.city ?? "")"; n.sound = .default
@@ -154,7 +158,7 @@ enum Reminders {
         }
     }
     static func cancel(_ e: Race) {
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["race-\(e.id)-0", "race-\(e.id)-1"])
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["race-\(e.id)-d", "race-\(e.id)-0", "race-\(e.id)-1"])
     }
 }
 
@@ -209,7 +213,7 @@ struct RaceList: View {
                             .symbolEffect(.bounce, value: onlyFollowed)
                         Text(onlyFollowed ? "还没追比赛" : past ? "还没有结束的比赛" : "最近没有比赛").font(.headline)
                         if onlyFollowed {
-                            Text("在“国内”或“全球职业赛”里点「追赛」，开赛前 30 分钟会提醒你").font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                            Text("在“国内”或“全球职业赛”里点「追赛」，比赛前一天、开赛前 30 分钟都会提醒你").font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
                         }
                     }
                     .frame(maxWidth: .infinity).padding(.vertical, 60).padding(.horizontal, 30)
