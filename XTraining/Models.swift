@@ -100,18 +100,24 @@ struct SetRow: Codable, Identifiable, Hashable {
     var r = ""
     var min = ""
     var p: [Int]? = nil   // 挂片：每根挂杆挂几片，比如 [2, 1] = 上 2 片、下 1 片
-    enum CodingKeys: String, CodingKey { case w, r, min, p }
+    var inkW: String? = nil   // 全部手写模式：重量/次数的笔迹文件编号（InkStore）
+    var inkR: String? = nil
+    enum CodingKeys: String, CodingKey { case w, r, min, p, inkW, inkR }
     init(w: String = "", r: String = "", min: String = "", p: [Int]? = nil) { self.w = w; self.r = r; self.min = min; self.p = p }
     init(from d: Decoder) throws {
         let c = try d.container(keyedBy: CodingKeys.self)
         w = dropJunk(flex(c, .w)); r = dropJunk(flex(c, .r)); min = dropJunk(flex(c, .min))
         p = try? c.decode([Int].self, forKey: .p)
+        inkW = try? c.decode(String.self, forKey: .inkW)
+        inkR = try? c.decode(String.self, forKey: .inkR)
     }
     func encode(to e: Encoder) throws {
         var c = e.container(keyedBy: CodingKeys.self)
         try c.encode(w, forKey: .w); try c.encode(r, forKey: .r)
         if !min.isEmpty { try c.encode(min, forKey: .min) }
         if let p { try c.encode(p, forKey: .p) }
+        if let inkW { try c.encode(inkW, forKey: .inkW) }
+        if let inkR { try c.encode(inkR, forKey: .inkR) }
     }
     var platesText: String? { p.map { $0.map(String.init).joined(separator: "/") } }
     var weight: Double { Double(w) ?? 0 }
@@ -122,16 +128,19 @@ struct Exercise: Codable, Identifiable, Hashable {
     var id = UUID()
     var name: String
     var sets: [SetRow]
-    enum CodingKeys: String, CodingKey { case name, sets }
+    var inkName: String? = nil   // 全部手写模式：动作名的笔迹
+    enum CodingKeys: String, CodingKey { case name, sets, inkName }
     init(name: String, sets: [SetRow] = [SetRow()]) { self.name = name; self.sets = sets }
     init(from d: Decoder) throws {
         let c = try d.container(keyedBy: CodingKeys.self)
         name = (try? c.decode(String.self, forKey: .name)) ?? ""
         sets = (try? c.decode([SetRow].self, forKey: .sets)) ?? []
+        inkName = try? c.decode(String.self, forKey: .inkName)
     }
     func encode(to e: Encoder) throws {
         var c = e.container(keyedBy: CodingKeys.self)
         try c.encode(name, forKey: .name); try c.encode(sets, forKey: .sets)
+        if let inkName { try c.encode(inkName, forKey: .inkName) }
     }
     var isCardio: Bool { Parts.of(name) == "有氧" }
     var best: Double { sets.map(\.weight).max() ?? 0 }
