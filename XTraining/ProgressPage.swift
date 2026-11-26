@@ -265,6 +265,7 @@ struct LiftChart: View {
     let name: String
     let options: [String]
     @State private var sel: Int? = nil   // 点中的柱子（在 shown 里的位置）
+    @State private var press: Int? = nil // 长按中的柱子：弹出那次练了什么
 
     private var resolved: String {
         if name == "__first" { return options.first ?? "" }
@@ -277,6 +278,27 @@ struct LiftChart: View {
             guard let best = sets.max() else { return nil }
             return (w.date, best, sets.reduce(0, +) / Double(sets.count))
         }
+    }
+
+    // 长按柱子弹出的小方框：那天这个部位练了哪些动作、每组多少
+    private func dayPopup(_ date: String) -> some View {
+        let xs = store.workouts.filter { $0.date == date }.flatMap { $0.exercises(of: part) }
+        return VStack(alignment: .leading, spacing: 4) {
+            Text("\(slashDate(date)) 练了").font(.caption.bold()).foregroundStyle(.secondary)
+            ForEach(Array(xs.prefix(6).enumerated()), id: \.offset) { _, x in
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(x.name).font(.caption.bold()).foregroundStyle(x.name == resolved ? Color(hex: 0x0a84ff) : .primary)
+                    Text(x.isCardio ? "\(x.sets.first?.min ?? "")分钟" : x.sets.map(setLabel).joined(separator: "  "))
+                        .font(.system(size: 10, design: .rounded)).monospacedDigit().foregroundStyle(.secondary).lineLimit(2)
+                }
+            }
+            if xs.count > 6 { Text("还有 \(xs.count - 6) 个动作").font(.caption2).foregroundStyle(.secondary) }
+        }
+        .padding(10)
+        .frame(maxWidth: 200, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.regularMaterial))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color.primary.opacity(0.1)))
+        .shadow(color: .black.opacity(0.15), radius: 8, y: 3)
     }
 
     var body: some View {
@@ -341,6 +363,13 @@ struct LiftChart: View {
                         .foregroundStyle(Color.gray.opacity(0.6))
                         .lineStyle(StrokeStyle(lineWidth: 2))
                         .annotation(position: .top, alignment: .trailing) { Text("平均").font(.caption2).foregroundStyle(.secondary) }
+                    if let press, press < shown.count {
+                        RuleMark(x: .value("次", "\(press + pad)"))
+                            .foregroundStyle(accent.opacity(0.25))
+                            .annotation(position: .top, spacing: 2, overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
+                                dayPopup(shown[press].date)
+                            }
+                    }
                 }
                 .chartXScale(domain: (0..<8).map { "\($0)" })
                 .chartXAxis {
@@ -364,6 +393,20 @@ struct LiftChart: View {
                                 withAnimation(.snappy) { sel = (i < 0 || i >= shown.count || sel == i) ? nil : i }
                                 Haptic.tap()
                             }
+                            // 长按：弹出小方框，那天练了什么；松手就收起
+                            .simultaneousGesture(
+                                LongPressGesture(minimumDuration: 0.35)
+                                    .sequenced(before: DragGesture(minimumDistance: 0))
+                                    .onChanged { v in
+                                        guard case .second(true, let drag) = v, let f = proxy.plotFrame else { return }
+                                        let x = (drag?.location.x ?? g[f].midX) - g[f].origin.x
+                                        guard let s: String = proxy.value(atX: x), let k = Int(s) else { return }
+                                        let i = k - pad
+                                        let n: Int? = (i >= 0 && i < shown.count) ? i : nil
+                                        if n != press { press = n; if n != nil { Haptic.tap(.medium) } }
+                                    }
+                                    .onEnded { _ in withAnimation(.easeOut(duration: 0.15)) { press = nil } }
+                            )
                     }
                 }
                 .chartYAxis(.hidden)
