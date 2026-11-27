@@ -8,7 +8,7 @@ struct RaceFlipCard: View {
     @EnvironmentObject var store: Store
     @Environment(\.openURL) private var openURL
     let e: Race
-    var compact = false          // 下面列表里点开的：小一号，不带按钮
+    var compact = false          // 下面列表里点开的：小一号，按钮一样有
     @State private var addCal = false
 
     private var left: Int { e.date.map { max(0, Day.between(Day.today, $0)) } ?? 0 }
@@ -44,8 +44,8 @@ struct RaceFlipCard: View {
                 }
                 .padding(.horizontal, compact ? 30 : 14).padding(.top, compact ? 10 : 14)
             }
-            if !compact {
-            Rectangle().fill(.white.opacity(0.08)).frame(height: 1).padding(.vertical, 12)
+            Group {
+            Rectangle().fill(.white.opacity(0.08)).frame(height: 1).padding(.vertical, compact ? 10 : 12)
             HStack(spacing: 0) {
                 action(followed ? "已追" : "追赛", followed ? "bell.fill" : "bell", on: followed) {
                     store.toggleFollow(e); Haptic.tap(.medium)

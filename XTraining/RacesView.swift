@@ -231,13 +231,14 @@ struct RaceList: View {
                 } else if !past {
                     // 新样式：最上面一张翻页钟大卡（点下面的比赛就换上来），下面是其余比赛
                     // 最上面固定是追的最近一场（没追就是最近一场）；点下面的比赛就地展开成大卡片，再点收起
-                    let top = items.first { store.follow.contains($0.id) } ?? items[0]
+                    // 追了才在最上面放大卡；没追就不放，全部是下面的小行
+                    let top = items.first { store.follow.contains($0.id) }
                     VStack(alignment: .leading, spacing: 10) {
-                        RaceFlipCard(e: top)
-                        if items.count > 1 {
+                        if let top { RaceFlipCard(e: top) }
+                        if items.count > (top == nil ? 0 : 1) {
                             Text("接下来").font(.subheadline.bold()).foregroundStyle(.secondary).padding(.top, 8).padding(.leading, 4)
                         }
-                        ForEach(items.filter { $0.id != top.id }) { e in
+                        ForEach(items.filter { $0.id != top?.id }) { e in
                             Group {
                                 if open == e.id {
                                     RaceFlipCard(e: e, compact: true).transition(.opacity.combined(with: .scale(scale: 0.97, anchor: .top)))
