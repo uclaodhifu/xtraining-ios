@@ -276,6 +276,8 @@ struct LogFullScreen: View {
     @State private var editing: Workout? = nil
     @State private var picking = false
     @State private var comparing = false
+    @Environment(\.verticalSizeClass) private var vClass
+    private var landscape: Bool { vClass == .compact }
 
     private func shift(_ n: Int) {
         let d = Calendar.current.date(byAdding: .month, value: n, to: Day.date(month + "-01")) ?? Date()
@@ -290,16 +292,26 @@ struct LogFullScreen: View {
                     ForEach(Parts.strength, id: \.self) { Text($0).tag($0) }
                 }
                 .pickerStyle(.segmented)
-                MonthLogTable(part: part, month: month) { w in editing = w }
-                    .id(part + month)   // 不要跟着数据刷新重建，不然横着滑会被弹回去
+                if landscape {
+                    MonthLogTable(part: part, month: month) { w in editing = w }
+                        .id(part + month)   // 不要跟着数据刷新重建，不然横着滑会被弹回去
+                        .frame(maxHeight: .infinity, alignment: .top)
+                        .card()
+                } else {
+                    // 竖着拿：跟首页一样，最近 4 次；转横屏才看整月
+                    ScrollView {
+                        TrainingLogTable(part: part, maxRows: 99, onOpen: { w in editing = w })
+                            .id("\(part)-\(store.rev)")
+                            .card()
+                    }
                     .frame(maxHeight: .infinity, alignment: .top)
-                    .card()
+                }
             }
             .padding(.horizontal, 16).padding(.bottom, 8)
             .background(Color(.systemGroupedBackground))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                if landscape { ToolbarItem(placement: .topBarLeading) {
                     HStack(spacing: 4) {
                         Button { shift(-1) } label: { Image(systemName: "chevron.left") }
                         Button { picking = true } label: {
@@ -312,7 +324,7 @@ struct LogFullScreen: View {
                         Button { shift(1) } label: { Image(systemName: "chevron.right") }
                             .disabled(month >= String(Day.today.prefix(7)))
                     }
-                }
+                } }
                 ToolbarItem(placement: .topBarTrailing) {
                     HStack(spacing: 14) {
                         Button { comparing = true } label: { Label("对比", systemImage: "arrow.left.arrow.right") }
