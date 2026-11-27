@@ -67,6 +67,34 @@ enum Overload {
     ]
 }
 
+// 文献和建议数值放在网上（xtraining-events 仓库 public/science.json），每月更新不用发版
+final class Science: ObservableObject {
+    static let shared = Science()
+    struct Ref: Codable { let year: String; let text: String; let src: String; var url: String? = nil }
+    struct Rules: Codable {
+        var setsMin = 10.0, setsMax = 20.0, freqMin = 2.0, repsMin = 5.0, repsMax = 20.0, gapMax = 5
+        var setsTip = "建议每个部位每周 10 组以上，太多恢复不过来"
+        var freqTip = "同一部位每周练 2 次以上效果更好"
+        var repsTip = "增肌在 5–20 次都有效，接近力竭比次数本身更重要"
+        var gapTip = "同一部位隔 2–5 天练一次比较合适"
+        var longTip = "拉长位练得少。研究显示在肌肉拉长的位置发力更利于增肌，可以加："
+    }
+    struct Doc: Codable { var updated: String; var refs: [Ref]; var rules: Rules }
+    @Published var doc: Doc
+    private let key = "xt.science"
+    init() {
+        if let d = UserDefaults.standard.data(forKey: key), let x = try? JSONDecoder().decode(Doc.self, from: d) { doc = x }
+        else { doc = Doc(updated: "2026-11-27", refs: Overload.refs.map { Ref(year: $0.year, text: $0.text, src: $0.src) }, rules: Rules()) }
+    }
+    @MainActor func refresh() async {
+        guard let u = URL(string: "https://xtraining-events.vercel.app/science.json"),
+              let (d, _) = try? await URLSession.shared.data(from: u),
+              let x = try? JSONDecoder().decode(Doc.self, from: d), !x.refs.isEmpty else { return }
+        doc = x
+        UserDefaults.standard.set(d, forKey: key)
+    }
+}
+
 // 进步页上的入口卡片
 struct OverloadEntry: View {
     let part: String
@@ -358,7 +386,9 @@ private struct MiniBars: View {
 private struct CheckupCard: View {
     let part: String
     let ss: [Workout]
+    @ObservedObject private var sci = Science.shared
     var body: some View {
+        let R = sci.doc.rules
         let from = Day.str(Calendar.current.date(byAdding: .day, value: -27, to: Date()) ?? Date())
         let recent = ss.filter { $0.date >= from }
         let sets = recent.flatMap { $0.exercises(of: part).flatMap(\.sets) }.filter { $0.weight > 0 || $0.reps > 0 }
@@ -370,12 +400,12 @@ private struct CheckupCard: View {
         let gaps = zip(days.dropFirst(), days).map { Calendar.current.dateComponents([.day], from: Day.date($1), to: Day.date($0)).day ?? 0 }
         let maxGap = gaps.max() ?? 0
         let items: [(String, String, String, Bool)] = [
-            ("📊", "每周 \(fmtNum((weekly * 10).rounded() / 10)) 组" + (weekly >= 10 && weekly <= 20 ? " ✓" : weekly > 20 ? " · 偏多" : " · 偏少"),
-             "建议每个部位每周 10 组以上，太多恢复不过来", weekly >= 10 && weekly <= 20),
-            ("📅", "每周练 \(fmtNum((freq * 10).rounded() / 10)) 次" + (freq >= 2 ? " ✓" : " · 偏少"), "同一部位每周练 2 次以上效果更好", freq >= 2),
-            ("🔁", "常用次数 \(fmtNum(mid)) 次" + (mid >= 5 && mid <= 20 ? " ✓" : mid < 5 ? " · 偏大重量" : " · 偏多"),
-             "增肌在 5–20 次都有效，接近力竭比次数本身更重要", mid >= 5 && mid <= 20),
-            ("⏸", "最长隔了 \(maxGap) 天" + (maxGap <= 5 ? " ✓" : " · 偏长"), "同一部位隔 2–5 天练一次比较合适", maxGap <= 5),
+            ("📊", "每周 \(fmtNum((weekly * 10).rounded() / 10)) 组" + (weekly >= R.setsMin && weekly <= R.setsMax ? " ✓" : weekly > R.setsMax ? " · 偏多" : " · 偏少"),
+             R.setsTip, weekly >= R.setsMin && weekly <= R.setsMax),
+            ("📅", "每周练 \(fmtNum((freq * 10).rounded() / 10)) 次" + (freq >= R.freqMin ? " ✓" : " · 偏少"), R.freqTip, freq >= R.freqMin),
+            ("🔁", "常用次数 \(fmtNum(mid)) 次" + (mid >= R.repsMin && mid <= R.repsMax ? " ✓" : mid < R.repsMin ? " · 偏大重量" : " · 偏多"),
+             R.repsTip, mid >= R.repsMin && mid <= R.repsMax),
+            ("⏸", "最长隔了 \(maxGap) 天" + (maxGap <= R.gapMax ? " ✓" : " · 偏长"), R.gapTip, maxGap <= R.gapMax),
         ]
         let bad = items.filter { !$0.3 }.count
         let score = max(40, 100 - bad * 14)
@@ -441,7 +471,7 @@ private struct CurveCard: View {
                     }
                 }
                 if longShare < 0.2 {
-                    Text("💡 拉长位练得少。研究显示在肌肉拉长的位置发力更利于增肌，可以加：\(Overload.longTip[part] ?? "")")
+                    Text("💡 " + Science.shared.doc.rules.longTip + (Overload.longTip[part] ?? ""))
                         .font(.footnote).foregroundStyle(Color(hex: 0xa35f00))
                         .padding(10).frame(maxWidth: .infinity, alignment: .leading)
                         .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.orange.opacity(0.12)))
@@ -455,10 +485,13 @@ private struct CurveCard: View {
 
 private struct RefsCard: View {
     @State private var all = false
+    @ObservedObject private var sci = Science.shared
+    @Environment(\.openURL) private var openURL
     var body: some View {
-        let list = all ? Overload.refs : Array(Overload.refs.prefix(3))
+        let refs = sci.doc.refs
+        let list = all ? refs : Array(refs.prefix(3))
         VStack(alignment: .leading, spacing: 0) {
-            HStack { Text("参考文献").font(.title3.bold()); Spacer(); Text("只收 2021–2026").font(.caption).foregroundStyle(.secondary) }
+            HStack { Text("参考文献").font(.title3.bold()); Spacer(); Text("更新于 \(slashDate(sci.doc.updated))").font(.caption).foregroundStyle(.secondary) }
                 .padding(.bottom, 8)
             ForEach(Array(list.enumerated()), id: \.offset) { i, r in
                 if i > 0 { Divider() }
@@ -466,11 +499,15 @@ private struct RefsCard: View {
                  + Text(r.text + " ").font(.caption)
                  + Text(r.src).font(.caption).foregroundColor(.secondary))
                     .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .onTapGesture { if let s = r.url, let u = URL(string: s) { openURL(u) } }
             }
-            Button(all ? "收起" : "展开全部 \(Overload.refs.count) 篇") { withAnimation(.snappy) { all.toggle() } }
-                .font(.subheadline.bold()).frame(maxWidth: .infinity).padding(.top, 6)
+            if refs.count > 3 { Button(all ? "收起" : "展开全部 \(refs.count) 篇") { withAnimation(.snappy) { all.toggle() } }
+                .font(.subheadline.bold()).frame(maxWidth: .infinity).padding(.top, 6) }
         }
         .card()
+        .task { await sci.refresh() }
     }
 }
 
