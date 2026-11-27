@@ -558,9 +558,11 @@ struct AnchorEditor: View {
                 } header: { Text("动作") }
                 Section {
                     HStack {
-                        TextField("重量", text: $a.kg).keyboardType(.decimalPad).multilineTextAlignment(.center)
+                        NumField(value: $a.kg, decimal: true, label: "锚点 重量", placeholder: "重量",
+                                 font: .systemFont(ofSize: 20, weight: .bold), color: .label)
                         Text("\(WU.s) ×").foregroundStyle(.secondary)
-                        TextField("次数", text: $a.reps).keyboardType(.numberPad).multilineTextAlignment(.center)
+                        NumField(value: $a.reps, decimal: false, label: "锚点 次数", placeholder: "次数",
+                                 font: .systemFont(ofSize: 20, weight: .bold), color: .label)
                         Text("次").foregroundStyle(.secondary)
                     }
                     .font(.title3.bold())

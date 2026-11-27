@@ -348,8 +348,9 @@ struct PrepDayEditor: View {
                 HStack {
                     Text("时长").font(.caption).foregroundStyle(.secondary)
                     Spacer()
-                    TextField("30", text: rowBind(x.id, rows[0].id, \.min))
-                        .keyboardType(.decimalPad).multilineTextAlignment(.center).frame(width: 70)
+                    NumField(value: rowBind(x.id, rows[0].id, \.min), decimal: true, label: "备赛 时长", placeholder: "30",
+                             font: .monospacedDigitSystemFont(ofSize: 17, weight: .semibold), color: .label)
+                        .frame(width: 70, height: 24)
                         .padding(.vertical, 6).background(RoundedRectangle(cornerRadius: 8).fill(Color(.tertiarySystemFill)))
                     Text("分钟").font(.caption).foregroundStyle(.secondary)
                 }
@@ -474,9 +475,9 @@ struct PrepDayEditor: View {
         return out.reversed()
     }
     private func cell(_ hint: String, _ text: Binding<String>, _ kb: UIKeyboardType) -> some View {
-        TextField("", text: text)
-            .keyboardType(kb).multilineTextAlignment(.center)
-            .font(.system(size: 19, weight: .bold, design: .rounded)).monospacedDigit()
+        NumField(value: text, decimal: kb == .decimalPad, label: "备赛 \(hint)",
+                 font: .monospacedDigitSystemFont(ofSize: 19, weight: .bold), color: .label)
+            .frame(minHeight: 24)
             .overlay {
                 if text.wrappedValue.isEmpty {
                     Text(hint).font(.system(size: 13, weight: .medium)).foregroundStyle(Color.primary.opacity(0.3))

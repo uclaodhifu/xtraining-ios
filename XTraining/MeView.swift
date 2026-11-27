@@ -76,6 +76,11 @@ struct MeView: View {
                          : inputMode == 1 ? "重量、次数、动作名都手写，格子里留着你写的原样笔迹，像一本电子手写笔记。数字照样会认出来，涨跌和统计不受影响。"
                          : "都用系统键盘打字。")
                 }
+                Section {
+                    BugRecordRow()
+                } header: { Text("遇到问题") } footer: {
+                    Text("点了以后照常操作，把出问题的步骤做一遍，再点顶上的「停止」上传。会记下点了哪里、开了哪个页面、按了哪个数字、手写认成了什么、格子里的数字变化。不录屏幕画面，不含照片和个人信息。")
+                }
                 Section("主题配色") {
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
                         ForEach(Skin.allCases) { s in

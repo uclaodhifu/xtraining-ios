@@ -107,7 +107,6 @@ struct HandPad: View {
     @State private var job: DispatchWorkItem? = nil
     @State private var empty = true
     @State private var miss = false      // 刚才没认出来
-    @FocusState private var fixing: Bool
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
@@ -122,18 +121,17 @@ struct HandPad: View {
                     // 认出来的数字：用来算涨跌和进步；认错了点一下直接改
                     HStack(spacing: 4) {
                         Text("认成").font(.caption2).foregroundStyle(Paper.pencil)
-                        TextField("?", text: $value)
-                            .keyboardType(.decimalPad).multilineTextAlignment(.center)
-                            .font(.system(size: 18, weight: .bold, design: .rounded)).monospacedDigit()
-                            .foregroundStyle(value.isEmpty ? Tone.down : Paper.ink)
-                            .frame(width: 64).padding(.vertical, 3)
+                        // UIKit 输入框：键盘弹出之前就标记「正在改」，手写板不会被键盘关掉
+                        NumField(value: $value, decimal: true, label: "认成(\(title))", placeholder: "?",
+                                 font: .monospacedDigitSystemFont(ofSize: 18, weight: .bold),
+                                 color: value.isEmpty ? UIColor(Tone.down) : UIColor(Paper.ink)) { f in
+                            if f { job?.cancel(); job = nil }   // 正在改：后台识别别再把改好的数字盖掉
+                            PadFix.editing = f
+                            // 改完了：把这次的笔迹按改对的数字记下来，下次认得更准
+                            if !f, !value.isEmpty, !canvas.drawing.strokes.isEmpty { DigitReader.learn(canvas.drawing, answer: value) }
+                        }
+                            .frame(width: 64, height: 30)
                             .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Paper.ink.opacity(0.07)))
-                            .focused($fixing)
-                            .onChange(of: fixing) { _, f in
-                                PadFix.editing = f
-                                // 改完了：把这次的笔迹按改对的数字记下来，下次认得更准
-                                if !f, !value.isEmpty, !canvas.drawing.strokes.isEmpty { DigitReader.learn(canvas.drawing, answer: value) }
-                            }
                     }
                 }
                 Button { onClose() } label: {
@@ -166,7 +164,7 @@ struct HandPad: View {
         .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Paper.bg).shadow(color: .black.opacity(0.18), radius: 12, y: -2))
         .padding(.horizontal, 10).padding(.bottom, 6)
         .onAppear { reset() }
-        .onChange(of: title) { _, _ in reset() }
+        .onChange(of: title) { _, t in BugLog.add("手写板换到 \(t)"); reset() }
     }
 
     private func key(_ t: String, wide: Bool, strong: Bool = false, _ a: @escaping () -> Void) -> some View {
@@ -179,7 +177,7 @@ struct HandPad: View {
     }
 
     private func reset() { job?.cancel(); job = nil; canvas.drawing = PKDrawing(); dotAt = nil; empty = true; miss = false }
-    private func clear() { reset(); value = "" }
+    private func clear() { BugLog.add("手写 \(title) 点了清除（原来 \"\(value)\"）"); reset(); value = "" }
     // 小数点没写/认不出来：记住前面几位，之后认出来的数字在这里插一个点
     private func dot() {
         flush()
@@ -196,8 +194,13 @@ struct HandPad: View {
         guard job != nil, !canvas.drawing.strokes.isEmpty else { return }
         job?.cancel(); job = nil
         let d = canvas.drawing
-        var r = HandPad.read(d, text: textMode)
-        if !textMode { r = DigitReader.fuse(r, DigitReader.read(d)) }
+        let v = HandPad.read(d, text: textMode)
+        var r = v
+        if !textMode {
+            let m = DigitReader.read(d)
+            r = DigitReader.fuse(v, m)
+            BugLog.add("手写 \(title) 点下一格前认成 \"\(r)\"（系统 \"\(v)\" / 笔画 \"\(m.text)\" \(m.digits)个字，\(d.strokes.count)笔）")
+        }
         if !r.isEmpty { apply(r) }
         onInk?(d)
     }
@@ -205,15 +208,20 @@ struct HandPad: View {
         job?.cancel()
         let tm = textMode
         guard !canvas.drawing.strokes.isEmpty else { return }
-        let w = DispatchWorkItem {
+        var w: DispatchWorkItem!
+        w = DispatchWorkItem {
             let d = canvas.drawing
             guard let cg = HandPad.page(d) else { return }
             let mine: (text: String, digits: Int)? = tm ? nil : DigitReader.read(d)
             DispatchQueue.global(qos: .userInitiated).async {
-                var r = HandPad.recognize(cg, text: tm)
-                if let mine { r = DigitReader.fuse(r, mine) }
+                let v = HandPad.recognize(cg, text: tm)
+                var r = v
+                if let mine { r = DigitReader.fuse(v, mine) }
+                let strokes = d.strokes.count
                 DispatchQueue.main.async {
+                    guard let me = w, job === me, !me.isCancelled else { return }   // 这期间又写了一笔或者点了清除/改数字：这次结果作废
                     job = nil
+                    if !tm { BugLog.add("手写 \(title) 认成 \"\(r)\"（系统 \"\(v)\" / 笔画 \"\(mine?.text ?? "")\" \(mine?.digits ?? 0)个字，\(strokes)笔）→ 格子 \"\(r.isEmpty ? value : r)\"") }
                     // 后台悄悄认一下数字，只用来算涨跌和统计，界面上不显示
                     if !r.isEmpty { apply(r) }
                     if textMode { onInk?(d) }
