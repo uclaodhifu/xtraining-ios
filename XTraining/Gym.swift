@@ -60,6 +60,11 @@ enum GymAPI {
     // 先走自己的域名（国内能连），连不上再试 vercel.app
     static let bases = ["https://api.linshan.cloud/api/", "https://xt-bugs.vercel.app/api/"]
     static let base = bases[0]
+    // 照片存储的域名国内常打不开：改走自己的域名转一下
+    static func img(_ s: String) -> String {
+        guard let r = s.range(of: ".public.blob.vercel-storage.com/") else { return s }
+        return "https://api.linshan.cloud/img/" + s[r.upperBound...]
+    }
     // 依次试每个地址，返回第一个 200 的结果
     private static func send(_ r: URLRequest) async -> Data? {
         for b in bases {
@@ -285,7 +290,7 @@ struct GymAvatar: View {
         let inner = Group {
             if let local, let img = UIImage(data: local) {
                 Image(uiImage: img).resizable().scaledToFill()
-            } else if let url, let u = URL(string: url) {
+            } else if let url, let u = URL(string: GymAPI.img(url)) {
                 AsyncImage(url: u, transaction: Transaction(animation: .easeOut(duration: 0.2))) { ph in
                     if let img = ph.image { img.resizable().scaledToFill() } else { fallback }
                 }

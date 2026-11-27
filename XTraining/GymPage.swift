@@ -94,7 +94,7 @@ struct GymPage: View {
             }
         }
         .sheet(item: Binding(get: { big.map(StrID.init) }, set: { big = $0?.id })) { s in
-            AsyncImage(url: URL(string: s.id)) { $0.resizable().scaledToFit() } placeholder: { ProgressView() }
+            AsyncImage(url: URL(string: GymAPI.img(s.id))) { $0.resizable().scaledToFit() } placeholder: { ProgressView() }
                 .presentationDetents([.medium, .large])
         }
         .onChange(of: item) { _, it in
