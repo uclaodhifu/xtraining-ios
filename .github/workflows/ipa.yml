@@ -48,7 +48,7 @@ jobs:
         with:
           name: XTraining-ipa
           path: XTraining.ipa
-          retention-days: 30
+          retention-days: 1
       - name: 先推标签（GitHub 偶尔建标签时报 500）
         run: |
           git tag -f build-${{ github.run_number }}

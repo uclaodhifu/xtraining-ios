@@ -58,6 +58,7 @@ struct PartProgress: View {
         return ScrollView {
             VStack(spacing: 14) {
                 YesterdayCard()   // 跟着页面一起滚走
+                MuscleMapCard()   // 训练分布（从首页挪过来）
                 if ss.isEmpty {
                     VStack(spacing: 8) {
                         Text("📈").font(.system(size: 44))

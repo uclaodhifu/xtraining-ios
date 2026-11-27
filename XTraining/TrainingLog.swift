@@ -273,7 +273,7 @@ struct LogFullScreen: View {
                 }
                 .pickerStyle(.segmented)
                 MonthLogTable(part: part, month: month) { w in editing = w }
-                    .id("\(part)\(month)-\(store.rev)")
+                    .id(part + month)   // 不要跟着数据刷新重建，不然横着滑会被弹回去
                     .frame(maxHeight: .infinity, alignment: .top)
                     .card()
             }

@@ -7,7 +7,7 @@ struct MonthLogTable: View {
     let part: String
     let month: String            // "2026-11"
     var onOpen: (Workout) -> Void = { _ in }
-    @State private var hx: CGFloat = 0     // 日期列左右滑了多少
+    @State private var hx = HXBox()        // 日期列左右滑了多少（单独放，滑动时只动表头，不重算整张表）
     @AppStorage("xt.logOrder") private var orderData = Data()   // 每个部位自己拖好的动作顺序
     @State private var draggingRow: String? = nil
     @AppStorage(Baseline.key) private var baseData = Data()
@@ -110,10 +110,11 @@ struct MonthLogTable: View {
                     .frame(width: nameW, height: headH, alignment: .leading)
                     .background(Color(.secondarySystemGroupedBackground))
                     .zIndex(1)
-                HStack(spacing: 0) {
-                    ForEach(cols) { c in header(c, headH: headH, line: line) }
+                HXFollow(box: hx) {
+                    HStack(spacing: 0) {
+                        ForEach(cols) { c in header(c, headH: headH, line: line) }
+                    }
                 }
-                .offset(x: hx)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .clipped()
             }
@@ -153,7 +154,6 @@ struct MonthLogTable: View {
                     }
                     .background(Color(.secondarySystemGroupedBackground))
                     .overlay(alignment: .trailing) { Rectangle().fill(Color.primary.opacity(0.18)).frame(width: 1) }
-                    .shadow(color: .black.opacity(hx < -1 ? 0.12 : 0), radius: 4, x: 3)
                     .zIndex(1)
                     ScrollViewReader { proxy in
                         ScrollView(.horizontal, showsIndicators: true) {
@@ -168,8 +168,8 @@ struct MonthLogTable: View {
                             })
                         }
                         .coordinateSpace(name: "mlh")
-                        .onPreferenceChange(MLHOffset.self) { hx = $0 }
-                        .modifier(HScrollWatch(hx: $hx))
+                        .onPreferenceChange(MLHOffset.self) { v in if hx.x != v { hx.x = v } }
+                        .modifier(HScrollWatch(box: hx))
                         .onAppear {
                             if month == String(Day.today.prefix(7)) { proxy.scrollTo(Day.today, anchor: .trailing) }
                         }
@@ -293,11 +293,18 @@ private struct MLHOffset: PreferenceKey {
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }
 // iOS 18 起直接读横向滚动位置（比 GeometryReader 稳）
+final class HXBox: ObservableObject { @Published var x: CGFloat = 0 }
+// 只有表头跟着横向滑动位置走
+private struct HXFollow<C: View>: View {
+    @ObservedObject var box: HXBox
+    @ViewBuilder var content: () -> C
+    var body: some View { content().offset(x: box.x) }
+}
 private struct HScrollWatch: ViewModifier {
-    @Binding var hx: CGFloat
+    let box: HXBox
     func body(content: Content) -> some View {
         if #available(iOS 18.0, *) {
-            content.onScrollGeometryChange(for: CGFloat.self) { -$0.contentOffset.x - $0.contentInsets.leading } action: { _, v in hx = v }
+            content.onScrollGeometryChange(for: CGFloat.self) { -$0.contentOffset.x - $0.contentInsets.leading } action: { _, v in if box.x != v { box.x = v } }
         } else { content }
     }
 }
