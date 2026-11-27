@@ -251,7 +251,7 @@ struct LifterPicker: View {
                         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
                             ForEach(Array(LifterChar.allCases.enumerated()), id: \.element) { i, c in
                                 let on = c == mine
-                                Button { Haptic.tap(); mine = c; LifterChar.mine = c } label: {
+                                Button { Haptic.tap(); mine = c; LifterChar.mine = c; GymStore.shared.setChar(c) } label: {
                                     VStack(spacing: 4) {
                                         Lifter(kind: LiftKind.all[i], char: c, t: t + Double(i) * 0.4, size: 62)
                                             .frame(maxWidth: .infinity).frame(height: 84)
@@ -427,7 +427,7 @@ struct GlobeScreen: View {
                 let people = Array(g.recent.prefix(g.count(range) >= 6 ? 3 : g.count(range) >= 3 ? 2 : 1))
                 HStack(spacing: -8) {
                     ForEach(Array(people.enumerated()), id: \.offset) { i, p in
-                        Lifter(kind: .of(p.parts.first ?? g.top.first), char: .from(p.a), t: t + Double(i) * 0.7, size: 34)
+                        Lifter(kind: .of(p.parts.first ?? g.top.first), char: p.uid == gs.uid ? .mine : .from(p.a), t: t + Double(i) * 0.7, size: 34)
                     }
                     if people.isEmpty { Lifter(kind: .of(g.top.first), char: .boy, t: t, size: 34) }
                 }

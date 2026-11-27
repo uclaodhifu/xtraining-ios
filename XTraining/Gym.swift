@@ -98,6 +98,9 @@ enum GymAPI {
     static func checkin(gym: String, uid: String, nick: String, parts: [String]) async -> Bool {
         await call(req("checkin", method: "POST", json: ["gym": gym, "uid": uid, "nick": nick, "parts": parts, "a": LifterChar.mine.rawValue])) != nil
     }
+    static func setChar(uid: String, char: String) async -> Bool {
+        await call(req("me", method: "POST", json: ["uid": uid, "a": char])) != nil
+    }
     static func fix(gym: String, uid: String, lat: Double, lon: Double, city: String) async -> Bool {
         await call(req("gymfix", method: "POST", json: ["gym": gym, "uid": uid, "lat": lat, "lon": lon, "city": city])) != nil
     }
@@ -164,6 +167,14 @@ final class GymStore: NSObject, ObservableObject, CLLocationManagerDelegate {
             if seenCount == 0 { seenCount = max(1, myGymWeek) }
         } else { failed = true }
         await flush()
+        if let c = ud.string(forKey: "xt.charPending"), await GymAPI.setChar(uid: uid, char: c) { ud.removeObject(forKey: "xt.charPending") }
+    }
+
+    // 在「我」页换了小人：告诉服务器，地球上马上换（没网就下次打开地球再补）
+    func setChar(_ c: LifterChar) {
+        ud.set(c.rawValue, forKey: "xt.charPending")
+        objectWillChange.send()
+        Task { if await GymAPI.setChar(uid: uid, char: c.rawValue) { ud.removeObject(forKey: "xt.charPending"); await refresh() } }
     }
 
     func gym(_ id: String) -> GymInfo? { world?.gyms.first { $0.id == id } }
