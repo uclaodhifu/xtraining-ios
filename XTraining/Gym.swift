@@ -20,6 +20,7 @@ struct GymPerson: Codable, Hashable {
     var nick: String
     var parts: [String]
     var t: Double
+    var a: String? = nil      // 这个人选的打卡小人
 }
 
 struct GymPending: Codable, Hashable { var url: String; var uid: String }
@@ -79,7 +80,10 @@ enum GymAPI {
         await call(req("gyms", method: "POST", json: ["name": g.name, "city": g.city, "lat": g.lat, "lon": g.lon, "by": by, "uid": uid]))?["id"] as? String
     }
     static func checkin(gym: String, uid: String, nick: String, parts: [String]) async -> Bool {
-        await call(req("checkin", method: "POST", json: ["gym": gym, "uid": uid, "nick": nick, "parts": parts])) != nil
+        await call(req("checkin", method: "POST", json: ["gym": gym, "uid": uid, "nick": nick, "parts": parts, "a": LifterChar.mine.rawValue])) != nil
+    }
+    static func fix(gym: String, uid: String, lat: Double, lon: Double, city: String) async -> Bool {
+        await call(req("gymfix", method: "POST", json: ["gym": gym, "uid": uid, "lat": lat, "lon": lon, "city": city])) != nil
     }
     static func photo(gym: String, uid: String, jpg: Data) async -> Bool {
         await call(req("photo?gym=\(gym)&uid=\(uid)", method: "POST", body: jpg, type: "image/jpeg", timeout: 40)) != nil
@@ -165,7 +169,10 @@ final class GymStore: NSObject, ObservableObject, CLLocationManagerDelegate {
     }
     nonisolated func locationManager(_ m: CLLocationManager, didUpdateLocations l: [CLLocation]) {
         guard let x = l.last else { return }
-        Task { @MainActor in self.location = x }
+        // 国内地图用的是火星坐标：换算一下，和苹果地图上搜到的健身房对得上
+        let g = ChinaCoord.toMap(x.coordinate)
+        let y = CLLocation(coordinate: g, altitude: x.altitude, horizontalAccuracy: x.horizontalAccuracy, verticalAccuracy: x.verticalAccuracy, timestamp: x.timestamp)
+        Task { @MainActor in self.location = y }
     }
     nonisolated func locationManager(_ m: CLLocationManager, didFailWithError e: Error) {}
 
@@ -305,3 +312,27 @@ struct PersonDot: View {
 }
 
 func fmtDist(_ m: Double) -> String { m < 1000 ? "\(Int(m / 10) * 10) m" : String(format: "%.1f km", m / 1000) }
+
+// GPS 坐标 → 国内地图坐标（GCJ-02）；国外不变
+enum ChinaCoord {
+    static func inChina(_ c: CLLocationCoordinate2D) -> Bool { c.longitude > 73.66 && c.longitude < 135.05 && c.latitude > 3.86 && c.latitude < 53.55 }
+    static func toMap(_ c: CLLocationCoordinate2D) -> CLLocationCoordinate2D {
+        guard inChina(c) else { return c }
+        let a = 6378245.0, ee = 0.00669342162296594323
+        let x = c.longitude - 105, y = c.latitude - 35
+        var dLat = -100 + 2 * x + 3 * y + 0.2 * y * y + 0.1 * x * y + 0.2 * sqrt(abs(x))
+        dLat += (20 * sin(6 * x * .pi) + 20 * sin(2 * x * .pi)) * 2 / 3
+        dLat += (20 * sin(y * .pi) + 40 * sin(y / 3 * .pi)) * 2 / 3
+        dLat += (160 * sin(y / 12 * .pi) + 320 * sin(y * .pi / 30)) * 2 / 3
+        var dLon = 300 + x + 2 * y + 0.1 * x * x + 0.1 * x * y + 0.1 * sqrt(abs(x))
+        dLon += (20 * sin(6 * x * .pi) + 20 * sin(2 * x * .pi)) * 2 / 3
+        dLon += (20 * sin(x * .pi) + 40 * sin(x / 3 * .pi)) * 2 / 3
+        dLon += (150 * sin(x / 12 * .pi) + 300 * sin(x / 30 * .pi)) * 2 / 3
+        let rad = c.latitude / 180 * .pi
+        var m = sin(rad); m = 1 - ee * m * m
+        let sm = sqrt(m)
+        dLat = (dLat * 180) / ((a * (1 - ee)) / (m * sm) * .pi)
+        dLon = (dLon * 180) / (a / sm * cos(rad) * .pi)
+        return CLLocationCoordinate2D(latitude: c.latitude + dLat, longitude: c.longitude + dLon)
+    }
+}

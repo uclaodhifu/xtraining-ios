@@ -1,5 +1,7 @@
 import SwiftUI
 import PhotosUI
+import MapKit
+import CoreLocation
 
 // MARK: - 健身房主页：圆形大头像、打卡人数、最近在这练的人、大家传的照片
 struct GymPage: View {
@@ -28,6 +30,7 @@ struct GymPage: View {
                         stat("\(g.week)", "本周")
                         stat(g.top.first ?? "—", "最常练")
                     }
+                    GymLocationBox(g: g)
                     card("最近在这练的人", note: "只显示公开的") {
                         if g.recent.isEmpty {
                             Text("还没有人公开打卡").font(.footnote).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
@@ -157,5 +160,119 @@ struct GymPage: View {
             gs.checkin(workoutID: "gym-" + Day.today, gym: g.ref, parts: [], date: Day.today)
         }
         show("已打卡 ✓")
+    }
+}
+
+// 健身房位置：大家都能看，能导航（高德 / 苹果地图），位置不准可以纠正
+struct GymLocationBox: View {
+    var g: GymInfo
+    @ObservedObject private var gs = GymStore.shared
+    @State private var address = ""
+    @State private var askNav = false
+    @State private var fixing = false
+    @State private var copied = false
+    private var coord: CLLocationCoordinate2D { CLLocationCoordinate2D(latitude: g.lat, longitude: g.lon) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("健身房位置").font(.subheadline.bold())
+                Spacer()
+                Button("位置不对？纠正") { fixing = true }.font(.caption).foregroundStyle(.secondary)
+            }
+            GymMapPreview(coord: coord, cover: g.cover, seed: g.id)
+                .frame(height: 170).clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(address.isEmpty ? (g.city.isEmpty ? "正在查地址…" : g.city) : address).font(.subheadline)
+                if let d = gs.distance(g.lat, g.lon) { Text("距你 \(fmtDist(d))").font(.caption).foregroundStyle(.secondary) }
+            }
+            HStack(spacing: 8) {
+                Button { askNav = true } label: {
+                    Text("导航去这里").font(.subheadline.bold()).foregroundStyle(Brand.ink)
+                        .frame(maxWidth: .infinity).frame(height: 42)
+                        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Brand.gradient))
+                }
+                Button {
+                    UIPasteboard.general.string = [g.name, address.isEmpty ? g.city : address].filter { !$0.isEmpty }.joined(separator: " ")
+                    Haptic.success(); copied = true
+                    Task { try? await Task.sleep(for: .seconds(1.5)); copied = false }
+                } label: {
+                    Text(copied ? "已复制 ✓" : "复制地址").font(.subheadline.bold()).foregroundStyle(.primary)
+                        .frame(maxWidth: .infinity).frame(height: 42)
+                        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color(.tertiarySystemFill)))
+                }
+            }
+            .buttonStyle(PressScale())
+        }
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color(.secondarySystemGroupedBackground)))
+        .confirmationDialog("用哪个地图导航？", isPresented: $askNav, titleVisibility: .visible) {
+            Button("高德地图") { openAmap() }
+            Button("苹果地图") { openApple() }
+            Button("取消", role: .cancel) {}
+        }
+        .sheet(isPresented: $fixing) { GymFixSheet(g: g) }
+        .task(id: g.id) {
+            let l = CLLocation(latitude: g.lat, longitude: g.lon)
+            if let p = try? await CLGeocoder().reverseGeocodeLocation(l).first {
+                address = [p.administrativeArea, p.locality, p.subLocality, p.thoroughfare, p.subThoroughfare].compactMap { $0 }
+                    .reduce(into: [String]()) { if $0.last != $1 { $0.append($1) } }.joined()
+            }
+        }
+    }
+
+    private func openAmap() {
+        let name = g.name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        // 坐标已经是国内地图坐标（dev=0 不再偏移）
+        if let u = URL(string: "iosamap://path?sourceApplication=XTraining&dlat=\(g.lat)&dlon=\(g.lon)&dname=\(name)&dev=0&t=0"), UIApplication.shared.canOpenURL(u) {
+            UIApplication.shared.open(u)
+        } else if let w = URL(string: "https://uri.amap.com/marker?position=\(g.lon),\(g.lat)&name=\(name)&coordinate=gaode&callnative=1") {
+            UIApplication.shared.open(w)
+        }
+    }
+    private func openApple() {
+        let item = MKMapItem(placemark: MKPlacemark(coordinate: coord))
+        item.name = g.name
+        item.openInMaps(launchOptions: [MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDefault])
+    }
+}
+
+// 纠正位置：拖地图对准健身房门口。添加的人改了直接生效，其他人改了后台确认
+struct GymFixSheet: View {
+    var g: GymInfo
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var gs = GymStore.shared
+    @State private var center: CLLocationCoordinate2D? = nil
+    @State private var sending = false
+    @State private var msg = ""
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 12) {
+                GymMapPicker(center: $center, start: CLLocationCoordinate2D(latitude: g.lat, longitude: g.lon))
+                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                Text(msg.isEmpty ? "拖动地图，把大头针对准「\(g.name)」门口" : msg).font(.footnote).foregroundStyle(.secondary)
+            }
+            .padding(16)
+            .navigationTitle("纠正健身房位置")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    if sending { ProgressView() } else {
+                        Button("提交") {
+                            guard let c = center else { return }
+                            Task {
+                                sending = true; defer { sending = false }
+                                var city = g.city
+                                if let p = try? await CLGeocoder().reverseGeocodeLocation(CLLocation(latitude: c.latitude, longitude: c.longitude)).first { city = p.locality ?? p.administrativeArea ?? city }
+                                if await GymAPI.fix(gym: g.id, uid: gs.uid, lat: c.latitude, lon: c.longitude, city: city) {
+                                    Haptic.success(); await gs.refresh(); dismiss()
+                                } else { msg = "提交失败，网络不好再试一次" }
+                            }
+                        }.bold()
+                    }
+                }
+            }
+        }
     }
 }

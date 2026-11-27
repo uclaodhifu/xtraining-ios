@@ -32,6 +32,7 @@ struct MeView: View {
                     if store.avatar != nil {
                         Button("删掉头像", role: .destructive) { withAnimation { store.avatar = nil } }
                     }
+                    MeLifterRow()
                 }
                 Section {
                     NavigationLink { ExerciseLibView() } label: {

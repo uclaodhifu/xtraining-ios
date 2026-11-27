@@ -64,7 +64,7 @@ targets:
         NSHealthUpdateUsageDescription: X Training 目前不会往 Apple 健康里写数据。
         LSApplicationCategoryType: public.app-category.healthcare-fitness
         NSSupportsLiveActivities: true
-        LSApplicationQueriesSchemes: [snssdk1128]
+        LSApplicationQueriesSchemes: [snssdk1128, iosamap]
   XTrainingWidgets:
     type: app-extension
     platform: iOS

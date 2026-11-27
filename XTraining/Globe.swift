@@ -92,23 +92,45 @@ struct GlobeBall: View {
     }
 }
 
-// MARK: - 卡通小人：按最常练的部位做动作，循环
-enum LiftKind { case bench, squat, pull, run, press, curl
+// MARK: - 卡通小人：6 个人物（「我 → 我的打卡小人」自己选），按这次练的部位做动作，循环
+enum LiftKind { case squat, flex, jack, wave, jump, run
     static func of(_ part: String?) -> LiftKind {
         switch part {
-        case "胸": return .bench
-        case "背": return .pull
+        case "腿": return .squat
+        case "胸", "手臂": return .flex
+        case "背", "肩": return .jack
         case "有氧": return .run
-        case "肩": return .press
-        case "手臂": return .curl
-        default: return .squat
+        case nil: return .wave
+        default: return .jump
         }
     }
+    static let all: [LiftKind] = [.squat, .flex, .jack, .wave, .jump, .run]
+    var name: String {
+        switch self { case .squat: return "深蹲"; case .flex: return "秀肌肉"; case .jack: return "开合跳"; case .wave: return "挥手"; case .jump: return "跳一下"; case .run: return "跑步" }
+    }
+}
+
+enum LifterChar: String, CaseIterable, Identifiable {
+    case boy, girl, bald, cap, panda, robot
+    var id: String { rawValue }
+    var name: String { ["阿强", "小美", "大壮", "帽子哥", "滚滚", "铁甲"][Self.allCases.firstIndex(of: self)!] }
+    var desc: String { ["短发小哥", "马尾女生", "光头壮汉", "反戴棒球帽", "健身熊猫", "健身机器人"][Self.allCases.firstIndex(of: self)!] }
+    var shirt: Color { [Color(hex: 0xff7a00), Color(hex: 0xe64980), Color(hex: 0x2f9e44), Color(hex: 0xfab005), Color(hex: 0x222222), Color(hex: 0x868e96)][Self.allCases.firstIndex(of: self)!] }
+    var pants: Color { [Color(hex: 0x2b2d42), Color(hex: 0x343a40), Color(hex: 0x212529), Color(hex: 0x1864ab), Color(hex: 0x222222), Color(hex: 0x495057)][Self.allCases.firstIndex(of: self)!] }
+    var arm: Color {
+        switch self { case .bald: return Color(hex: 0xf2c39b); case .panda: return Color(hex: 0x222222); case .robot: return Color(hex: 0xadb5bd); default: return Color(hex: 0xffd8b5) }
+    }
+    var width: CGFloat { switch self { case .bald: return 15; case .panda: return 14; case .girl: return 11; default: return 12 } }
+    static var mine: LifterChar {
+        get { LifterChar(rawValue: UserDefaults.standard.string(forKey: "xt.lifter") ?? "") ?? .boy }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: "xt.lifter") }
+    }
+    static func from(_ s: String?) -> LifterChar { LifterChar(rawValue: s ?? "") ?? .boy }
 }
 
 struct Lifter: View {
     var kind: LiftKind
-    var shirt: Color
+    var char: LifterChar = .boy
     var t: Double          // 动画时间（秒）
     var size: CGFloat = 40
     var body: some View {
@@ -116,77 +138,159 @@ struct Lifter: View {
             let k = sz.width / 40
             ctx.scaleBy(x: k, y: k)
             let s = (1 - cos(t * 2.6)) / 2          // 0~1 循环
-            let skin = Color(hex: 0xffd8b5), pants = Color(hex: 0x2b2d42), bar = Color(white: 0.85), plate = Color(hex: 0xff5c8a)
-            func line(_ pts: [CGPoint], _ c: Color, _ w: CGFloat) {
-                var p = Path(); p.addLines(pts); ctx.stroke(p, with: .color(c), style: StrokeStyle(lineWidth: w, lineCap: .round, lineJoin: .round))
+            let skin = Color(hex: 0xffd8b5), plate = Color(hex: 0xff5c8a)
+            let c = char, shirt = c.shirt, pants = c.pants, arm = c.arm, W = c.width
+            func line(_ pts: [CGPoint], _ col: Color, _ w: CGFloat) {
+                var p = Path(); p.addLines(pts); ctx.stroke(p, with: .color(col), style: StrokeStyle(lineWidth: w, lineCap: .round, lineJoin: .round))
             }
-            func circle(_ x: CGFloat, _ y: CGFloat, _ r: CGFloat, _ c: Color) { ctx.fill(Path(ellipseIn: CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2)), with: .color(c)) }
-            func rect(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat, _ c: Color, _ rr: CGFloat = 2) { ctx.fill(Path(roundedRect: CGRect(x: x, y: y, width: w, height: h), cornerRadius: rr), with: .color(c)) }
-            func head(_ x: CGFloat, _ y: CGFloat) { circle(x, y, 4.6, skin); var h = Path(); h.addArc(center: CGPoint(x: x, y: y - 0.5), radius: 4.8, startAngle: .degrees(180), endAngle: .degrees(360), clockwise: false); ctx.fill(h, with: .color(shirt.opacity(0.9))) }
-            func barbell(_ y: CGFloat) { rect(2, y - 1.2, 36, 2.4, bar, 1); rect(1, y - 5, 4, 10, plate, 1.5); rect(35, y - 5, 4, 10, plate, 1.5) }
+            func circle(_ x: CGFloat, _ y: CGFloat, _ r: CGFloat, _ col: Color) { ctx.fill(Path(ellipseIn: CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2)), with: .color(col)) }
+            func rect(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat, _ col: Color, _ rr: CGFloat = 2) { ctx.fill(Path(roundedRect: CGRect(x: x, y: y, width: w, height: h), cornerRadius: rr), with: .color(col)) }
+            func arc(_ x: CGFloat, _ y: CGFloat, _ r: CGFloat, _ col: Color) {
+                var h = Path(); h.addArc(center: CGPoint(x: x, y: y), radius: r, startAngle: .degrees(180), endAngle: .degrees(360), clockwise: false); h.closeSubpath(); ctx.fill(h, with: .color(col))
+            }
+            func head(_ x: CGFloat, _ y: CGFloat) {
+                switch c {
+                case .boy:
+                    circle(x, y, 5, skin); arc(x, y - 0.4, 5.2, Color(hex: 0x222222))
+                case .girl:
+                    var tail = Path(); tail.move(to: CGPoint(x: x + 4, y: y - 3)); tail.addQuadCurve(to: CGPoint(x: x + 5, y: y + 6), control: CGPoint(x: x + 10, y: y - 2)); tail.addLine(to: CGPoint(x: x + 3, y: y)); ctx.fill(tail, with: .color(Color(hex: 0x6b3a1e)))
+                    circle(x, y, 5, skin); arc(x, y, 5.3, Color(hex: 0x6b3a1e)); circle(x + 4.6, y - 3, 1.3, plate)
+                case .bald:
+                    circle(x, y, 5.4, Color(hex: 0xf2c39b))
+                    var beard = Path(); beard.addArc(center: CGPoint(x: x, y: y + 1.5), radius: 4.2, startAngle: .degrees(20), endAngle: .degrees(160), clockwise: false); ctx.stroke(beard, with: .color(Color(hex: 0x5a3a22)), lineWidth: 2)
+                    ctx.fill(Path(ellipseIn: CGRect(x: x - 3.4, y: y - 3.8, width: 3.2, height: 1.6)), with: .color(.white.opacity(0.5)))
+                case .cap:
+                    circle(x, y, 5, skin); arc(x, y - 0.8, 5.3, Color(hex: 0x1c7ed6)); rect(x - 8.5, y - 1.6, 5, 1.8, Color(hex: 0x1c7ed6), 0.9)
+                case .panda:
+                    circle(x - 4.2, y - 4.2, 2.2, Color(hex: 0x222222)); circle(x + 4.2, y - 4.2, 2.2, Color(hex: 0x222222))
+                    circle(x, y, 5.4, .white)
+                    ctx.fill(Path(ellipseIn: CGRect(x: x - 3.5, y: y - 1.9, width: 3, height: 3.8)), with: .color(Color(hex: 0x222222)))
+                    ctx.fill(Path(ellipseIn: CGRect(x: x + 0.5, y: y - 1.9, width: 3, height: 3.8)), with: .color(Color(hex: 0x222222)))
+                    circle(x, y + 2.4, 0.8, Color(hex: 0x222222))
+                case .robot:
+                    line([CGPoint(x: x, y: y - 5), CGPoint(x: x, y: y - 8)], Color(hex: 0xadb5bd), 1); circle(x, y - 8.5, 1.2, plate)
+                    rect(x - 5, y - 4.6, 10, 9, Color(hex: 0xced4da), 2.5); rect(x - 3.6, y - 2, 7.2, 3, Color(hex: 0x212529), 1.5)
+                    circle(x - 1.6, y - 0.5, 0.8, Color(hex: 0x4dd4ff)); circle(x + 1.6, y - 0.5, 0.8, Color(hex: 0x4dd4ff))
+                }
+            }
+            func torso(_ y: CGFloat, _ h: CGFloat) {
+                rect(20 - W / 2, y, W, h, shirt, 5)
+                if c == .panda { ctx.fill(Path(ellipseIn: CGRect(x: 20 - W / 2 + 2.5, y: y + 2, width: W - 5, height: h - 3)), with: .color(.white)) }
+                if c == .robot { rect(17, y + 3, 6, 4, Color(hex: 0x4dd4ff).opacity(0.7), 1) }
+            }
+            func legs(_ y: CGFloat) {
+                line([CGPoint(x: 17, y: y), CGPoint(x: 15, y: y + 7), CGPoint(x: 15, y: 42)], pants, 4)
+                line([CGPoint(x: 23, y: y), CGPoint(x: 25, y: y + 7), CGPoint(x: 25, y: 42)], pants, 4)
+            }
             let S = CGFloat(s)
             switch kind {
-            case .squat:
-                let d = 7 * S
-                barbell(14 + d)
-                head(20, 8 + d)
-                rect(14, 14 + d, 12, 12 - 2 * S, shirt, 5)
-                line([CGPoint(x: 16, y: 25 + d * 0.8), CGPoint(x: 11 - 2 * S, y: 33 + d * 0.3), CGPoint(x: 14, y: 42)], pants, 4)
-                line([CGPoint(x: 24, y: 25 + d * 0.8), CGPoint(x: 29 + 2 * S, y: 33 + d * 0.3), CGPoint(x: 26, y: 42)], pants, 4)
-            case .bench:
-                rect(4, 31, 32, 3, Color(white: 0.55), 1.5)
-                circle(9, 27, 4.2, skin)
-                rect(12, 25, 16, 6, shirt, 3)
-                rect(27, 26, 8, 4, pants, 2)
-                let y = 9 + 8 * S
-                line([CGPoint(x: 15, y: 25), CGPoint(x: 15, y: y)], skin, 3)
-                line([CGPoint(x: 24, y: 25), CGPoint(x: 24, y: y)], skin, 3)
-                barbell(y)
-            case .pull:
-                rect(2, 2, 36, 3, Color(white: 0.75), 1.5)
-                let up = -7 * S
-                line([CGPoint(x: 12, y: 4), CGPoint(x: 15, y: 16 + up)], skin, 3.2)
-                line([CGPoint(x: 28, y: 4), CGPoint(x: 25, y: 16 + up)], skin, 3.2)
-                head(20, 13 + up)
-                rect(14, 18 + up, 12, 13, shirt, 5)
-                line([CGPoint(x: 17, y: 30 + up), CGPoint(x: 16, y: 42 + up)], pants, 4)
-                line([CGPoint(x: 23, y: 30 + up), CGPoint(x: 24, y: 42 + up)], pants, 4)
+            case .squat:   // 徒手深蹲：手往前伸
+                let d = 8 * S
+                head(20, 10 + d)
+                torso(16 + d, 11 - 2 * S)
+                line([CGPoint(x: 15, y: 19 + d), CGPoint(x: 6, y: 20 + d)], arm, 3.2)
+                line([CGPoint(x: 25, y: 19 + d), CGPoint(x: 34, y: 20 + d)], arm, 3.2)
+                line([CGPoint(x: 16, y: 26 + d * 0.8), CGPoint(x: 10 - 2 * S, y: 33 + d * 0.3), CGPoint(x: 14, y: 42)], pants, 4)
+                line([CGPoint(x: 24, y: 26 + d * 0.8), CGPoint(x: 30 + 2 * S, y: 33 + d * 0.3), CGPoint(x: 26, y: 42)], pants, 4)
+            case .jack:    // 开合跳
+                let u = S
+                head(20, 10 - 2 * u)
+                torso(16 - 2 * u, 13)
+                line([CGPoint(x: 15, y: 18 - 2 * u), CGPoint(x: 9 - 3 * u, y: 24 - 14 * u), CGPoint(x: 10 - 2 * u, y: 30 - 24 * u)], arm, 3.2)
+                line([CGPoint(x: 25, y: 18 - 2 * u), CGPoint(x: 31 + 3 * u, y: 24 - 14 * u), CGPoint(x: 30 + 2 * u, y: 30 - 24 * u)], arm, 3.2)
+                line([CGPoint(x: 17, y: 28 - 2 * u), CGPoint(x: 14 - 6 * u, y: 42)], pants, 4)
+                line([CGPoint(x: 23, y: 28 - 2 * u), CGPoint(x: 26 + 6 * u, y: 42)], pants, 4)
+            case .flex:    // 秀肌肉：二头一鼓一鼓
+                head(20, 10)
+                torso(16, 13)
+                line([CGPoint(x: 15, y: 18), CGPoint(x: 8, y: 19), CGPoint(x: 8, y: 12 - S)], arm, 3.4)
+                line([CGPoint(x: 25, y: 18), CGPoint(x: 32, y: 19), CGPoint(x: 32, y: 12 - S)], arm, 3.4)
+                circle(8.6, 16 - S * 0.5, 2 + 1.4 * S, arm); circle(31.4, 16 - S * 0.5, 2 + 1.4 * S, arm)
+                legs(28)
+            case .wave:    // 挥手
+                let w = CGFloat(sin(t * 6))
+                head(20, 10)
+                torso(16, 13)
+                line([CGPoint(x: 15, y: 18), CGPoint(x: 12, y: 25), CGPoint(x: 13, y: 30)], arm, 3.2)
+                line([CGPoint(x: 25, y: 18), CGPoint(x: 30, y: 12), CGPoint(x: 30 + 4 * w, y: 5)], arm, 3.2)
+                legs(28)
+            case .jump:    // 跳一下
+                let j = -6 * S
+                ctx.fill(Path(ellipseIn: CGRect(x: 20 - (8 - 3 * S), y: 42, width: 2 * (8 - 3 * S), height: 2.4)), with: .color(.black.opacity(0.12)))
+                head(20, 10 + j)
+                torso(16 + j, 12)
+                line([CGPoint(x: 15, y: 18 + j), CGPoint(x: 9, y: 12 + j), CGPoint(x: 8, y: 6 + j)], arm, 3.2)
+                line([CGPoint(x: 25, y: 18 + j), CGPoint(x: 31, y: 12 + j), CGPoint(x: 32, y: 6 + j)], arm, 3.2)
+                line([CGPoint(x: 17, y: 27 + j), CGPoint(x: 14, y: 33 + j), CGPoint(x: 16, y: 39 + j)], pants, 4)
+                line([CGPoint(x: 23, y: 27 + j), CGPoint(x: 26, y: 33 + j), CGPoint(x: 24, y: 39 + j)], pants, 4)
             case .run:
                 let a = sin(t * 7), bob = CGFloat(abs(a)) * -1.5
                 head(21, 8 + bob)
-                ctx.drawLayer { l in
-                    l.translateBy(x: 20, y: 20); l.rotate(by: .degrees(10)); l.translateBy(x: -20, y: -20)
-                    l.fill(Path(roundedRect: CGRect(x: 14, y: 14 + bob, width: 12, height: 13), cornerRadius: 5), with: .color(shirt))
-                }
+                torso(14 + bob, 13)
                 let A = CGFloat(a)
-                line([CGPoint(x: 16, y: 17 + bob), CGPoint(x: 11 + 5 * A, y: 23 + bob)], skin, 3.2)
-                line([CGPoint(x: 25, y: 17 + bob), CGPoint(x: 29 - 5 * A, y: 22 + bob)], skin, 3.2)
+                line([CGPoint(x: 16, y: 17 + bob), CGPoint(x: 11 + 5 * A, y: 23 + bob)], arm, 3.2)
+                line([CGPoint(x: 25, y: 17 + bob), CGPoint(x: 29 - 5 * A, y: 22 + bob)], arm, 3.2)
                 line([CGPoint(x: 18, y: 27 + bob), CGPoint(x: 15 + 7 * A, y: 34), CGPoint(x: 12 + 9 * A, y: 41)], pants, 4)
                 line([CGPoint(x: 22, y: 27 + bob), CGPoint(x: 25 - 7 * A, y: 34), CGPoint(x: 28 - 9 * A, y: 41)], pants, 4)
-            case .press:
-                let y = 15 - 12 * S
-                head(20, 10)
-                line([CGPoint(x: 15, y: 18), CGPoint(x: 11, y: (18 + y) / 2), CGPoint(x: 12, y: y)], skin, 3)
-                line([CGPoint(x: 25, y: 18), CGPoint(x: 29, y: (18 + y) / 2), CGPoint(x: 28, y: y)], skin, 3)
-                barbell(y)
-                rect(14, 16, 12, 13, shirt, 5)
-                line([CGPoint(x: 17, y: 28), CGPoint(x: 16, y: 42)], pants, 4)
-                line([CGPoint(x: 23, y: 28), CGPoint(x: 24, y: 42)], pants, 4)
-            case .curl:
-                head(20, 9)
-                rect(14, 15, 12, 13, shirt, 5)
-                let ang = Double(S) * 2.2
-                for (sx, dir) in [(CGFloat(15), CGFloat(-1)), (CGFloat(25), CGFloat(1))] {
-                    let elbow = CGPoint(x: sx + dir * 1.5, y: 25)
-                    let hand = CGPoint(x: elbow.x + dir * CGFloat(sin(ang)) * 2, y: elbow.y + CGFloat(cos(ang)) * 8)
-                    line([CGPoint(x: sx, y: 17), elbow, hand], skin, 3)
-                    rect(hand.x - 4, hand.y - 1.5, 8, 3, plate, 1.5)
-                }
-                line([CGPoint(x: 17, y: 28), CGPoint(x: 16, y: 42)], pants, 4)
-                line([CGPoint(x: 23, y: 28), CGPoint(x: 24, y: 42)], pants, 4)
             }
         }
         .frame(width: size, height: size * 1.1)
+    }
+}
+
+// 「我 → 我的打卡小人」：6 个人物选一个
+struct LifterPicker: View {
+    @State private var mine = LifterChar.mine
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("在地球上，你打卡的健身房会站着你选的小人").font(.subheadline).foregroundStyle(.secondary)
+                TimelineView(.animation(minimumInterval: 1 / 30, paused: Motion.calm)) { tl in
+                    let t = tl.date.timeIntervalSinceReferenceDate
+                    VStack(spacing: 14) {
+                        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
+                            ForEach(Array(LifterChar.allCases.enumerated()), id: \.element) { i, c in
+                                let on = c == mine
+                                Button { Haptic.tap(); mine = c; LifterChar.mine = c } label: {
+                                    VStack(spacing: 4) {
+                                        Lifter(kind: LiftKind.all[i], char: c, t: t + Double(i) * 0.4, size: 62)
+                                            .frame(maxWidth: .infinity).frame(height: 84)
+                                            .background(RoundedRectangle(cornerRadius: 12).fill(RadialGradient(colors: [Color(hex: 0xeef0ff).opacity(0.8), .clear], center: .bottom, startRadius: 0, endRadius: 70)))
+                                        Text(c.name).font(.headline).foregroundStyle(.primary)
+                                        Text(c.desc).font(.caption2).foregroundStyle(.secondary)
+                                    }
+                                    .padding(.vertical, 10).padding(.horizontal, 6)
+                                    .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color(.secondarySystemGroupedBackground)))
+                                    .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(on ? Brand.pink : .clear, lineWidth: 2.5))
+                                    .overlay(alignment: .topTrailing) {
+                                        if on { Image(systemName: "checkmark.circle.fill").font(.title3).foregroundStyle(.white, Brand.pink).padding(6) }
+                                    }
+                                }
+                                .buttonStyle(PressScale())
+                            }
+                        }
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("\(mine.name)在地球上会根据你这次练的部位做动作").font(.footnote).foregroundStyle(Color(hex: 0xa5a8c2))
+                            HStack {
+                                ForEach(LiftKind.all, id: \.self) { k in
+                                    VStack(spacing: 2) {
+                                        Lifter(kind: k, char: mine, t: t, size: 44)
+                                        Text(k.name).font(.system(size: 10)).foregroundStyle(Color(hex: 0xc9cbe0))
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                }
+                            }
+                        }
+                        .padding(14)
+                        .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(LinearGradient(colors: [Color(hex: 0x1b1f3b), Color(hex: 0x05060f)], startPoint: .topLeading, endPoint: .bottomTrailing)))
+                    }
+                }
+            }
+            .padding(16)
+        }
+        .background(Color(.systemGroupedBackground))
+        .navigationTitle("我的打卡小人")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
@@ -319,7 +423,14 @@ struct GlobeScreen: View {
         VStack(spacing: 1) {
             if figure {
                 Text("\(g.count(range))").font(.system(size: 10, weight: .heavy)).foregroundStyle(Color(hex: 0xffd1e6))
-                Lifter(kind: .of(g.top.first), shirt: GymAvatar.palette(g.id)[0], t: t, size: 36)
+                // 站的是最近在这打卡的人自己选的小人，人多的地方站 2~3 个
+                let people = Array(g.recent.prefix(g.count(range) >= 6 ? 3 : g.count(range) >= 3 ? 2 : 1))
+                HStack(spacing: -8) {
+                    ForEach(Array(people.enumerated()), id: \.offset) { i, p in
+                        Lifter(kind: .of(p.parts.first ?? g.top.first), char: .from(p.a), t: t + Double(i) * 0.7, size: 34)
+                    }
+                    if people.isEmpty { Lifter(kind: .of(g.top.first), char: .boy, t: t, size: 34) }
+                }
             }
             GymAvatar(url: g.cover, seed: g.id, size: 30, ring: true)
             Text(g.name).font(.system(size: 10, weight: .bold)).lineLimit(1).frame(maxWidth: 90)
@@ -389,5 +500,27 @@ struct GlobeButton: View {
         .accessibilityLabel("打卡地球")
         .fullScreenCover(isPresented: $show) { GlobeScreen() }
         .task { await gs.refresh() }
+    }
+}
+
+// 「我」页面里的两行：我的打卡小人、公开到打卡地球
+struct MeLifterRow: View {
+    @ObservedObject private var gs = GymStore.shared
+    @State private var tick = 0
+    var body: some View {
+        NavigationLink {
+            LifterPicker().onDisappear { tick += 1 }
+        } label: {
+            HStack {
+                Label("我的打卡小人", systemImage: "figure.strengthtraining.traditional")
+                Spacer()
+                Lifter(kind: .squat, char: LifterChar.mine, t: 0.6, size: 24).id(tick)
+                Text(LifterChar.mine.name).foregroundStyle(.secondary)
+            }
+        }
+        Toggle(isOn: Binding(get: { gs.isPublic }, set: { gs.isPublic = $0 })) {
+            Label("公开到打卡地球", systemImage: "globe.asia.australia.fill")
+        }
+        .tint(.green)
     }
 }

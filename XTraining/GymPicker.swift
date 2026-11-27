@@ -249,6 +249,20 @@ struct AddGymSheet: View {
     @State private var camera = false
     @State private var saving = false
     @State private var error = ""
+    @State private var mode = 0                 // 0 现在的位置  1 输入地址  2 地图上选
+    @State private var address = ""
+    @State private var results: [MKMapItem] = []
+    @State private var picked: CLLocationCoordinate2D? = nil
+    @State private var pickedLabel = ""
+    @State private var mapCenter: CLLocationCoordinate2D? = nil
+
+    private var coord: CLLocationCoordinate2D? {
+        switch mode {
+        case 0: return gs.location?.coordinate
+        case 1: return picked
+        default: return mapCenter
+        }
+    }
 
     var body: some View {
         NavigationStack {
@@ -277,8 +291,45 @@ struct AddGymSheet: View {
                 Section {
                     TextField("健身房名字，比如 铁馆 · 国贸店", text: $name)
                     TextField("城市（可不填）", text: $city)
-                } footer: {
-                    Text(gs.location == nil ? "需要定位来确定健身房在地球上的位置（只用健身房的位置）。" : "位置用你现在所在的地方。照片是圆形显示的，后台会审核。")
+                }
+                Section {
+                    Picker("位置", selection: $mode) { Text("现在的位置").tag(0); Text("输入地址").tag(1); Text("地图上选").tag(2) }
+                        .pickerStyle(.segmented)
+                    switch mode {
+                    case 0:
+                        Text(gs.location == nil ? (gs.locDenied ? "没有定位权限，换成输入地址或地图上选。" : "正在定位…") : "用你现在所在的地方")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    case 1:
+                        HStack {
+                            TextField("地区或地址，比如 哈尔滨 中央大街", text: $address).submitLabel(.search).onSubmit { Task { await search() } }
+                            Button("查找") { Task { await search() } }.disabled(address.trimmingCharacters(in: .whitespaces).isEmpty)
+                        }
+                        ForEach(results, id: \.self) { m in
+                            Button {
+                                picked = m.placemark.coordinate
+                                pickedLabel = m.name ?? ""
+                                if city.isEmpty { city = m.placemark.locality ?? m.placemark.administrativeArea ?? "" }
+                                Haptic.tap()
+                            } label: {
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(m.name ?? "").foregroundStyle(.primary)
+                                        Text([m.placemark.administrativeArea, m.placemark.locality, m.placemark.subLocality].compactMap { $0 }.joined(separator: " ")).font(.caption).foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    if let p = picked, p.latitude == m.placemark.coordinate.latitude, p.longitude == m.placemark.coordinate.longitude {
+                                        Image(systemName: "checkmark").foregroundStyle(Brand.pink)
+                                    }
+                                }
+                            }
+                        }
+                        if let p = picked { GymMapPreview(coord: p).frame(height: 150).listRowInsets(EdgeInsets()) }
+                    default:
+                        GymMapPicker(center: $mapCenter, start: gs.location?.coordinate).frame(height: 260).listRowInsets(EdgeInsets())
+                        Text("拖动地图，把大头针对准健身房门口").font(.footnote).foregroundStyle(.secondary)
+                    }
+                } header: { Text("位置") } footer: {
+                    Text("只上传健身房的位置，大家可以在健身房主页看到并导航过去。照片是圆形显示的。")
                 }
                 if !error.isEmpty { Section { Text(error).foregroundStyle(.red).font(.footnote) } }
             }
@@ -289,7 +340,7 @@ struct AddGymSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     if saving { ProgressView() } else {
                         Button("添加") { Task { await save() } }.bold()
-                            .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || gs.location == nil)
+                            .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || coord == nil)
                     }
                 }
             }
@@ -304,17 +355,70 @@ struct AddGymSheet: View {
         }
     }
 
+    private func search() async {
+        let q = address.trimmingCharacters(in: .whitespaces)
+        guard !q.isEmpty else { return }
+        let r = MKLocalSearch.Request(); r.naturalLanguageQuery = q
+        results = Array(((try? await MKLocalSearch(request: r).start().mapItems) ?? []).prefix(6))
+        if let f = results.first { picked = f.placemark.coordinate; pickedLabel = f.name ?? ""; if city.isEmpty { city = f.placemark.locality ?? f.placemark.administrativeArea ?? "" } }
+        if results.isEmpty { error = "没找到这个地方，换个写法试试" } else { error = "" }
+    }
+
     private func save() async {
-        guard let l = gs.location else { return }
+        guard let c = coord else { return }
         saving = true; defer { saving = false }
-        let ref = GymRef(name: name.trimmingCharacters(in: .whitespaces), city: city.trimmingCharacters(in: .whitespaces), lat: l.coordinate.latitude, lon: l.coordinate.longitude)
+        if city.isEmpty, let p = try? await CLGeocoder().reverseGeocodeLocation(CLLocation(latitude: c.latitude, longitude: c.longitude)).first {
+            city = p.locality ?? p.administrativeArea ?? ""
+        }
+        let ref = GymRef(name: name.trimmingCharacters(in: .whitespaces), city: city.trimmingCharacters(in: .whitespaces), lat: c.latitude, lon: c.longitude)
         // 网不好也先记下来，保存训练时再补建
         let g = await gs.ensureID(ref) ?? ref
         if let image, !g.id.isEmpty { _ = await gs.upload(photo: image, gym: g.id) }
-        if g.id.isEmpty && image != nil { error = "网络不好，健身房先记在本机，照片等会儿在健身房主页再传。" }
         Haptic.success()
         done(g)
         dismiss()
+    }
+}
+
+// 小地图预览：一个圆形大头针
+struct GymMapPreview: View {
+    var coord: CLLocationCoordinate2D
+    var cover: String? = nil
+    var seed = "gym"
+    var body: some View {
+        Map(position: .constant(.region(MKCoordinateRegion(center: coord, latitudinalMeters: 700, longitudinalMeters: 700))), interactionModes: []) {
+            Annotation("", coordinate: coord, anchor: .bottom) { GymPinMark(cover: cover, seed: seed) }
+        }
+        .id("\(coord.latitude),\(coord.longitude)")
+    }
+}
+
+struct GymPinMark: View {
+    var cover: String? = nil
+    var seed = "gym"
+    var body: some View {
+        VStack(spacing: -2) {
+            GymAvatar(url: cover, seed: seed, size: 32).overlay(Circle().strokeBorder(.white, lineWidth: 3)).shadow(radius: 3)
+            Image(systemName: "triangle.fill").font(.system(size: 9)).foregroundStyle(.white).rotationEffect(.degrees(180))
+        }
+    }
+}
+
+// 地图上选位置：拖地图，中间的大头针就是健身房位置
+struct GymMapPicker: View {
+    @Binding var center: CLLocationCoordinate2D?
+    var start: CLLocationCoordinate2D?
+    @State private var pos: MapCameraPosition = .userLocation(fallback: .automatic)
+    var body: some View {
+        Map(position: $pos)
+            .onMapCameraChange(frequency: .onEnd) { ctx in center = ctx.region.center }
+            .overlay { GymPinMark().offset(y: -18).allowsHitTesting(false) }
+            .onAppear {
+                if let s = start ?? center {
+                    pos = .region(MKCoordinateRegion(center: s, latitudinalMeters: 800, longitudinalMeters: 800))
+                    center = s
+                }
+            }
     }
 }
 
