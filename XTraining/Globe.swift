@@ -309,7 +309,8 @@ struct GlobeScreen: View {
     @State private var selected: GymInfo? = nil
     @State private var open: GymInfo? = nil
 
-    private var gyms: [GymInfo] { (gs.world?.gyms ?? []).filter { range == 2 ? $0.checkins > 0 : $0.count(range) > 0 } }
+    // 所有健身房都上地球（后台新建、还没人打卡的也显示头像），有人打卡的才站小人
+    private var gyms: [GymInfo] { gs.world?.gyms ?? [] }
 
     var body: some View {
         NavigationStack {
@@ -325,7 +326,7 @@ struct GlobeScreen: View {
                     let proj = GlobeProj(lon0: lon0 - spin, lat0: lat0, r: r, c: center)
                     let t = now.timeIntervalSinceReferenceDate
                     let ranked = gyms.sorted { $0.count(range) > $1.count(range) }
-                    let figures = Set(ranked.prefix(zoom > 1.8 ? 16 : 8).map(\.id))
+                    let figures = Set(ranked.filter { $0.count(range) > 0 }.prefix(zoom > 1.8 ? 16 : 8).map(\.id))
                     let faces = Set(ranked.prefix(zoom > 1.8 ? 40 : 18).map(\.id))
                     ZStack {
                         GlobeBall(proj: proj, dots: gyms.filter { !faces.contains($0.id) }.map { ($0.lon, $0.lat) })
