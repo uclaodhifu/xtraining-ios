@@ -9,6 +9,8 @@ struct MeView: View {
     @AppStorage("brandTitle") private var brandTitle = ""
     @AppStorage("skin") private var skin = "ins"
     @State private var notesImport = false
+    @AppStorage(WU.key) private var unit = "kg"
+    @State private var askUnit: String? = nil
     @State private var importing = false
     @State private var message: String? = nil
     @State private var syncing = false
@@ -46,6 +48,22 @@ struct MeView: View {
                         .padding(.vertical, 6)
                 }
                 CloudSection()
+                Section {
+                    Picker("重量单位", selection: Binding(get: { unit }, set: { v in if v != unit { askUnit = v } })) {
+                        Text("公斤 kg").tag("kg")
+                        Text("磅 lb").tag("lb")
+                    }
+                    .pickerStyle(.segmented)
+                } header: { Text("重量单位") } footer: {
+                    Text("换单位会把以前所有训练的重量一起换算（比如 60kg → 132.3lb），换回来也一样。体重还是按公斤记。")
+                }
+                .confirmationDialog("把所有重量换成\(askUnit == "lb" ? "磅" : "公斤")？", isPresented: Binding(get: { askUnit != nil }, set: { if !$0 { askUnit = nil } }), titleVisibility: .visible) {
+                    Button("换算成\(askUnit == "lb" ? "磅 lb" : "公斤 kg")") {
+                        if let u = askUnit { store.switchUnit(toLb: u == "lb"); Haptic.success() }
+                        askUnit = nil
+                    }
+                    Button("取消", role: .cancel) { askUnit = nil }
+                } message: { Text("以前记的重量、挂片、目标重量都会一起换算。") }
                 Section {
                     Picker("记录训练的输入方式", selection: $inputMode) {
                         Text("数字手写").tag(0)

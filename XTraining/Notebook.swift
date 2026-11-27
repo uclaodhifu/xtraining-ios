@@ -36,7 +36,7 @@ enum Tone {
 func deltaText(_ a: Exercise, _ b: Exercise?) -> String {
     guard let b else { return "首次" }
     let d = a.best - b.best
-    if abs(d) > 0.001 { return (d > 0 ? "+" : "−") + fmtNum(abs(d)) + "kg" }
+    if abs(d) > 0.001 { return (d > 0 ? "+" : "−") + fmtNum(abs(d)) + WU.s }
     let ar = a.sets.filter { $0.weight == a.best }.map(\.reps).max() ?? 0
     let br = b.sets.filter { $0.weight == b.best }.map(\.reps).max() ?? 0
     let r = ar - br
@@ -49,7 +49,7 @@ func setDelta(_ cur: SetRow, _ prev: SetRow?) -> (String, Trend)? {
     guard let w = Double(cur.w), let r = Double(cur.r) else { return nil }
     guard let p = prev, let pw = Double(p.w) else { return ("首次", .up) }
     let pr = Double(p.r) ?? 0
-    if abs(w - pw) > 0.001 { return ((w > pw ? "+" : "−") + fmtNum(abs(w - pw)) + "kg", w > pw ? .up : .down) }
+    if abs(w - pw) > 0.001 { return ((w > pw ? "+" : "−") + fmtNum(abs(w - pw)) + WU.s, w > pw ? .up : .down) }
     if abs(r - pr) > 0.001 { return ((r > pr ? "+" : "−") + fmtNum(abs(r - pr)) + "次", r > pr ? .up : .down) }
     return ("持平", .same)
 }

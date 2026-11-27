@@ -159,7 +159,7 @@ func setsText(_ x: Exercise) -> String {
     }
     var groups: [(String, Int)] = []
     for s in x.sets {
-        let t = s.w.isEmpty ? (s.r.isEmpty ? "—" : "\(s.r)次") : (s.r.isEmpty ? "\(s.w)kg" : "\(s.w)kg × \(s.r)")
+        let t = s.w.isEmpty ? (s.r.isEmpty ? "—" : "\(s.r)次") : (s.r.isEmpty ? "\(s.w)\(WU.s)" : "\(s.w)\(WU.s) × \(s.r)")
         if let last = groups.last, last.0 == t { groups[groups.count - 1].1 += 1 } else { groups.append((t, 1)) }
     }
     return groups.map { $0.1 > 1 ? "\($0.0) ×\($0.1)组" : $0.0 }.joined(separator: " · ")
@@ -175,4 +175,30 @@ enum Haptic {
         let g = UIImpactFeedbackGenerator(style: style); g.prepare(); g.impactOccurred()
     }
     static func success() { UINotificationFeedbackGenerator().notificationOccurred(.success) }
+}
+
+// 重量单位：公斤 / 磅（我 → 重量单位）。记录里存的就是当前单位的数字，换单位时整体换算一次
+enum WU {
+    static let key = "xt.unit"
+    static var lb: Bool { UserDefaults.standard.string(forKey: key) == "lb" }
+    static var s: String { lb ? "lb" : "kg" }
+    static var plates: [Double] { lb ? [45, 35, 25, 10, 5, 2.5] : [20, 15, 10, 5, 2.5] }
+    static let perKg = 2.20462262
+    // 换算一个数：磅保留到 0.1（60kg → 132.3lb），公斤保留到 0.1，正好的整数不带小数
+    static func conv(_ v: Double, toLb: Bool) -> Double {
+        let x = toLb ? v * perKg : v / perKg
+        let r = (x * 10).rounded() / 10
+        return abs(r - r.rounded()) < 0.051 ? r.rounded() : r
+    }
+    static func conv(_ s: String, toLb: Bool) -> String {
+        guard let v = Double(s), v > 0 else { return s }
+        return fmtNum(conv(v, toLb: toLb))
+    }
+    // 挂片：20kg ↔ 45lb 这样一一对应
+    static func plate(_ v: Double, toLb: Bool) -> Double {
+        let kg: [Double] = [20, 15, 10, 5, 2.5], lb: [Double] = [45, 35, 25, 10, 5, 2.5]
+        if toLb, let i = kg.firstIndex(of: v) { return lb[i] }
+        if !toLb, let i = lb.firstIndex(of: v) { return i < kg.count ? kg[i] : 2.5 }
+        return conv(v, toLb: toLb)
+    }
 }

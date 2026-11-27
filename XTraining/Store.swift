@@ -51,6 +51,28 @@ final class Store: ObservableObject {
         if let i = workouts.firstIndex(where: { $0.id == w.id }) { workouts[i] = w } else { workouts.append(w) }
     }
     // 把一个动作改到某个部位：以后都按这个算，以前练过这个动作的训练也补上这个部位
+    // 换重量单位：所有训练的重量、挂片设置、目标重量、锚点一起换算
+    func switchUnit(toLb: Bool) {
+        guard toLb != WU.lb else { return }
+        let now = Date().timeIntervalSince1970
+        workouts = workouts.map { w in
+            var w = w, changed = false
+            for i in w.exercises.indices { for k in w.exercises[i].sets.indices {
+                let o = w.exercises[i].sets[k].w, n = WU.conv(o, toLb: toLb)
+                if n != o { w.exercises[i].sets[k].w = n; changed = true }
+            } }
+            if changed { w.editedAt = now }
+            return w
+        }
+        plateCfg = plateCfg.mapValues { c in var c = c; c.kg = WU.plate(c.kg, toLb: toLb); c.base = WU.conv(c.base, toLb: toLb); return c }
+        let ud = UserDefaults.standard
+        if let d = ud.data(forKey: "xt.targets"), let t = try? JSONDecoder().decode([String: Double].self, from: d),
+           let nd = try? JSONEncoder().encode(t.mapValues { WU.conv($0, toLb: toLb) }) { ud.set(nd, forKey: "xt.targets") }
+        AnchorStore.shared.anchors = AnchorStore.shared.anchors.map { a in var a = a; a.kg = WU.conv(a.kg, toLb: toLb); return a }
+        ud.set(toLb ? "lb" : "kg", forKey: WU.key)
+        objectWillChange.send()
+    }
+
     func setPart(_ name: String, _ p: String) {
         Parts.setCustom(name, p)
         var ws = workouts

@@ -228,7 +228,7 @@ struct HomeView: View {
                         Text(n).font(.subheadline.bold())
                         Spacer()
                         if let s = store.lastSet(n) {
-                            Text("上次 \(s.w.isEmpty ? "0" : s.w)kg × \(s.r.isEmpty ? "0" : s.r)").font(.caption).foregroundStyle(.secondary)
+                            Text("上次 \(s.w.isEmpty ? "0" : s.w)\(WU.s) × \(s.r.isEmpty ? "0" : s.r)").font(.caption).foregroundStyle(.secondary)
                         } else {
                             Text("还没练过").font(.caption).foregroundStyle(.secondary)
                         }

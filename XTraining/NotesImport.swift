@@ -4,12 +4,12 @@ import JavaScriptCore
 // 从 iPhone 备忘录粘贴训练记录：解析（NotesParser.js）+ 动作名自动纠错 + 预览后导入
 enum NotesParser {
     struct Fix: Hashable { let from: String; let to: String }
-    struct Result { var workouts: [Workout]; var weights: [(String, Double)]; var fixes: [Fix] }
+    struct Result { var workouts: [Workout]; var weights: [(String, Double)]; var fixes: [Fix]; var orig: [UUID: String] = [:] }
 
-    static func parse(_ text: String, known: [String], year: Int = 0) -> Result? {
+    static func parse(_ text: String, known: [String], year: Int = 0, unit: Int = 0) -> Result? {
         guard let ctx = JSContext() else { return nil }
         ctx.evaluateScript(notesParserJS)
-        guard let out = ctx.objectForKeyedSubscript("xtParse")?.call(withArguments: [text, year])?.toString(),
+        guard let out = ctx.objectForKeyedSubscript("xtParse")?.call(withArguments: [text, year, unit, WU.lb])?.toString(),
               let data = out.data(using: .utf8),
               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
         let entries = obj["entries"] as? [Any] ?? []
@@ -23,7 +23,7 @@ enum NotesParser {
         }
         // 体重写成动作的，交给体重记录
         ws = ws.map { w in var w = w; w.exercises.removeAll { ["体重", "称重", "晨重"].contains($0.name) }; return w }
-        var fixes: [Fix] = []
+        var fixes: [Fix] = [], orig: [UUID: String] = [:]
         let set = Set(known)
         for i in ws.indices {
             for j in ws[i].exercises.indices {
@@ -31,12 +31,13 @@ enum NotesParser {
                 let c = correct(n, known: known, set: set)
                 if c != n {
                     ws[i].exercises[j].name = c
+                    orig[ws[i].exercises[j].id] = n
                     if !fixes.contains(Fix(from: n, to: c)) { fixes.append(Fix(from: n, to: c)) }
                     if let p = Parts.of(c), !ws[i].parts.contains(p) { ws[i].parts.append(p) }
                 }
             }
         }
-        return Result(workouts: ws.filter { !$0.exercises.isEmpty || !$0.note.isEmpty }, weights: weights, fixes: fixes)
+        return Result(workouts: ws.filter { !$0.exercises.isEmpty || !$0.note.isEmpty }, weights: weights, fixes: fixes, orig: orig)
     }
 
     // 常见错别字（拼音输入法打错的）
@@ -53,10 +54,21 @@ enum NotesParser {
         if set.contains(n) { return n }
         for (a, b) in typos where n.contains(a) { n = n.replacingOccurrences(of: a, with: b) }
         if set.contains(n) { return n }
-        // 跟已知动作只差一个字：认为是打错了
+        // 跟已知动作只差一个字、而且读音一样（拼音输入法选错字）才改。
+        // 读音不一样的不改：上斜/下斜、哑铃/杠铃、坐姿/站姿 这类是不同动作
         guard n.count >= 3 else { return n }
-        let close = known.filter { abs($0.count - n.count) <= 1 && dist(Array($0), Array(n)) == 1 }
+        let py = pinyin(n)
+        let close = known.filter { $0.count == n.count && dist(Array($0), Array(n)) == 1 && pinyin($0) == py }
         return close.count == 1 ? close[0] : n
+    }
+
+    private static var pyCache: [String: String] = [:]
+    static func pinyin(_ s: String) -> String {
+        if let p = pyCache[s] { return p }
+        let p = (s.applyingTransform(.toLatin, reverse: false) ?? s)
+            .applyingTransform(.stripDiacritics, reverse: false)?.replacingOccurrences(of: " ", with: "").lowercased() ?? s
+        pyCache[s] = p
+        return p
     }
 
     private static func dist(_ a: [Character], _ b: [Character]) -> Int {
@@ -79,6 +91,8 @@ struct NotesImportView: View {
     @State private var result: NotesParser.Result?
     @State private var done = ""
     @State private var year = 0   // 0 = 自动（按今天往前推）
+    @State private var unit = 0   // 没写单位的重量：0 自动 1 公斤 2 磅
+    @State private var kept = Set<NotesParser.Fix>()   // 点掉的纠错：保留原来的名字
     private var thisYear: Int { Calendar.current.component(.year, from: Date()) }
 
     private var known: [String] {
@@ -108,21 +122,35 @@ struct NotesImportView: View {
                         ForEach((2015...thisYear).reversed(), id: \.self) { y in Text(verbatim: "\(y)年").tag(y) }
                     }
                     .onChange(of: year) { _, _ in if result != nil { reparse() } }
+                    // 有人用磅记：写了 lb/磅 的自动换成公斤；没写单位的按这里选的算
+                    Picker("单位", selection: $unit) {
+                        Text("自动").tag(0); Text("公斤 kg").tag(1); Text("磅 lb").tag(2)
+                    }
+                    .onChange(of: unit) { _, _ in if result != nil { reparse() } }
                 } footer: {
-                    Text("年份：只写了月日的记录按选的年份导入；选「自动」就按今天往前推（比今天晚的日期算去年）。写了年份的（如 2024年3月5日）照写的来。\n支持：11月20日 胸+肩 / 卧推 60kg 8 8 6 / 卧推 60×8 65×6 / 深蹲 100×5×5 / 侧平举 8kg 3组×15 / 跑步 30分钟 / 体重 90.5。打错的动作名会自动改正。")
+                    Text("单位：写了 lb、磅 或 kg、公斤 的都会自动换算成你在「我」里设的单位（现在是 \(WU.lb ? "磅" : "公斤")，135磅 = 61.2kg）；没写单位的数字按这里选的算，「自动」就看整段里写磅多还是写公斤多。\n年份：只写了月日的记录按选的年份导入；选「自动」就按今天往前推（比今天晚的日期算去年）。写了年份的（如 2024年3月5日）照写的来。\n支持：11月20日 胸+肩 / 卧推 60kg 8 8 6 / 卧推 60×8 65×6 / 深蹲 100×5×5 / 侧平举 8kg 3组×15 / 跑步 30分钟 / 体重 90.5。读音一样的错别字会自动改正（如 握推 → 卧推），改错了点一下那行就不改。")
                 }
 
                 if let r = result {
                     if !r.fixes.isEmpty {
-                        Section("自动纠错 \(r.fixes.count) 处") {
+                        Section {
                             ForEach(r.fixes, id: \.self) { f in
-                                HStack {
-                                    Text(f.from).strikethrough().foregroundStyle(.secondary)
-                                    Image(systemName: "arrow.right").font(.caption).foregroundStyle(.secondary)
-                                    Text(f.to).bold().foregroundStyle(Color(hex: 0xe8590c))
+                                let keep = kept.contains(f)
+                                Button {
+                                    Haptic.tap()
+                                    if keep { kept.remove(f) } else { kept.insert(f) }
+                                } label: {
+                                    HStack {
+                                        Text(f.from).strikethrough(!keep).foregroundStyle(keep ? Color.primary : .secondary).bold(keep)
+                                        Image(systemName: "arrow.right").font(.caption).foregroundStyle(.secondary)
+                                        Text(f.to).strikethrough(keep).bold(!keep).foregroundStyle(keep ? Color.secondary : Color(hex: 0xe8590c))
+                                        Spacer()
+                                        Text(keep ? "不改" : "改").font(.caption).foregroundStyle(.secondary)
+                                    }
                                 }
+                                .buttonStyle(.plain)
                             }
-                        }
+                        } header: { Text("自动纠错 \(r.fixes.count) 处") } footer: { Text("点一下就保留原来的名字") }
                     }
                     Section("识别到 \(r.workouts.count) 次训练" + (r.weights.isEmpty ? "" : "、\(r.weights.count) 条体重")) {
                         if r.workouts.isEmpty { Text("没认出训练记录，检查一下格式").foregroundStyle(.secondary) }
@@ -159,10 +187,16 @@ struct NotesImportView: View {
         }
     }
 
-    private func reparse() { result = NotesParser.parse(text, known: known, year: year) }
+    private func reparse() { result = NotesParser.parse(text, known: known, year: year, unit: unit) }
 
     private func doImport() {
-        guard let r = result else { return }
+        guard var r = result else { return }
+        // 点掉的纠错改回原来的名字
+        for i in r.workouts.indices { for j in r.workouts[i].exercises.indices {
+            let x = r.workouts[i].exercises[j]
+            if let o = r.orig[x.id], kept.contains(NotesParser.Fix(from: o, to: x.name)) { r.workouts[i].exercises[j].name = o }
+        } }
+        kept = []
         let entries = r.workouts.compactMap { w -> Any? in
             guard let d = try? JSONEncoder().encode(w) else { return nil }
             return try? JSONSerialization.jsonObject(with: d)

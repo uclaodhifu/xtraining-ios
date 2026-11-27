@@ -207,7 +207,7 @@ struct ExerciseDetail: View {
                     } else {
                         let best = mine.map { $0.1.best }.max() ?? 0
                         HStack {
-                            StatTile(value: fmtNum(best) + "kg", label: "最好成绩")
+                            StatTile(value: fmtNum(best) + WU.s, label: "最好成绩")
                             StatTile(value: "\(mine.count)", label: "练过次数")
                             StatTile(value: slashDate(mine[0].0), label: "上次")
                         }

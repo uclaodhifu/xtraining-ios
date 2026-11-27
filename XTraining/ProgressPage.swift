@@ -197,10 +197,10 @@ struct PartProgress: View {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(n).font(.subheadline.bold())
-                            Text("\(hist.count) 次 · 最佳 \(fmtNum(pr))kg").font(.caption).foregroundStyle(.secondary)
+                            Text("\(hist.count) 次 · 最佳 \(fmtNum(pr))\(WU.s)").font(.caption).foregroundStyle(.secondary)
                         }
                         Spacer()
-                        Text("\(fmtNum(first.1)) → \(fmtNum(last.1))kg").font(.caption).monospacedDigit()
+                        Text("\(fmtNum(first.1)) → \(fmtNum(last.1))\(WU.s)").font(.caption).monospacedDigit()
                         Text(pct >= 0 ? "+\(Int(pct.rounded()))%" : "\(Int(pct.rounded()))%")
                             .font(.caption.bold())
                             .foregroundStyle(pct > 0 ? Color.green : pct < 0 ? Color.orange : Color.secondary)
@@ -356,8 +356,8 @@ struct LiftChart: View {
                 Divider()
                 HStack {
                     StatTile(value: target == nil ? "—" : "\(hit)/\(shown.count)", label: "最近达标")
-                    StatTile(value: fmtNum(bestEver) + "kg", label: "最好一次")
-                    StatTile(value: target.map { t in latest.best >= t ? "已达标" : "差" + fmtNum(t - latest.best) + "kg" } ?? "—", label: "离目标")
+                    StatTile(value: fmtNum(bestEver) + WU.s, label: "最好一次")
+                    StatTile(value: target.map { t in latest.best >= t ? "已达标" : "差" + fmtNum(t - latest.best) + WU.s } ?? "—", label: "离目标")
                 }
             } else {
                 Text("还没有“\(ex)”的重量记录").font(.subheadline).foregroundStyle(.secondary).padding(.vertical, 20)
@@ -375,13 +375,13 @@ struct LiftChart: View {
     private func kg(_ v: Double) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 1) {
             Text(fmtNum(v)).font(.system(size: 30, weight: .bold, design: .rounded))
-            Text("kg").font(.subheadline.bold())
+            Text(WU.s).font(.subheadline.bold())
         }
     }
     private func verdict(_ v: Double, _ target: Double?, _ who: String) -> String {
-        guard let target else { return "\(who) \(fmtNum(v))kg · 设个目标重量，每次都跟它比" }
+        guard let target else { return "\(who) \(fmtNum(v))\(WU.s) · 设个目标重量，每次都跟它比" }
         if v >= target { return v > target ? "\(who)超过目标 \(fmtNum(v - target))kg，可以加目标了 💪" : "\(who)刚好达到目标 ✓" }
-        return "\(who)离目标还差 \(fmtNum(target - v))kg"
+        return "\(who)离目标还差 \(fmtNum(target - v))\(WU.s)"
     }
     private func current() -> [String] {
         if let c = store.liftCharts[part], !c.isEmpty { return c }
