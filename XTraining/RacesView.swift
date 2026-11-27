@@ -17,6 +17,7 @@ struct Race: Codable, Identifiable, Hashable {
     var divs: String?
     var desc: String?
     var dy: String?
+    var dyHome: String?     // 赛事方抖音主页（events.json 里可以按场写）
     var url: String?
     var region: String?
     var time: String?
@@ -27,6 +28,23 @@ struct Race: Codable, Identifiable, Hashable {
     var resNote: String?
 
     var isWorld: Bool { region == "world" }
+    // 赛事方抖音主页：先看这场自己写的，再按主办方找
+    static let orgDouyin: [String: String] = [
+        "寰际": "https://v.douyin.com/scMabjewGuw/",
+    ]
+    var douyinHome: String? { dyHome ?? Race.orgDouyin[org] ?? Race.orgDouyin.first { name.contains($0.key) }?.value }
+    // 「赛事主页」：国内赛有赛事方抖音主页就跳主页，没有用官网；全球赛用官网
+    var pageURL: String? { isWorld ? url : (douyinHome ?? url) }
+    // 抖音观看：有赛事方主页直接打开主页（装了抖音会跳 App），没有就去抖音搜比赛名
+    static func openDouyin(_ e: Race, _ open: OpenURLAction) {
+        if let h = e.douyinHome, let u = URL(string: h) { open(u); return }
+        let q = (e.dy ?? e.name).addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        if let app = URL(string: "snssdk1128://search?keyword=\(q)"), UIApplication.shared.canOpenURL(app) {
+            open(app)
+        } else if let web = URL(string: "https://www.douyin.com/search/\(q)") {
+            open(web)
+        }
+    }
     // 开赛时刻：国内按北京时间；国外按当地时间 + 时区
     var startAt: Date? {
         guard let d = date else { return nil }
@@ -422,15 +440,7 @@ struct RaceCard: View {
         } message: { Text("打开 X Training 的通知，追的比赛才能按时提醒你。") }
     }
 
-    private func douyin() {
-        let kw = e.dy ?? e.name
-        let q = kw.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        if let app = URL(string: "snssdk1128://search?keyword=\(q)"), UIApplication.shared.canOpenURL(app) {
-            openURL(app)
-        } else if let web = URL(string: "https://www.douyin.com/search/\(q)") {
-            openURL(web)
-        }
-    }
+    private func douyin() { Race.openDouyin(e, openURL) }
 }
 
 // 首页顶部：36 小时内开赛的提醒条
