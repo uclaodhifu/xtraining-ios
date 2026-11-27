@@ -5,6 +5,7 @@ import PhotosUI
 import UniformTypeIdentifiers
 
 // 录动作算阻力曲线：录 5–8 秒视频，手机本地分析，不联网
+// 视频第一帧 = 动作起始位置（开始）。
 // 原理：手移动一段距离时，杠铃片（或铁块）被抬高多少。片子升得多 = 手上重；升得少 = 手上轻。
 // 哑铃杠铃（重量就在手上）：手往上走的那部分才在对抗重量，所以按手的移动方向算。
 // 拍不到片子：看手在哪个位置变慢（最慢的地方最吃力）。
@@ -200,17 +201,14 @@ enum MotionAnalyzer {
         let lo = pct(s, 0.05), hi = pct(s, 0.95)
         guard hi - lo > diag * 0.04 else { throw MotionError.tooSmall }
 
-        // 重量最低的一头算“开始”
-        var weightY: [CGFloat] = hand.map(\.y)
+        // 视频第一帧就是动作的起始位置：第一帧手在的那一头算“开始”
         var plate: [CGPoint] = []
         if method == .plate {
             guard plates.compactMap({ $0 }).count >= max(10, n / 2) else { throw MotionError.noPlate }
             plate = smooth(fill(plates))
-            weightY = plate.map(\.y)
         }
-        let ms = s.reduce(0, +) / CGFloat(s.count), mw = weightY.reduce(0, +) / CGFloat(weightY.count)
-        let cor = zip(s, weightY).reduce(CGFloat(0)) { $0 + ($1.0 - ms) * ($1.1 - mw) }
-        if cor < 0 { s = s.map { -$0 } }
+        let s0 = s.prefix(3).reduce(0, +) / CGFloat(min(3, s.count))
+        if s0 - lo > hi - s0 { s = s.map { -$0 } }
         let lo2 = pct(s, 0.05), hi2 = pct(s, 0.95)
         let prog = s.map { min(1, max(0, ($0 - lo2) / max(1, hi2 - lo2))) }
 
@@ -448,7 +446,7 @@ struct MotionCurveSheet: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 Text("怎么录更准").font(.headline)
-                Text("· 手机放稳，别手拿着晃\n· 尽量从侧面拍，手和杠铃片（或铁块）都在画面里\n· 每次做满全程，别只做半程").font(.subheadline).foregroundStyle(.secondary)
+                Text("· 从动作的起始位置开始录，第一帧就算动作开始\n· 手机放稳，别手拿着晃\n· 尽量从侧面拍，手和杠铃片（或铁块）都在画面里\n· 每次做满全程，别只做半程").font(.subheadline).foregroundStyle(.secondary)
             }
             .card()
 
