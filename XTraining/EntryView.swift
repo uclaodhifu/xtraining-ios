@@ -259,6 +259,9 @@ struct EntryView: View {
                 } else {
                     TextField("动作名", text: x.name).font(.subheadline.bold())
                 }
+                if x.wrappedValue.isRP {
+                    Text("（组内暂停）").font(.caption.bold()).foregroundStyle(.orange).fixedSize()
+                }
                 if !name.isEmpty && !x.wrappedValue.isCardio || Parts.custom[name] != nil {
                     // 这个动作算哪个部位：点一下改（比如哑铃飞鸟改成肩）
                     Menu {

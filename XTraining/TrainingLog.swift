@@ -142,6 +142,9 @@ struct TrainingLogTable: View {
                                 Text("\(ri + 1)").font(.caption2.bold()).foregroundStyle(Parts.color(part))
                                 if let ink = inkName(n, part: part, in: cols) { InkView(id: ink, height: 16) }
                                 else { Text(n).font(.caption2.bold()).lineLimit(2).minimumScaleFactor(0.6).multilineTextAlignment(.center) }
+                                if cols.contains(where: { $0.exercises.contains { $0.name == n && $0.isRP } }) {
+                                    Text("（组内暂停）").font(.system(size: 8, weight: .bold)).foregroundStyle(.orange).lineLimit(1).minimumScaleFactor(0.6)
+                                }
                             }
                             .frame(width: nameW, height: rowH)
                             .contentShape(Rectangle())

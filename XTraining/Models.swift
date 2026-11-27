@@ -128,7 +128,13 @@ struct SetRow: Codable, Identifiable, Hashable {
     }
     var platesText: String? { p.map { $0.map(String.init).joined(separator: "/") } }
     var weight: Double { Double(w) ?? 0 }
-    var reps: Double { Double(r) ?? 0 }
+    // 组内暂停（rest-pause）写成 10+5：算一组，次数按总数 15 算
+    var reps: Double { SetRow.total(r) ?? 0 }
+    var isRP: Bool { r.contains("+") }
+    static func total(_ s: String) -> Double? {
+        let parts = s.split(separator: "+", omittingEmptySubsequences: true).compactMap { Double($0) }
+        return parts.isEmpty ? nil : parts.reduce(0, +)
+    }
 }
 
 struct Exercise: Codable, Identifiable, Hashable {
@@ -150,6 +156,7 @@ struct Exercise: Codable, Identifiable, Hashable {
         if let inkName { try c.encode(inkName, forKey: .inkName) }
     }
     var isCardio: Bool { Parts.of(name) == "有氧" }
+    var isRP: Bool { sets.contains(where: \.isRP) }   // 有一组用了 10+5，名字后面标（组内暂停）
     var best: Double { sets.map(\.weight).max() ?? 0 }
 }
 

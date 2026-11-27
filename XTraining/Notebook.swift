@@ -46,9 +46,9 @@ func deltaText(_ a: Exercise, _ b: Exercise?) -> String {
 
 // 一组和上次同一组比
 func setDelta(_ cur: SetRow, _ prev: SetRow?) -> (String, Trend)? {
-    guard let w = Double(cur.w), let r = Double(cur.r) else { return nil }
+    guard let w = Double(cur.w), let r = SetRow.total(cur.r) else { return nil }
     guard let p = prev, let pw = Double(p.w) else { return ("首次", .up) }
-    let pr = Double(p.r) ?? 0
+    let pr = SetRow.total(p.r) ?? 0
     if abs(w - pw) > 0.001 { return ((w > pw ? "+" : "−") + fmtNum(abs(w - pw)) + WU.s, w > pw ? .up : .down) }
     if abs(r - pr) > 0.001 { return ((r > pr ? "+" : "−") + fmtNum(abs(r - pr)) + "次", r > pr ? .up : .down) }
     return ("持平", .same)

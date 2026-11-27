@@ -107,7 +107,25 @@ const lb2kg = (v) => String(Math.round(parseFloat(v) * 0.45359237 * 10) / 10);
 const bwKg = (v, u) => { u = (u || "").toLowerCase(); if (!u && DEF_LB) u = "lb"; return u === "斤" ? num(v / 2) : /lb|磅|pound/.test(u) ? lb2kg(v) : num(v); };
 
 // 解析一段“组”的写法，返回 { sets, min }（min 是有氧的分钟数）
+// 组内暂停：“10+5” 先按总数 15 去解析，解析完再把这组的次数换回 “10+5”（算一组）
 function parseSets(raw) {
+  const rp = [];
+  const t = String(raw).replace(/(\d{1,3})((?:\s*\+\s*\d{1,3})+)(?!\s*(?:kg|斤|lb|\.\d|×\s*\d+\s*\+))/gi, (m0, a) => {
+    const parts = m0.split("+").map((x) => parseInt(x, 10));
+    const sum = parts.reduce((x, y) => x + y, 0);
+    rp.push({ sum: String(sum), txt: parts.join("+") });
+    return String(sum);
+  });
+  const r = parseSets0(t);
+  if (rp.length && r && r.sets) {
+    let k = 0;
+    for (const set of r.sets) {
+      if (k < rp.length && String(set.r) === rp[k].sum) { set.r = rp[k].txt; k++; }
+    }
+  }
+  return r;
+}
+function parseSets0(raw) {
   let t = ` ${raw} `.replace(/第\s*\d+\s*组/g, " ").replace(/每组|每边|单边|单手|递减|力竭|热身|正式组?|RPE\s*\d+(\.\d+)?/gi, " ").replace(/\s+/g, " ");
   // 没写单位的重量按导入时选的单位算（选了“磅”就换成公斤）
   const kgOf = wOf;

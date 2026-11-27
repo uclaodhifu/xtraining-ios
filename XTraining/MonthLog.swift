@@ -126,8 +126,13 @@ struct MonthLogTable: View {
                         ForEach(rows.indices, id: \.self) { i in
                             HStack(alignment: .top, spacing: 4) {
                                 Text("\(i + 1)").font(.caption2.bold()).foregroundStyle(Parts.color(part))
-                                if let ink = inkName(rows[i], part: part, in: hist) { InkView(id: ink, height: 22) }
-                                else { Text(rows[i]).font(.caption.bold()).lineLimit(2).minimumScaleFactor(0.7) }
+                                VStack(alignment: .leading, spacing: 1) {
+                                    if let ink = inkName(rows[i], part: part, in: hist) { InkView(id: ink, height: 22) }
+                                    else { Text(rows[i]).font(.caption.bold()).lineLimit(2).minimumScaleFactor(0.7) }
+                                    if inMonth.contains(where: { $0.exercises.contains { $0.name == rows[i] && $0.isRP } }) {
+                                        Text("（组内暂停）").font(.system(size: 9, weight: .bold)).foregroundStyle(.orange).lineLimit(1)
+                                    }
+                                }
                             }
                             .padding(.top, 6)
                             .frame(width: nameW, height: heights[i], alignment: .topLeading)
