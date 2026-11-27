@@ -13,18 +13,18 @@ enum CurveKind: String, Codable {
     case ascending, descending, bell, flat
     var title: String {
         switch self {
-        case .ascending: return "越往后越重"
-        case .descending: return "越往后越轻"
-        case .bell: return "中间最重"
-        case .flat: return "比较均匀"
+        case .ascending: return "上升阻力"
+        case .descending: return "下降阻力"
+        case .bell: return "钟形阻力"
+        case .flat: return "平稳阻力"
         }
     }
     var type: String {
         switch self {
-        case .ascending: return "缩短位型"
-        case .descending: return "拉长位型"
-        case .bell: return "中段型"
-        case .flat: return "均匀型"
+        case .ascending: return "越往后越重 · 缩短位最吃力"
+        case .descending: return "越往后越轻 · 拉长位最吃力"
+        case .bell: return "中间最重 · 中段最吃力"
+        case .flat: return "从头到尾差不多"
         }
     }
     var zone: Overload.Zone {
@@ -543,9 +543,9 @@ struct MotionCurveSheet: View {
                     Text("越往上越吃力").font(.caption).foregroundStyle(.secondary)
                 }
                 CurveChart(values: vals).frame(height: 190)
-                HStack(spacing: 8) {
-                    Text(kind.title).font(.footnote.bold()).padding(.horizontal, 11).padding(.vertical, 6).background(Color.primary, in: Capsule()).foregroundStyle(Color(.systemBackground))
-                    Text(kind.type).font(.footnote).padding(.horizontal, 11).padding(.vertical, 6).background(Color(.tertiarySystemFill), in: Capsule())
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(kind.title).font(.title2.bold()).foregroundStyle(Color(hex: 0xe8590c))
+                    Text(kind.type).font(.footnote).foregroundStyle(.secondary)
                 }
                 if let p = r.peakPct, let l = r.lowPct, r.method == .plate {
                     Text("最吃力时约是片子重量的 \(p)%，最轻时约 \(l)%（估算，片子离镜头远近会有偏差）").font(.footnote).foregroundStyle(.secondary)
