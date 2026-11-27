@@ -57,7 +57,18 @@ struct GymWorld: Codable {
 }
 
 enum GymAPI {
-    static let base = "https://xt-bugs.vercel.app/api/"
+    // 先走自己的域名（国内能连），连不上再试 vercel.app
+    static let bases = ["https://api.linshan.cloud/api/", "https://xt-bugs.vercel.app/api/"]
+    static let base = bases[0]
+    // 依次试每个地址，返回第一个 200 的结果
+    private static func send(_ r: URLRequest) async -> Data? {
+        for b in bases {
+            var x = r
+            x.url = URL(string: r.url!.absoluteString.replacingOccurrences(of: base, with: b))
+            if let (d, resp) = try? await URLSession.shared.data(for: x), (resp as? HTTPURLResponse)?.statusCode == 200 { return d }
+        }
+        return nil
+    }
     private static func req(_ path: String, method: String = "GET", json: Any? = nil, body: Data? = nil, type: String? = nil, timeout: Double = 15) -> URLRequest {
         var r = URLRequest(url: URL(string: base + path)!, timeoutInterval: timeout)
         r.httpMethod = method
@@ -67,12 +78,12 @@ enum GymAPI {
         return r
     }
     private static func call(_ r: URLRequest) async -> [String: Any]? {
-        guard let (d, resp) = try? await URLSession.shared.data(for: r), (resp as? HTTPURLResponse)?.statusCode == 200,
+        guard let d = await send(r),
               let j = try? JSONSerialization.jsonObject(with: d) as? [String: Any], j["ok"] as? Bool == true else { return nil }
         return j
     }
     static func world() async -> (GymWorld, Data)? {
-        guard let (d, resp) = try? await URLSession.shared.data(for: req("gyms", timeout: 20)), (resp as? HTTPURLResponse)?.statusCode == 200,
+        guard let d = await send(req("gyms", timeout: 20)),
               let w = try? JSONDecoder().decode(GymWorld.self, from: d) else { return nil }
         return (w, d)
     }
