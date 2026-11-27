@@ -796,7 +796,7 @@ struct NumField: UIViewRepresentable {
         }
         f.inlinePredictionType = .no
         f.textContentType = nil
-        f.keyboardType = decimal ? .decimalPad : .numberPad
+        f.keyboardType = decimal ? .decimalPad : .asciiCapableNumberPad
         f.textAlignment = align
         f.font = font ?? UIFont(name: "Noteworthy-Bold", size: 24) ?? .systemFont(ofSize: 24, weight: .bold)
         f.textColor = color ?? UIColor(Paper.ink)
@@ -852,6 +852,7 @@ struct NumField: UIViewRepresentable {
     final class Coord: NSObject, UITextFieldDelegate {
         var parent: NumField
         var dismantled = false
+        var skipped = false
         weak var field: UITextField?
         init(_ p: NumField) { parent = p }
         var allowed: String { parent.allowPlus ? "0123456789.+" : "0123456789." }
@@ -872,14 +873,48 @@ struct NumField: UIViewRepresentable {
             NumField.editingLabel = parent.label
             BugLog.add("键盘 \(parent.label) 弹出，格子里是 \"\(f.text ?? "")\"，格子宽 \(Int(f.bounds.width))")
         }
+        // 全角数字、中文句号这些换成普通的
+        private func ascii(_ s: String) -> String {
+            String(s.map { c -> Character in
+                if let v = c.unicodeScalars.first?.value, c.unicodeScalars.count == 1, (0xFF10...0xFF19).contains(v) {
+                    return Character(UnicodeScalar(v - 0xFF10 + 0x30)!)
+                }
+                switch c { case "。", "．": return "."; case "＋": return "+"; default: return c }
+            })
+        }
         func textField(_ f: UITextField, shouldChangeCharactersIn range: NSRange, replacementString string: String) -> Bool {
-            BugLog.add("按键 \(parent.label) " + (string.isEmpty ? "⌫ 删除" : "\"\(string)\"") + "（原来 \"\(f.text ?? "")\"）")
+            BugLog.add("按键 \(parent.label) " + (string.isEmpty ? "⌫ 删除" : "\"\(string)\"") + "（原来 \"\(f.text ?? "")\"，位置 \(range.location)/\(range.length)）")
+            if string.isEmpty { return true }
+            let clean = ascii(string).filter { allowed.contains($0) }
+            // iOS 27.3 中文键盘：打完 12 再按 0，会先送来一个「一」把 12 整个换掉，结果格子被清空。不是数字的一律不收，原来的数字留着
+            if clean.isEmpty {
+                BugLog.add("  ⚠ 不是数字，忽略「\(string)」，格子还是 \"\(f.text ?? "")\"")
+                skipped = true
+                return false
+            }
+            if skipped {
+                // 刚忽略过怪字：键盘以为格子已经被换掉了，它给的位置不可信，直接接在后面
+                skipped = false
+                f.text = (f.text ?? "") + clean
+                BugLog.add("  接在后面：\"\(f.text ?? "")\"")
+                changed(f)
+                return false
+            }
+            if clean != string {
+                // 混着别的字：只把数字插进去
+                let t = (f.text ?? "") as NSString
+                guard range.location + range.length <= t.length else { return false }
+                f.text = t.replacingCharacters(in: range, with: clean)
+                changed(f)
+                return false
+            }
             return true
         }
         @objc func changed(_ f: UITextField) {
-            let t = f.text ?? ""
+            if f.markedTextRange != nil { return }   // 键盘还在拼字（候选中），等它定下来再说
+            let t = ascii(f.text ?? "")
             let n = t.filter { allowed.contains($0) }
-            if n != t { f.text = n }
+            if n != (f.text ?? "") { f.text = n }
             BugLog.add("  → 格子 \(parent.label) \"\(n)\"")
             if parent.value != n { parent.value = n }
         }
