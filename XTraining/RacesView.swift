@@ -230,22 +230,28 @@ struct RaceList: View {
                     .frame(maxWidth: .infinity).padding(.vertical, 60).padding(.horizontal, 30)
                 } else if !past {
                     // 新样式：最上面一张翻页钟大卡（点下面的比赛就换上来），下面是其余比赛
-                    let top = items.first { $0.id == open } ?? items.first { store.follow.contains($0.id) } ?? items[0]
+                    // 最上面固定是追的最近一场（没追就是最近一场）；点下面的比赛就地展开成大卡片，再点收起
+                    let top = items.first { store.follow.contains($0.id) } ?? items[0]
                     VStack(alignment: .leading, spacing: 10) {
-                        RaceFlipCard(e: top).id("flip-top")
-                            .transition(.opacity.combined(with: .scale(scale: 0.97)))
+                        RaceFlipCard(e: top)
                         if items.count > 1 {
                             Text("接下来").font(.subheadline.bold()).foregroundStyle(.secondary).padding(.top, 8).padding(.leading, 4)
                         }
                         ForEach(items.filter { $0.id != top.id }) { e in
-                            RaceMiniRow(e: e)
-                                .onTapGesture {
-                                    Haptic.tap()
-                                    withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) { open = e.id; proxy.scrollTo("flip-top", anchor: .top) }
+                            Group {
+                                if open == e.id {
+                                    RaceFlipCard(e: e, compact: true).transition(.opacity.combined(with: .scale(scale: 0.97, anchor: .top)))
+                                } else {
+                                    RaceMiniRow(e: e).transition(.opacity)
                                 }
-                                .contextMenu {
-                                    Button(store.follow.contains(e.id) ? "取消追赛" : "追赛", systemImage: "bell") { store.toggleFollow(e) }
-                                }
+                            }
+                            .onTapGesture {
+                                Haptic.tap()
+                                withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) { open = open == e.id ? nil : e.id }
+                            }
+                            .contextMenu {
+                                Button(store.follow.contains(e.id) ? "取消追赛" : "追赛", systemImage: "bell") { store.toggleFollow(e) }
+                            }
                         }
                     }
                     .padding(.horizontal, 16).padding(.top, 4)

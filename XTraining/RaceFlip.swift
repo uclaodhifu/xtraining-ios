@@ -8,6 +8,7 @@ struct RaceFlipCard: View {
     @EnvironmentObject var store: Store
     @Environment(\.openURL) private var openURL
     let e: Race
+    var compact = false          // 下面列表里点开的：小一号，不带按钮
     @State private var addCal = false
 
     private var left: Int { e.date.map { max(0, Day.between(Day.today, $0)) } ?? 0 }
@@ -25,7 +26,7 @@ struct RaceFlipCard: View {
                 Text(e.level + (followed ? " · 已追" : "")).font(.caption).foregroundStyle(.white.opacity(0.6))
                 Spacer()
             }
-            Text(e.name).font(.system(size: 19, weight: .heavy)).foregroundStyle(.white)
+            Text(e.name).font(.system(size: compact ? 16 : 19, weight: .heavy)).foregroundStyle(.white)
                 .lineLimit(2).padding(.top, 8)
             Text(dateLine).font(.footnote).foregroundStyle(.white.opacity(0.7)).padding(.top, 4)
             if let dv = e.divs { Text(dv).font(.footnote).foregroundStyle(.white.opacity(0.85)).lineLimit(1).padding(.top, 4) }
@@ -36,13 +37,14 @@ struct RaceFlipCard: View {
                     .font(.system(size: 30, weight: .heavy, design: .rounded)).foregroundStyle(.white)
                     .frame(maxWidth: .infinity).padding(.vertical, 18)
             } else {
-                HStack(spacing: 14) {
-                    FlipDigits(value: m, label: "月")
-                    FlipDigits(value: w, label: "周")
-                    FlipDigits(value: d, label: "天")
+                HStack(spacing: compact ? 10 : 14) {
+                    FlipDigits(value: m, label: "月", small: compact)
+                    FlipDigits(value: w, label: "周", small: compact)
+                    FlipDigits(value: d, label: "天", small: compact)
                 }
-                .padding(.horizontal, 14).padding(.top, 14)
+                .padding(.horizontal, compact ? 30 : 14).padding(.top, compact ? 10 : 14)
             }
+            if !compact {
             Rectangle().fill(.white.opacity(0.08)).frame(height: 1).padding(.vertical, 12)
             HStack(spacing: 0) {
                 action(followed ? "已追" : "追赛", followed ? "bell.fill" : "bell", on: followed) {
@@ -56,8 +58,9 @@ struct RaceFlipCard: View {
                     action("抖音观看", "play.rectangle.fill") { douyin() }
                 }
             }
+            }
         }
-        .padding(16)
+        .padding(compact ? 12 : 16)
         .background(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .fill(LinearGradient(colors: [Color(hex: 0x29292b), Color(hex: 0x1a1a1c)], startPoint: .top, endPoint: .bottom))
@@ -104,14 +107,15 @@ struct RaceFlipCard: View {
 struct FlipDigits: View {
     let value: Int
     let label: String
+    var small = false
     var body: some View {
         VStack(spacing: 6) {
             Text(String(format: "%02d", min(value, 99)))
-                .font(.system(size: 36, weight: .black, design: .rounded)).monospacedDigit()
+                .font(.system(size: small ? 24 : 36, weight: .black, design: .rounded)).monospacedDigit()
                 .foregroundStyle(.white)
                 .contentTransition(.numericText(countsDown: true))
                 .animation(.snappy, value: value)
-                .frame(maxWidth: .infinity, minHeight: 56)
+                .frame(maxWidth: .infinity, minHeight: small ? 38 : 56)
                 .background {
                     ZStack {
                         RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color(hex: 0x0e0e10))
