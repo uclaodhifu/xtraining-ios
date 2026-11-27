@@ -26,7 +26,14 @@ enum Parts {
         }
     }
     // 按名字猜部位（常用动作表 + 关键词）
+    // 自己指定的部位（比如“哑铃飞鸟”算肩）：{ 动作名: 部位 }，优先于自动猜
+    static var custom: [String: String] = (UserDefaults.standard.dictionary(forKey: "xt.partMap") as? [String: String]) ?? [:]
+    static func setCustom(_ name: String, _ p: String?) {
+        custom[name] = p
+        UserDefaults.standard.set(custom, forKey: "xt.partMap")
+    }
     static func of(_ name: String) -> String? {
+        if let p = custom[name] { return p }
         for p in all where library[p]?.contains(name) == true { return p }
         let words: [(String, [String])] = [
             ("有氧", ["跑", "单车", "骑行", "椭圆", "爬坡", "爬楼", "游泳", "跳绳", "划船机", "有氧", "快走"]),

@@ -42,6 +42,21 @@ enum Baseline {
     }
 }
 
+// 长按动作名：改它属于哪个部位
+struct PartMenuItems: View {
+    @EnvironmentObject var store: Store
+    let name: String
+    var body: some View {
+        Section("「\(name)」算哪个部位") {
+            ForEach(Parts.all, id: \.self) { p in
+                Button { store.setPart(name, p); Haptic.success() } label: {
+                    if Parts.of(name) == p { Label(p, systemImage: "checkmark") } else { Text(p) }
+                }
+            }
+        }
+    }
+}
+
 // 动作名的手写笔迹（最近一次写过的）
 func inkName(_ name: String, part: String, in ws: [Workout]) -> String? {
     for w in ws.reversed() { if let x = w.exercises(of: part).first(where: { $0.name == name }), let ink = InkStore.has(x.inkName) { return ink } }
@@ -129,6 +144,8 @@ struct TrainingLogTable: View {
                                 else { Text(n).font(.caption2.bold()).lineLimit(2).minimumScaleFactor(0.6).multilineTextAlignment(.center) }
                             }
                             .frame(width: nameW, height: rowH)
+                            .contentShape(Rectangle())
+                            .contextMenu { PartMenuItems(name: n) }
                             ForEach(Array(cols.enumerated()), id: \.offset) { ci, w in
                                 cell(n, w, hist, first + ci)
                                     .frame(maxWidth: .infinity).frame(height: rowH)
@@ -146,6 +163,7 @@ struct TrainingLogTable: View {
                     legend("arrow.up", .green, "进步")
                     legend("arrow.down", .red, "退步")
                     legend("equal", .primary, "持平")
+                    Text("长按动作改部位").foregroundStyle(.secondary)
                     Spacer()
                     if names.count > maxRows {
                         Button(showAll ? "收起" : "全部 \(names.count) 个") { withAnimation(.snappy) { showAll.toggle() } }
@@ -258,6 +276,8 @@ struct LogFullScreen: View {
     @State private var editing: Workout? = nil
     @State private var picking = false
     @State private var comparing = false
+    @Environment(\.verticalSizeClass) private var vClass
+    private var landscape: Bool { vClass == .compact }
 
     private func shift(_ n: Int) {
         let d = Calendar.current.date(byAdding: .month, value: n, to: Day.date(month + "-01")) ?? Date()
@@ -272,16 +292,26 @@ struct LogFullScreen: View {
                     ForEach(Parts.strength, id: \.self) { Text($0).tag($0) }
                 }
                 .pickerStyle(.segmented)
-                MonthLogTable(part: part, month: month) { w in editing = w }
-                    .id(part + month)   // 不要跟着数据刷新重建，不然横着滑会被弹回去
+                if landscape {
+                    MonthLogTable(part: part, month: month) { w in editing = w }
+                        .id(part + month)   // 不要跟着数据刷新重建，不然横着滑会被弹回去
+                        .frame(maxHeight: .infinity, alignment: .top)
+                        .card()
+                } else {
+                    // 竖着拿：跟首页一样，最近 4 次；转横屏才看整月
+                    ScrollView {
+                        TrainingLogTable(part: part, maxRows: 99, onOpen: { w in editing = w })
+                            .id("\(part)-\(store.rev)")
+                            .card()
+                    }
                     .frame(maxHeight: .infinity, alignment: .top)
-                    .card()
+                }
             }
             .padding(.horizontal, 16).padding(.bottom, 8)
             .background(Color(.systemGroupedBackground))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                if landscape { ToolbarItem(placement: .topBarLeading) {
                     HStack(spacing: 4) {
                         Button { shift(-1) } label: { Image(systemName: "chevron.left") }
                         Button { picking = true } label: {
@@ -294,7 +324,7 @@ struct LogFullScreen: View {
                         Button { shift(1) } label: { Image(systemName: "chevron.right") }
                             .disabled(month >= String(Day.today.prefix(7)))
                     }
-                }
+                } }
                 ToolbarItem(placement: .topBarTrailing) {
                     HStack(spacing: 14) {
                         Button { comparing = true } label: { Label("对比", systemImage: "arrow.left.arrow.right") }

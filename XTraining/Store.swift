@@ -50,6 +50,17 @@ final class Store: ObservableObject {
         var w = w; w.editedAt = Date().timeIntervalSince1970
         if let i = workouts.firstIndex(where: { $0.id == w.id }) { workouts[i] = w } else { workouts.append(w) }
     }
+    // 把一个动作改到某个部位：以后都按这个算，以前练过这个动作的训练也补上这个部位
+    func setPart(_ name: String, _ p: String) {
+        Parts.setCustom(name, p)
+        var ws = workouts
+        for i in ws.indices where ws[i].exercises.contains(where: { $0.name == name }) {
+            if !ws[i].parts.contains(p) { ws[i].parts.append(p); ws[i].parts = Parts.all.filter { ws[i].parts.contains($0) } }
+            // 这次训练里已经没有别的动作属于原来的部位了，就把那个部位去掉
+            ws[i].parts = ws[i].parts.filter { q in q == p || ws[i].exercises.contains { (Parts.of($0.name) ?? "") == q } || !ws[i].exercises.contains { Parts.of($0.name) != nil } }
+        }
+        if ws != workouts { workouts = ws } else { objectWillChange.send() }
+    }
     func delete(_ w: Workout) { CloudSync.shared.noteDelete([w.id]); workouts.removeAll { $0.id == w.id } }
     var todays: [Workout] { workouts.filter { $0.date == Day.today } }
 

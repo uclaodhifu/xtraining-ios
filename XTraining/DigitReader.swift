@@ -18,7 +18,8 @@ enum DigitReader {
         for (pts, b) in boxed {
             if let last = out.last {
                 let overlap = min(last.1.maxX, b.maxX) - max(last.1.minX, b.minX)
-                if overlap > min(last.1.width, b.width) * 0.3 || b.minX < last.1.maxX - b.width * 0.5 {
+                // 只有左右重叠一大半才算同一个字（4、5、7 的两笔）；挨得近的 2 和 0 不能合成一个，不然 120 会认成 12
+                if overlap > min(last.1.width, b.width) * 0.55 {
                     out[out.count - 1].0.append(pts); out[out.count - 1].1 = last.1.union(b); continue
                 }
             }
@@ -75,7 +76,10 @@ enum DigitReader {
     static func fuse(_ vision: String, _ mine: (text: String, digits: Int)) -> String {
         guard !mine.text.isEmpty else { return vision }
         let v = Array(vision), m = Array(mine.text)
-        if vision.isEmpty || v.filter(\.isNumber).count != mine.digits || v.count != m.count { return mine.text }
+        if vision.isEmpty { return mine.text }
+        let vd = v.filter(\.isNumber).count
+        if vd > mine.digits { return vision }          // 系统认出的位数更多：多半是这边把两个字拆成了一个，信系统的（防止吞 0）
+        if vd != mine.digits || v.count != m.count { return mine.text }
         let taught = taughtDigits
         return String(zip(v, m).map { a, b in a == b ? a : (b.isNumber && (taught[String(b)] ?? 0) >= 2 ? b : a) })
     }
