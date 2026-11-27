@@ -485,7 +485,6 @@ private struct CurveCard: View {
 private struct RefsCard: View {
     @State private var all = false
     @ObservedObject private var sci = Science.shared
-    @Environment(\.openURL) private var openURL
     var body: some View {
         let refs = sci.doc.refs
         let list = all ? refs : Array(refs.prefix(3))
@@ -499,8 +498,6 @@ private struct RefsCard: View {
                  + Text(r.src).font(.caption).foregroundColor(.secondary))
                     .padding(.vertical, 8)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
-                    .onTapGesture { if let s = r.url, let u = URL(string: s) { openURL(u) } }
             }
             if refs.count > 3 { Button(all ? "收起" : "展开全部 \(refs.count) 篇") { withAnimation(.snappy) { all.toggle() } }
                 .font(.subheadline.bold()).frame(maxWidth: .infinity).padding(.top, 6) }
