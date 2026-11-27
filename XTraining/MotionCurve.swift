@@ -199,7 +199,7 @@ enum MotionAnalyzer {
                 else {
                     req.inputObservation = obs
                     try? seq.perform([req], on: cg)
-                    if let o = req.results?.first {
+                    if let o = req.results?.first as? VNDetectedObjectObservation {
                         lastObs = o
                         if o.confidence > 0.25 { pp = CGPoint(x: o.boundingBox.midX * size.width, y: o.boundingBox.midY * size.height) }
                     }
