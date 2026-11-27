@@ -98,12 +98,14 @@ struct HandPad: View {
     let title: String
     var textMode = false
     var nextLabel = "下一格  →"
+    var plus = false          // 次数格：多一个「＋」键，写 10+5（组内暂停）
     var onInk: ((PKDrawing) -> Void)? = nil
     var onNext: () -> Void
     var onClose: () -> Void
 
     @State private var canvas = PKCanvasView()
     @State private var dotAt: Int? = nil     // 点「.」时前面已经写了几位数字
+    @State private var plusAt: [Int] = []    // 点「＋」时前面已经写了几位数字
     @State private var job: DispatchWorkItem? = nil
     @State private var empty = true
     @State private var miss = false      // 刚才没认出来
@@ -124,7 +126,7 @@ struct HandPad: View {
                         // UIKit 输入框：键盘弹出之前就标记「正在改」，手写板不会被键盘关掉
                         NumField(value: $value, decimal: true, label: "认成(\(title))", placeholder: "?",
                                  font: .monospacedDigitSystemFont(ofSize: 18, weight: .bold),
-                                 color: value.isEmpty ? UIColor(Tone.down) : UIColor(Paper.ink)) { f in
+                                 color: value.isEmpty ? UIColor(Tone.down) : UIColor(Paper.ink), allowPlus: plus) { f in
                             if f { job?.cancel(); job = nil }   // 正在改：后台识别别再把改好的数字盖掉
                             PadFix.editing = f
                             // 改完了：把这次的笔迹按改对的数字记下来，下次认得更准
@@ -157,6 +159,7 @@ struct HandPad: View {
             .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Paper.ink.opacity(0.15)))
             HStack(spacing: 8) {
                 key("清除", wide: false) { clear() }
+                if plus { key("＋", wide: false, tint: .orange) { addPlus() } }
                 key(nextLabel, wide: true, strong: true) { flush(); onNext() }
             }
         }
@@ -167,16 +170,25 @@ struct HandPad: View {
         .onChange(of: title) { _, t in BugLog.add("手写板换到 \(t)"); reset() }
     }
 
-    private func key(_ t: String, wide: Bool, strong: Bool = false, _ a: @escaping () -> Void) -> some View {
+    private func key(_ t: String, wide: Bool, strong: Bool = false, tint: Color? = nil, _ a: @escaping () -> Void) -> some View {
         Button { Haptic.tap(); a() } label: {
             Text(t).font(.headline).frame(maxWidth: wide ? .infinity : 64, minHeight: 44)
-                .foregroundStyle(strong ? Color.white : Paper.ink)
-                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(strong ? Paper.ink : Paper.ink.opacity(0.08)))
+                .foregroundStyle(strong ? Color.white : (tint ?? Paper.ink))
+                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(strong ? Paper.ink : (tint ?? Paper.ink).opacity(tint == nil ? 0.08 : 0.15)))
         }
         .buttonStyle(PressScale())
     }
 
-    private func reset() { job?.cancel(); job = nil; canvas.drawing = PKDrawing(); dotAt = nil; empty = true; miss = false }
+    private func reset() { job?.cancel(); job = nil; canvas.drawing = PKDrawing(); dotAt = nil; plusAt = []; empty = true; miss = false }
+    // 组内暂停：先写的 10 后面加个 +，接着写 5（笔迹照常写在后面）
+    private func addPlus() {
+        flush()
+        let k = value.filter(\.isNumber).count
+        guard k > 0, !plusAt.contains(k) else { return }
+        plusAt.append(k)
+        if !value.hasSuffix("+") { value += "+" }
+        BugLog.add("手写 次数 点了 ＋（组内暂停），现在是 \"\(value)\"")
+    }
     private func clear() { BugLog.add("手写 \(title) 点了清除（原来 \"\(value)\"）"); reset(); value = "" }
     // 小数点没写/认不出来：记住前面几位，之后认出来的数字在这里插一个点
     private func dot() {
@@ -188,6 +200,17 @@ struct HandPad: View {
         if textMode { value = r; return }
         var v = r
         if let k = dotAt, !v.contains("."), k <= v.count { v.insert(".", at: v.index(v.startIndex, offsetBy: k)) }
+        if !plusAt.isEmpty {
+            // 按数字个数找位置插 +（「10」后面点了＋，再写「5」→ 10+5）
+            let digits = v.filter { $0.isNumber || $0 == "." }
+            var out = "", n = 0
+            for c in digits {
+                if c.isNumber, plusAt.contains(n), n > 0, !out.hasSuffix("+") { out.append("+") }
+                out.append(c); if c.isNumber { n += 1 }
+            }
+            if plusAt.contains(n) && n > 0 && !out.hasSuffix("+") { out.append("+") }
+            v = out
+        }
         value = v
     }
     private func flush() {

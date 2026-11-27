@@ -70,7 +70,7 @@ struct EntryView: View {
                             onClose: { withAnimation(.snappy) { addingByHand = false } })
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 } else if let c = writing {
-                    HandPad(value: cellBinding(c), title: cellTitle(c),
+                    HandPad(value: cellBinding(c), title: cellTitle(c), plus: !c.weight,
                             onInk: { saveInk(c, $0) },   // 只要是手写，就留原样笔迹
                             onNext: { nextCell(c) },
                             onClose: { withAnimation(.snappy) { writing = nil } })
@@ -360,7 +360,7 @@ struct EntryView: View {
         Binding(get: { x.wrappedValue.sets.first { $0.id == id }?[keyPath: k] ?? "" },
                 set: { v in
                     // 只收数字和小数点，别的东西（比如拖进来的文字）一律不要
-                    let n = v.filter { "0123456789.".contains($0) }
+                    let n = v.filter { "0123456789.+".contains($0) }   // + 是组内暂停（10+5）
                     if let i = x.wrappedValue.sets.firstIndex(where: { $0.id == id }) { x.wrappedValue.sets[i][keyPath: k] = n } })
     }
 
@@ -415,7 +415,7 @@ struct EntryView: View {
 
     // 重量和次数分别跟上次同一组比：多了绿，少了红，一样黑
     private func cmp(_ cur: String, _ prev: Exercise?, _ i: Int, _ k: KeyPath<SetRow, String>) -> Trend {
-        guard let a = Double(cur), let p = prev, !p.sets.isEmpty, let b = Double(p.sets[min(i, p.sets.count - 1)][keyPath: k]) else { return .none }
+        guard let a = SetRow.total(cur), let p = prev, !p.sets.isEmpty, let b = SetRow.total(p.sets[min(i, p.sets.count - 1)][keyPath: k]) else { return .none }
         return a > b ? .up : a < b ? .down : .same
     }
 
@@ -425,7 +425,7 @@ struct EntryView: View {
         return Group {
             if inputMode == 2 {
                 // 用系统数字键盘
-                NumField(value: text, decimal: cell.weight, label: cellTitle(cell))
+                NumField(value: text, decimal: cell.weight, label: cellTitle(cell), allowPlus: !cell.weight)
                     .overlay {
                         if text.wrappedValue.isEmpty {
                             Text(hint).font(unit ? .system(size: 13, weight: .medium) : Paper.hand(22))
@@ -503,7 +503,7 @@ struct EntryView: View {
         }, set: { v in
             guard let i = workout.exercises.firstIndex(where: { $0.id == c.ex }),
                   let k = workout.exercises[i].sets.firstIndex(where: { $0.id == c.set }) else { return }
-            let v = v.filter { "0123456789.".contains($0) }
+            let v = v.filter { (c.weight ? "0123456789." : "0123456789.+").contains($0) }
             if c.weight { workout.exercises[i].sets[k].w = v } else { workout.exercises[i].sets[k].r = v }
             if v.isEmpty && !PadFix.editing { if c.weight { workout.exercises[i].sets[k].inkW = nil } else { workout.exercises[i].sets[k].inkR = nil } }
         })
@@ -776,6 +776,7 @@ struct NumField: UIViewRepresentable {
     var font: UIFont? = nil
     var color: UIColor? = nil
     var align: NSTextAlignment = .center
+    var allowPlus = false      // 次数格：可以写 10+5（组内暂停），键盘上面多一个「＋ 再做几次」
     var onFocus: ((Bool) -> Void)? = nil
 
     @MainActor static var editingLabel: String? = nil
@@ -811,8 +812,15 @@ struct NumField: UIViewRepresentable {
         f.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         // 键盘上面的「完成」
         let bar = UIToolbar(frame: CGRect(x: 0, y: 0, width: 320, height: 44))
-        bar.items = [UIBarButtonItem(systemItem: .flexibleSpace),
-                     UIBarButtonItem(title: "完成", style: .done, target: f, action: #selector(UIResponder.resignFirstResponder))]
+        var items = [UIBarButtonItem(systemItem: .flexibleSpace)]
+        if allowPlus {
+            let plus = UIBarButtonItem(title: "＋ 再做几次", style: .plain, target: context.coordinator, action: #selector(Coord.addPlus))
+            plus.tintColor = .systemOrange
+            items.append(plus)
+        }
+        items.append(UIBarButtonItem(title: "完成", style: .done, target: f, action: #selector(UIResponder.resignFirstResponder)))
+        bar.items = items
+        context.coordinator.field = f
         f.inputAccessoryView = bar
         return f
     }
@@ -837,7 +845,18 @@ struct NumField: UIViewRepresentable {
     final class Coord: NSObject, UITextFieldDelegate {
         var parent: NumField
         var dismantled = false
+        weak var field: UITextField?
         init(_ p: NumField) { parent = p }
+        var allowed: String { parent.allowPlus ? "0123456789.+" : "0123456789." }
+        // 组内暂停：10 后面加个 +，接着打 5
+        @objc func addPlus() {
+            guard let f = field else { return }
+            let t = f.text ?? ""
+            guard !t.isEmpty, !t.hasSuffix("+") else { return }
+            f.text = t + "+"
+            BugLog.add("按键 \(parent.label) \"+\"（组内暂停）")
+            changed(f)
+        }
         func textFieldShouldBeginEditing(_ f: UITextField) -> Bool {
             parent.onFocus?(true)      // 在键盘弹出之前就通知（手写板上的「认成」靠这个不被关掉）
             return true
@@ -852,7 +871,7 @@ struct NumField: UIViewRepresentable {
         }
         @objc func changed(_ f: UITextField) {
             let t = f.text ?? ""
-            let n = t.filter { "0123456789.".contains($0) }
+            let n = t.filter { allowed.contains($0) }
             if n != t { f.text = n }
             BugLog.add("  → 格子 \(parent.label) \"\(n)\"")
             if parent.value != n { parent.value = n }
@@ -863,7 +882,7 @@ struct NumField: UIViewRepresentable {
                 BugLog.add("⚠ 输入框被移走：「\(parent.label)」打字中，格子里是 \"\(f.text ?? "")\"")
                 NumField.lost = (parent.label, f.text ?? "", Date())
             }
-            let n = (f.text ?? "").filter { "0123456789.".contains($0) }
+            let n = (f.text ?? "").filter { allowed.contains($0) }
             if parent.value != n { parent.value = n }
             NumField.editingLabel = nil
             BugLog.add("键盘 \(parent.label) 收起，最后是 \"\(n)\"")
