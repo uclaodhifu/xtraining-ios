@@ -202,9 +202,10 @@ struct HandPad: View {
         if let k = dotAt, !v.contains("."), k <= v.count { v.insert(".", at: v.index(v.startIndex, offsetBy: k)) }
         if !plusAt.isEmpty {
             // 按数字个数找位置插 +（「10」后面点了＋，再写「5」→ 10+5）
-            let digits = v.filter { $0.isNumber || $0 == "." }
+            let digits = v.filter { $0.isNumber || $0 == "." || $0 == "+" }
             var out = "", n = 0
             for c in digits {
+                if c == "+" { if !out.isEmpty && !out.hasSuffix("+") { out.append("+") }; continue }
                 if c.isNumber, plusAt.contains(n), n > 0, !out.hasSuffix("+") { out.append("+") }
                 out.append(c); if c.isNumber { n += 1 }
             }
@@ -217,6 +218,13 @@ struct HandPad: View {
         guard job != nil, !canvas.drawing.strokes.isEmpty else { return }
         job?.cancel(); job = nil
         let d = canvas.drawing
+        if plus, !textMode, HandPad.splitPlus(d) != nil {
+            let r = HandPad.readNumber(d, text: false, plus: true)
+            BugLog.add("手写 \(title) 点下一格前认出「+」→ \"\(r)\"")
+            if !r.isEmpty { apply(r) }
+            onInk?(d)
+            return
+        }
         let v = HandPad.read(d, text: textMode)
         var r = v
         if !textMode {
@@ -232,8 +240,27 @@ struct HandPad: View {
         let tm = textMode
         guard !canvas.drawing.strokes.isEmpty else { return }
         var w: DispatchWorkItem!
+        let usePlus = plus
         w = DispatchWorkItem {
             let d = canvas.drawing
+            // 次数格里手写了「+」（组内暂停）：+ 左右两边分开认，再拼成 10+5
+            if usePlus, !tm, let (l, rt) = HandPad.splitPlus(d) {
+                let pl = HandPad.page(l), pr = rt.strokes.isEmpty ? nil : HandPad.page(rt)
+                let ml = DigitReader.read(l), mr: (text: String, digits: Int)? = rt.strokes.isEmpty ? nil : DigitReader.read(rt)
+                DispatchQueue.global(qos: .userInitiated).async {
+                    let a = pl.map { DigitReader.fuse(HandPad.recognize($0, text: false), ml) } ?? ""
+                    var b = pr.map { HandPad.recognize($0, text: false) } ?? ""
+                    if let mr { b = DigitReader.fuse(b, mr) }
+                    let r = a.isEmpty ? "" : a + "+" + b
+                    DispatchQueue.main.async {
+                        guard let me = w, job === me, !me.isCancelled else { return }
+                        job = nil
+                        BugLog.add("手写 \(title) 认出「+」，左边 \"\(a)\" 右边 \"\(b)\" → \"\(r)\"")
+                        if !r.isEmpty { apply(r) }
+                    }
+                }
+                return
+            }
             guard let cg = HandPad.page(d) else { return }
             let mine: (text: String, digits: Int)? = tm ? nil : DigitReader.read(d)
             DispatchQueue.global(qos: .userInitiated).async {
@@ -253,6 +280,52 @@ struct HandPad: View {
         }
         job = w
         DispatchQueue.main.asyncAfter(deadline: .now() + (textMode ? 0.9 : 0.6), execute: w)
+    }
+
+    // 同步认一遍（点「下一格」时用）：有手写的「+」就左右分开认
+    static func readNumber(_ d: PKDrawing, text: Bool, plus: Bool) -> String {
+        func one(_ x: PKDrawing) -> String {
+            guard !x.strokes.isEmpty else { return "" }
+            var r = read(x, text: text)
+            if !text { r = DigitReader.fuse(r, DigitReader.read(x)) }
+            return r
+        }
+        if plus, !text, let (l, rt) = splitPlus(d) {
+            let a = one(l)
+            return a.isEmpty ? "" : a + "+" + one(rt)
+        }
+        return one(d)
+    }
+
+    // 找手写的「+」：一笔横、一笔竖，长短差不多，在中间互相交叉。
+    // 找到了就把这两笔去掉，返回 + 左边和右边的笔画
+    static func splitPlus(_ d: PKDrawing) -> (PKDrawing, PKDrawing)? {
+        let ss = d.strokes
+        guard ss.count >= 3 else { return nil }   // + 前面至少要有一个数字
+        let b = ss.map { $0.renderBounds }
+        let digitH = b.map(\.height).max() ?? 0
+        for i in ss.indices {
+            let h = b[i]
+            guard h.width > max(h.height * 2.2, 8) else { continue }        // 横
+            for j in ss.indices where j != i {
+                let v = b[j]
+                guard v.height > max(v.width * 2.2, 8) else { continue }    // 竖
+                let ratio = h.width / v.height
+                guard ratio > 0.45, ratio < 2.2 else { continue }           // 长短差不多
+                guard v.height < digitH * 0.95 else { continue }            // + 比数字矮
+                // 交叉在中间：横线的高度在竖线中段，竖线的位置在横线中段
+                let hy = h.midY, vx = v.midX
+                guard hy > v.minY + v.height * 0.2, hy < v.maxY - v.height * 0.2,
+                      vx > h.minX + h.width * 0.2, vx < h.maxX - h.width * 0.2 else { continue }
+                let cx = (h.midX + v.midX) / 2
+                let rest = ss.indices.filter { $0 != i && $0 != j }
+                let left = rest.filter { b[$0].midX < cx }.map { ss[$0] }
+                let right = rest.filter { b[$0].midX >= cx }.map { ss[$0] }
+                guard !left.isEmpty else { continue }
+                return (PKDrawing(strokes: left), PKDrawing(strokes: right))
+            }
+        }
+        return nil
     }
 
     // 笔画画成白底黑字的图，交给 iPhone 自带的文字识别（不联网）
