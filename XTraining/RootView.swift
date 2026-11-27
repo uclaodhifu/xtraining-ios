@@ -17,8 +17,8 @@ struct RootView: View {
                 .tabItem { Label("我", systemImage: "person.crop.circle") }.tag(3)
         }
         .sensoryFeedback(.selection, trigger: tab)
-        .onChange(of: tab) { _, t in BugLog.add("页面 " + ["首页", "赛事", "进步", "我"][min(t, 3)]) }
-        .onChange(of: phase) { _, p in BugLog.add(p == .active ? "回到 App" : p == .background ? "切到后台" : "App 不在前台") }
+        .onChange(of: tab) { _, t in logTab(t) }
+        .onChange(of: phase) { _, p in logPhase(p) }
         // 每次打开/回到 App 都拉一下最新比赛清单
         .task(id: phase) {
             if phase == .active { await RaceFeed.shared.refresh(follow: store.follow) }
@@ -28,5 +28,18 @@ struct RootView: View {
         } else {
             tv
         }
+    }
+    private func logTab(_ t: Int) {
+        let names: [String] = ["首页", "赛事", "进步", "我"]
+        BugLog.add("页面 " + names[min(t, 3)])
+    }
+    private func logPhase(_ p: ScenePhase) {
+        let s: String
+        switch p {
+        case .active: s = "回到 App"
+        case .background: s = "切到后台"
+        default: s = "App 不在前台"
+        }
+        BugLog.add(s)
     }
 }
