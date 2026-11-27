@@ -827,7 +827,11 @@ struct NumField: UIViewRepresentable {
     func updateUIView(_ f: UITextField, context: Context) {
         context.coordinator.parent = self
         if f.text != value {
-            if f.isFirstResponder {
+            if f.isFirstResponder, allowPlus, value.hasSuffix("+"), value == (f.text ?? "") + "+" {
+                // 键盘开着时点了手写板上的「＋」：格子里也补上 +，接着打的数字跟在后面
+                f.text = value
+                BugLog.add("键盘 \(label) 补上 +，现在是 \"\(value)\"")
+            } else if f.isFirstResponder {
                 if (f.text ?? "") != value { BugLog.add("键盘 \(label) 外面的值是 \"\(value)\"，格子里是 \"\(f.text ?? "")\"（打字中，不覆盖）") }
             } else { f.text = value }
         }
