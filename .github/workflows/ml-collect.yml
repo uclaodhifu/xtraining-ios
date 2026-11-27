@@ -1,0 +1,27 @@
+name: ML 收集器械照片
+on:
+  workflow_dispatch:
+    inputs:
+      only: {description: "只收集这些类别（逗号分隔，留空=全部）", required: false, default: ""}
+  push:
+    branches: [claude/project-thread-2l3bya]
+    paths: ['ml/classes.json', 'ml/collect.py']
+permissions:
+  contents: write
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install pillow
+      - run: rm -f ml/review/sources.csv && python3 ml/collect.py
+        env: {ONLY: "${{ github.event.inputs.only }}", PER_CLASS: "80"}
+      - uses: actions/upload-artifact@v4
+        with: {name: machine-photos, path: ml/data, retention-days: 90}
+      - name: 把审核拼图提交回分支
+        run: |
+          git config user.name "github-actions"; git config user.email "actions@github.com"
+          echo "${{ github.run_id }}" > ml/review/collect_run_id.txt
+          git add ml/review && git commit -m "ml: review sheets from collect run ${{ github.run_id }}" || exit 0
+          for i in 1 2 3; do git pull --rebase -q origin ${GITHUB_REF_NAME} && git push origin HEAD:${GITHUB_REF_NAME} && break; sleep 5; done
