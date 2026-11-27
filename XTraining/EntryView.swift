@@ -57,6 +57,7 @@ struct EntryView: View {
                     topCard
                     notebook
                     addCard
+                    GymLocationCard(gym: $workout.gym)
                     noteCard
                     if !isNew {
                         Button("删除这次训练", role: .destructive) { confirmDelete = true }
@@ -113,6 +114,11 @@ struct EntryView: View {
                 BugLog.add("页面 " + (isNew ? "开始训练" : "修改训练") + "，输入方式 \(inputMode)")
                 prevLock = AppDelegate.lock
                 if alwaysLand && UIDevice.current.userInterfaceIdiom == .phone { setLand(true) }
+                // 新训练：人在上次那家健身房附近就自动选上
+                if isNew && workout.gym == nil && GymStore.shared.lastGym != nil { GymStore.shared.locate() }
+            }
+            .onReceive(GymStore.shared.$location) { _ in
+                if isNew && workout.gym == nil, let g = GymStore.shared.suggestion() { workout.gym = g }
             }
             .onDisappear {
                 BugLog.add("关掉 训练页")
@@ -727,6 +733,10 @@ struct EntryView: View {
         }
         store.upsert(workout)
         EntryDraft.clear()
+        // 选了健身房：打卡到地球（公开才传，只传当天的）
+        if let g = workout.gym {
+            GymStore.shared.checkin(workoutID: workout.id, gym: g, parts: workout.parts, date: workout.date)
+        }
     }
 
     private func add(_ name: String, sets: Int = 1) {

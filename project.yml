@@ -56,8 +56,9 @@ targets:
           - UTTypeIdentifier: com.kaigreen.xtraining.card
             UTTypeDescription: X Training 动作卡片
             UTTypeConformsTo: [public.data]
-        NSPhotoLibraryUsageDescription: 从相册选一段做动作的视频，在手机上分析阻力曲线，视频不会上传。
-        NSCameraUsageDescription: 录一段做动作的视频，在手机上分析阻力曲线，视频不会上传。
+        NSPhotoLibraryUsageDescription: 从相册选一段做动作的视频分析阻力曲线（视频不会上传）；或选一张健身房照片上传到打卡地球。
+        NSLocationWhenInUseUsageDescription: 用来找你附近的健身房、给新健身房定位。只上传你选中的健身房，不上传你的个人位置。
+        NSCameraUsageDescription: 录一段做动作的视频分析阻力曲线（视频不会上传）；或拍一张健身房照片上传到打卡地球。
         NSMicrophoneUsageDescription: 录视频时系统会一起录声音，X Training 不会使用也不会上传。
         NSHealthShareUsageDescription: 读取你在 Apple 健康里的运动、消耗的卡路里和步数，显示在“我”的运动记录日历里。
         NSHealthUpdateUsageDescription: X Training 目前不会往 Apple 健康里写数据。
