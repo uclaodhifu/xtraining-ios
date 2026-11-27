@@ -366,7 +366,7 @@ struct EntryView: View {
                 }
                 .font(.system(size: 18))
             }
-            if s.p != nil { Text("\(fmtNum(cfg.total(p)))kg").font(.system(size: 9)).foregroundStyle(.secondary) }
+            if s.p != nil { Text("\(fmtNum(cfg.total(p)))\(WU.s)").font(.system(size: 9)).foregroundStyle(.secondary) }
         }
         .padding(.vertical, 4)
         .frame(maxWidth: .infinity)
@@ -405,7 +405,7 @@ struct EntryView: View {
     }
 
     private func cellField(_ hint: String, _ text: Binding<String>, _ cell: WriteCell, ink: String?) -> some View {
-        let unit = hint == "kg" || hint == "次"
+        let unit = hint == WU.s || hint == "次"
         let on = writing == cell
         return Group {
             if inputMode == 2 {
@@ -495,7 +495,7 @@ struct EntryView: View {
     private func cellTitle(_ c: WriteCell) -> String {
         guard let x = workout.exercises.first(where: { $0.id == c.ex }) else { return "" }
         let n = (x.sets.firstIndex { $0.id == c.set } ?? 0) + 1
-        return "\(x.name) · 第\(n)组 · " + (c.weight ? "重量 kg" : "次数")
+        return "\(x.name) · 第\(n)组 · " + (c.weight ? "重量 \(WU.s)" : "次数")
     }
     // 重量写完跳到次数；次数写完跳到下一组的重量（挂片的动作跳过重量）；最后一格写完收起
     private func nextCell(_ c: WriteCell) {
@@ -534,7 +534,7 @@ struct EntryView: View {
                         if let cfg = store.plateCfg[name] {
                             plateSteppers(x, s, cfg, t)
                         } else {
-                            cellField(prevHint(prev, si, \.w, "kg"), setBinding(x, s.id, \.w), WriteCell(ex: x.wrappedValue.id, set: s.id, weight: true), ink: InkStore.has(s.inkW))
+                            cellField(prevHint(prev, si, \.w, WU.s), setBinding(x, s.id, \.w), WriteCell(ex: x.wrappedValue.id, set: s.id, weight: true), ink: InkStore.has(s.inkW))
                         }
                         Text("×").font(Paper.hand(18)).foregroundStyle(Paper.ink.opacity(0.6))
                         cellField(prevHint(prev, si, \.r, "次"), setBinding(x, s.id, \.r), WriteCell(ex: x.wrappedValue.id, set: s.id, weight: false), ink: InkStore.has(s.inkR))
@@ -723,9 +723,9 @@ struct PlateSettings: View {
                     Section("器械") {
                         Stepper("挂杆：\(cfg.pegs) 根（\(cfg.labels.joined(separator: "、"))）", value: $cfg.pegs, in: 1...3)
                         Picker("每片重量", selection: $cfg.kg) {
-                            ForEach([20.0, 15, 10, 5, 2.5], id: \.self) { Text("\(fmtNum($0)) kg").tag($0) }
+                            ForEach(WU.plates, id: \.self) { Text("\(fmtNum($0)) \(WU.s)").tag($0) }
                         }
-                        Stepper("器械自重：\(fmtNum(cfg.base)) kg", value: $cfg.base, in: 0...200, step: 2.5)
+                        Stepper("器械自重：\(fmtNum(cfg.base)) \(WU.s)", value: $cfg.base, in: 0...200, step: 2.5)
                     }
                 }
             }

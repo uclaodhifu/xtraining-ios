@@ -58,7 +58,7 @@ function normalize(s) {
     .replace(/[．。](?=\d)/g, ".")
     .replace(/[xX×*ｘＸ✖✕✗乘]️?/g, "×")
     .replace(/\s*(公斤|KG|Kg|kgs?)\b/g, "kg").replace(/公斤/g, "kg")
-    .replace(/(\d)\s*(lbs?|磅)/gi, "$1lb")
+    .replace(/(\d)\s*(pounds?|lbs?|磅|#)/gi, "$1lb")
     .replace(/(\d)\s*(minutes?|mins?|分钟|分)(?![a-z])/gi, "$1min")
     .replace(/(\d)\s*(小时|h)(?![a-z])/gi, "$1hr")
     .replace(/(\d)\s*(公里|km|千米)/gi, "$1km")
@@ -90,11 +90,27 @@ function parseDate(line, year) {
 const num = (s) => String(Math.round(parseFloat(s) * 100) / 100);
 const N = "(\\d+(?:\\.\\d+)?)";
 const W = "(kg|斤|lb)?";
+let DEF_LB = false;   // 没写单位的数字当磅
+let TO_LB = false;    // App 里用的单位是磅：导进来的重量都换成磅，否则都换成公斤
+const r1 = (x) => { const r = Math.round(x * 10) / 10; return String(Math.abs(r - Math.round(r)) < 0.051 ? Math.round(r) : r); };
+// 一个重量换成 App 的单位：写了 lb/磅 的、写了 kg/公斤/斤 的、没写单位的（按 DEF_LB）
+function wOf(v, u) {
+  u = (u || "").toLowerCase(); if (!u) u = DEF_LB ? "lb" : "kg";
+  let x = parseFloat(v);
+  if (u === "斤") { x = x / 2; u = "kg"; }
+  if (u === "lb") return TO_LB ? num(x) : r1(x * 0.45359237);
+  return TO_LB ? r1(x * 2.20462262) : num(x);
+}
+// 磅换公斤，保留一位小数（135 磅 → 61.2）
+const lb2kg = (v) => String(Math.round(parseFloat(v) * 0.45359237 * 10) / 10);
+// 体重：kg / 斤 / 磅
+const bwKg = (v, u) => { u = (u || "").toLowerCase(); if (!u && DEF_LB) u = "lb"; return u === "斤" ? num(v / 2) : /lb|磅|pound/.test(u) ? lb2kg(v) : num(v); };
 
 // 解析一段“组”的写法，返回 { sets, min }（min 是有氧的分钟数）
 function parseSets(raw) {
   let t = ` ${raw} `.replace(/第\s*\d+\s*组/g, " ").replace(/每组|每边|单边|单手|递减|力竭|热身|正式组?|RPE\s*\d+(\.\d+)?/gi, " ").replace(/\s+/g, " ");
-  const kgOf = (v, u) => num(u === "斤" ? parseFloat(v) / 2 : u === "lb" ? parseFloat(v) * 0.4536 : v);
+  // 没写单位的重量按导入时选的单位算（选了“磅”就换成公斤）
+  const kgOf = wOf;
   let m;
 
   // 有氧：分钟 / 小时
@@ -196,10 +212,10 @@ function parseNotes(text, year = guessYear) {
     // 中间冒出来的“今天练肩”：已经在一次训练里了，就只当部位，不另起一天
     if (d?.rel && cur) { partsInText(d.rest).forEach((p) => cur.parts.includes(p) || cur.parts.push(p)); continue; }
     if (d) {
-      const dbw = d.rest.match(/体重\s*[:：]?\s*(\d{2,3}(?:\.\d+)?)\s*(kg|公斤|斤)?/);
+      const dbw = d.rest.match(/体重\s*[:：]?\s*(\d{2,3}(?:\.\d+)?)\s*(kg|公斤|斤|lbs?|磅|pounds?)?/i);
       if (dbw) d.rest = d.rest.replace(dbw[0], " ");
       start(d.date, d.rest.replace(/^\s*[:：]/, ""));
-      if (dbw) cur.weight = num(dbw[2] === "斤" ? dbw[1] / 2 : dbw[1]);
+      if (dbw) cur.weight = bwKg(dbw[1], dbw[2]);
       line = d.rest.replace(/^\s*[:：]/, "").trim();
       if (!line || isPartOnly(line) || !/\d/.test(line)) continue;
     }
@@ -207,8 +223,8 @@ function parseNotes(text, year = guessYear) {
     if (isPartOnly(line)) { ensure(); partsInText(line).forEach((p) => cur.parts.includes(p) || cur.parts.push(p)); continue; }
 
     // 体重：单独一行或写在日期后面，记到体重里，不当动作
-    const bw = line.match(/体重\s*[:：]?\s*(\d{2,3}(?:\.\d+)?)\s*(kg|斤)?/);
-    if (bw) { ensure(); cur.weight = num(bw[2] === "斤" ? bw[1] / 2 : bw[1]); line = line.replace(bw[0], " ").trim(); if (!line) continue; }
+    const bw = line.match(/体重\s*[:：]?\s*(\d{2,3}(?:\.\d+)?)\s*(kg|斤|lb)?/);
+    if (bw) { ensure(); cur.weight = bwKg(bw[1], bw[2]); line = line.replace(bw[0], " ").trim(); if (!line) continue; }
     line = line.replace(/^([a-zA-Z])\s+(?=[\u4e00-\u9fa5])/, (_, c) => c.toUpperCase());
     const { name, rest } = splitLine(line);
     // 整行只有数字：接在上一个动作后面，算多一组（或几组）
@@ -251,7 +267,11 @@ function parseNotes(text, year = guessYear) {
 function hash(s) { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); }
 
 // App 调用入口：返回 JSON 字符串 {entries, weights}
-function xtParse(text, fixedYear) {
+function xtParse(text, fixedYear, unit, appLb) {
+  TO_LB = !!appLb;
+  // unit：1 = 公斤，2 = 磅，其他 = 自动（写 lb/磅 的比写 kg/公斤 的多，就把没写单位的也当磅）
+  const t = normalize(text), nLb = (t.match(/\dlb/g) || []).length, nKg = (t.match(/\d\s*kg/g) || []).length;
+  DEF_LB = unit === 2 || (unit !== 1 && (nLb > nKg || (nLb === nKg && TO_LB)));
   // fixedYear > 0：只写了月日的日期都按这一年；否则按今天往前推
   const out = parseNotes(text, fixedYear > 0 ? (() => fixedYear) : guessYear);
   const weights = (out.weights || []).slice();

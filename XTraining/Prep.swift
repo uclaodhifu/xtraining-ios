@@ -382,7 +382,7 @@ struct PrepDayEditor: View {
                         }
                         HStack(spacing: 4) {
                             if let cfg { plates(x.id, r, cfg) }
-                            else { cell("kg", rowBind(x.id, r.id, \.w), .decimalPad) }
+                            else { cell(WU.s, rowBind(x.id, r.id, \.w), .decimalPad) }
                             Text("×").font(.caption).foregroundStyle(.secondary)
                             cell(x.reps.isEmpty ? "次" : x.reps, rowBind(x.id, r.id, \.r), .numberPad)
                                 .frame(maxWidth: cfg != nil ? 56 : .infinity)
@@ -502,7 +502,7 @@ struct PrepDayEditor: View {
                 }
                 .font(.system(size: 18))
             }
-            if r.p != nil { Text("\(fmtNum(cfg.total(p)))kg").font(.system(size: 9)).foregroundStyle(.secondary) }
+            if r.p != nil { Text("\(fmtNum(cfg.total(p)))\(WU.s)").font(.system(size: 9)).foregroundStyle(.secondary) }
         }
         .padding(.vertical, 4).frame(maxWidth: .infinity)
     }

@@ -152,7 +152,7 @@ struct PRTile: View {
                 Text(p.name).font(.subheadline.bold()).lineLimit(1).foregroundStyle(Color.primary)
                 HStack(alignment: .firstTextBaseline, spacing: 3) {
                     Text(fmtNum(p.kg)).font(.system(size: 26, weight: .heavy, design: .rounded)).monospacedDigit()
-                    Text("kg").font(.caption).foregroundStyle(.secondary)
+                    Text(WU.s).font(.caption).foregroundStyle(.secondary)
                     if p.gain > 0 {
                         Text("+\(fmtNum(p.gain))").font(.caption.bold()).foregroundStyle(.green)
                     }

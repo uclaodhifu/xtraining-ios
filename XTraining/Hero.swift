@@ -84,7 +84,7 @@ struct HeroCarousel: View {
         case "pr":
             let pr = latestPR()
             shell(h, tint: Color(hex: 0xb8860b), tag: "个人纪录",
-                  title: pr.map { "\($0.0) \(fmtNum($0.1))kg" } ?? "还没有纪录",
+                  title: pr.map { "\($0.0) \(fmtNum($0.1))\(WU.s)" } ?? "还没有纪录",
                   sub: pr.map { $0.2.isEmpty ? "目前最重的一次" : "\(slashDate($0.2)) 破纪录，继续冲" } ?? "练几次，这里会显示你最新的突破",
                   button: nil, action: {})
         case "race":

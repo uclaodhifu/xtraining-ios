@@ -203,7 +203,7 @@ struct MonthCompare: View {
         }()
         let tag: String = {
             guard let o = old, let n = new else { return new == nil ? "本月没练" : "新动作" }
-            if n.weight != o.weight { return (n.weight > o.weight ? "+" : "−") + fmtNum(abs(n.weight - o.weight)) + "kg" }
+            if n.weight != o.weight { return (n.weight > o.weight ? "+" : "−") + fmtNum(abs(n.weight - o.weight)) + WU.s }
             if n.reps != o.reps { return (n.reps > o.reps ? "+" : "−") + fmtNum(abs(n.reps - o.reps)) + "次" }
             return "持平"
         }()
@@ -301,7 +301,7 @@ struct PRPicker: View {
                                 Text(r.name).font(.subheadline.bold())
                                 Spacer()
                                 VStack(alignment: .trailing, spacing: 1) {
-                                    Text("\(fmtNum(r.kg))kg" + (r.reps > 0 ? " × \(fmtNum(r.reps))" : "")).monospacedDigit().bold()
+                                    Text("\(fmtNum(r.kg))\(WU.s)" + (r.reps > 0 ? " × \(fmtNum(r.reps))" : "")).monospacedDigit().bold()
                                     Text(slashDate(r.date)).font(.caption2).foregroundStyle(.secondary)
                                 }
                                 if pinned == r.name { Image(systemName: "checkmark").foregroundStyle(Brand.pink) }
@@ -459,13 +459,13 @@ struct AnchorView: View {
                     if let d = h.dReps {
                         Text(d == 0 ? "次数持平" : "次数 " + diffText(d, 0)).font(.caption.bold()).foregroundStyle(diffColor(d, 0))
                     } else if let d = h.dKg {
-                        Text(d == 0 ? "重量持平" : "重量 " + diffText(d, 0, "kg")).font(.caption.bold()).foregroundStyle(diffColor(d, 0))
+                        Text(d == 0 ? "重量持平" : "重量 " + diffText(d, 0, WU.s)).font(.caption.bold()).foregroundStyle(diffColor(d, 0))
                     }
                 }
             }
         } header: {
             HStack {
-                Text("\(a.name) · 锚点 \(a.kg)kg × \(a.reps)")
+                Text("\(a.name) · 锚点 \(a.kg)\(WU.s) × \(a.reps)")
                 Spacer()
                 Menu {
                     Button("编辑") { editAnchor = a }
@@ -559,7 +559,7 @@ struct AnchorEditor: View {
                 Section {
                     HStack {
                         TextField("重量", text: $a.kg).keyboardType(.decimalPad).multilineTextAlignment(.center)
-                        Text("kg ×").foregroundStyle(.secondary)
+                        Text("\(WU.s) ×").foregroundStyle(.secondary)
                         TextField("次数", text: $a.reps).keyboardType(.numberPad).multilineTextAlignment(.center)
                         Text("次").foregroundStyle(.secondary)
                     }
