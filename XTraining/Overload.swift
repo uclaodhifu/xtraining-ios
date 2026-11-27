@@ -54,7 +54,7 @@ enum Overload {
     }
     static let longTip: [String: String] = [
         "胸": "上斜哑铃飞鸟、大幅度绳索夹胸", "肩": "身后绳索侧平举、上斜侧平举", "背": "直臂下拉、全程引体向上",
-        "腿": "罗马尼亚硬拉、保加利亚分腿蹲", "手臂": "上斜哑铃弯举、过头臂屈伸",
+        "腿": "罗马尼亚硬拉、保加利亚分腿蹲", "手臂": "上斜哑铃弯举、过头臂屈伸", "腹肌": "健腹轮、悬垂举腿",
     ]
 
     struct Ref: Identifiable { let id = UUID(); let year: String; let text: String; let src: String }
