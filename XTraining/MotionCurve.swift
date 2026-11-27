@@ -876,7 +876,6 @@ enum CurveAdvice {
 struct VerdictCard: View {
     let kind: CurveKind
     let name: String
-    @State private var showTable = false
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if let v = CurveAdvice.verdict(kind: kind, name: name) {
@@ -894,24 +893,6 @@ struct VerdictCard: View {
             } else {
                 Text("这个动作怎么样").font(.headline)
                 Text("在下面填上动作名（比如 T 杠划船），就能按部位评价这个阻力适不适合。").font(.subheadline).foregroundStyle(.secondary)
-            }
-            Button { withAnimation(.snappy) { showTable.toggle() } } label: {
-                Label(showTable ? "收起" : "各部位用什么阻力最好", systemImage: showTable ? "chevron.up" : "list.bullet").font(.footnote)
-            }
-            if showTable {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("增肌为主：肌肉被拉长时吃力的动作更好").font(.caption).foregroundStyle(.secondary)
-                    ForEach(CurveAdvice.table, id: \.muscle) { r in
-                        HStack(alignment: .top, spacing: 10) {
-                            Text(r.muscle).font(.subheadline.bold()).frame(width: 40, alignment: .leading)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(r.bestText + " · " + r.why).font(.footnote.bold())
-                                Text(r.example).font(.caption).foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                    Text("打分：符合最佳阻力 5 星；钟形、平稳 4 星；相反 3 星，建议换或补一个动作。").font(.caption).foregroundStyle(.secondary)
-                }
             }
             Text("依据拉长位训练相关研究（见参考文献），属于估算。增肌最关键的还是练到接近力竭，阻力曲线是加分项。").font(.caption2).foregroundStyle(.tertiary)
         }
