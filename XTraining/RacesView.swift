@@ -240,7 +240,7 @@ struct RaceList: View {
                         ForEach(items.filter { $0.id != top.id }) { e in
                             Group {
                                 if open == e.id {
-                                    RaceFlipCard(e: e).transition(.opacity.combined(with: .scale(scale: 0.97, anchor: .top)))
+                                    RaceFlipCard(e: e, compact: true).transition(.opacity.combined(with: .scale(scale: 0.97, anchor: .top)))
                                 } else {
                                     RaceMiniRow(e: e).transition(.opacity)
                                 }
