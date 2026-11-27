@@ -44,6 +44,7 @@ enum Overload {
     // 动作在哪个位置最吃力（按动作类型粗分）
     enum Zone: String, CaseIterable { case long = "拉长位", mid = "中段", short = "缩短位" }
     static func zone(_ n: String) -> Zone {
+        if let c = CurveStore.shared.curve(for: n) { return c.kind.zone }   // 录过动作的，按录出来的曲线
         let long = ["飞鸟", "罗马尼亚", "直腿硬拉", "过头", "上斜弯举", "牧师", "保加利亚", "箭步", "弓步", "深蹲", "直臂下拉", "坐姿腿弯举", "拉伸", "山羊"]
         let short = ["夹胸", "蝴蝶机", "侧平举", "反向飞鸟", "面拉", "腿屈伸", "臀推", "下压", "耸肩", "提踵", "集中弯举", "俯身臂屈伸", "臀桥"]
         if n.contains("反向飞鸟") { return .short }
@@ -468,6 +469,8 @@ private struct CheckupCard: View {
 private struct CurveCard: View {
     let part: String
     let ss: [Workout]
+    @State private var record = false
+    @ObservedObject private var cs = CurveStore.shared
     var body: some View {
         let from = Day.str(Calendar.current.date(byAdding: .day, value: -27, to: Date()) ?? Date())
         let xs = ss.filter { $0.date >= from }.flatMap { $0.exercises(of: part) }
@@ -481,7 +484,15 @@ private struct CurveCard: View {
         let longShare = Double(count[.long] ?? 0) / Double(total)
         let colors: [Overload.Zone: Color] = [.long: Tone.down, .mid: Color(hex: 0x0a84ff), .short: Color(hex: 0x7048e8)]
         return VStack(alignment: .leading, spacing: 10) {
-            HStack { Text("阻力曲线").font(.title3.bold()); Spacer(); Text("在哪个位置最吃力").font(.caption).foregroundStyle(.secondary) }
+            HStack {
+                Text("阻力曲线").font(.title3.bold()); Spacer()
+                Button { record = true } label: {
+                    Label("录动作测", systemImage: "video.fill").font(.caption.bold())
+                        .padding(.horizontal, 10).padding(.vertical, 6)
+                        .background(Color(hex: 0xe8590c).opacity(0.14), in: Capsule()).foregroundStyle(Color(hex: 0xe8590c))
+                }
+                .buttonStyle(.plain)
+            }
             if xs.isEmpty {
                 Text("最近 4 周没练\(part)").font(.subheadline).foregroundStyle(.secondary)
             } else {
@@ -504,10 +515,35 @@ private struct CurveCard: View {
                         .padding(10).frame(maxWidth: .infinity, alignment: .leading)
                         .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.orange.opacity(0.12)))
                 }
-                Text("按动作类型估算").font(.caption2).foregroundStyle(.tertiary)
+                let mine = (names.values.flatMap { $0 }).compactMap { cs.curve(for: $0) }
+                let uniq = mine.reduce(into: [SavedCurve]()) { a, c in if !a.contains(where: { $0.name == c.name }) { a.append(c) } }
+                if !uniq.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("你录过的").font(.footnote.bold()).foregroundStyle(.secondary)
+                        ForEach(uniq) { c in
+                            HStack(spacing: 10) {
+                                CurveChart(values: c.values, compact: true).frame(width: 56, height: 26)
+                                Text(c.name).font(.subheadline.bold())
+                                Spacer()
+                                Text(c.kind.title).font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+                Text(uniq.isEmpty ? "按动作类型估算 · 点右上角录一段动作，算出真实曲线" : "录过的动作按你录的曲线算，其他按动作类型估算").font(.caption2).foregroundStyle(.tertiary)
             }
         }
         .card()
+        .sheet(isPresented: $record) {
+            MotionCurveSheet(names: recentNames, preset: "")
+        }
+    }
+    private var recentNames: [String] {
+        var out: [String] = []
+        for w in ss.sorted(by: { $0.date > $1.date }) {
+            for x in w.exercises(of: part) where !x.name.isEmpty && !out.contains(x.name) { out.append(x.name) }
+        }
+        return out
     }
 }
 
