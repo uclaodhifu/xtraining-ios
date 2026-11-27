@@ -93,10 +93,11 @@ enum DigitReader {
         let vd = v.filter(\.isNumber).count
         if vd > mine.digits { return vision }          // 系统认出的位数更多：多半是这边把两个字拆成了一个，信系统的（防止吞 0）
         if vd < mine.digits {
-            // 笔画这边多拆出了字：只有多出来的都是 1（系统常常漏掉细细的 1）、其余和系统一样时才信笔画，不然信系统（防止 85 认成 155）
-            var extra = mine.digits - vd
-            let kept = String(m.filter { c in if c == "1" && extra > 0 { extra -= 1; return false }; return true })
-            return kept == vision ? mine.text : vision
+            // 笔画这边多拆出了字：系统认出的每个字都按顺序出现在笔画结果里，才是系统漏了字（漏掉细的 1、末尾的 0：2→12、12→120），信笔画；
+            // 对不上就是笔画这边把一个字拆坏了（8 拆成 15：85→155），信系统
+            var it = m.makeIterator()
+            let sub = v.allSatisfy { c in while let x = it.next() { if x == c { return true } }; return false }
+            return sub ? mine.text : vision
         }
         if v.count != m.count { return mine.text }
         let taught = taughtDigits
