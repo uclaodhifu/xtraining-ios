@@ -685,6 +685,12 @@ struct EntryView: View {
         // 动作里认出来的部位也补进去
         for x in workout.exercises { if let p = Parts.of(x.name), !workout.parts.contains(p) { workout.parts.append(p) } }
         workout.parts = Parts.all.filter { workout.parts.contains($0) }
+        // 动作全删光了、也没写备注：这次训练就删掉，首页不再显示「完成今天训练 · 0 组」
+        if workout.exercises.isEmpty && workout.note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if store.workouts.contains(where: { $0.id == workout.id }) { store.delete(workout) }
+            EntryDraft.clear()
+            return
+        }
         store.upsert(workout)
         EntryDraft.clear()
     }

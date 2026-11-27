@@ -83,8 +83,12 @@ final class Store: ObservableObject {
         }
         if ws != workouts { workouts = ws } else { objectWillChange.send() }
     }
-    func delete(_ w: Workout) { CloudSync.shared.noteDelete([w.id]); workouts.removeAll { $0.id == w.id } }
-    var todays: [Workout] { workouts.filter { $0.date == Day.today } }
+    func delete(_ w: Workout) {
+        CloudSync.shared.noteDelete([w.id]); workouts.removeAll { $0.id == w.id }
+        if todays.isEmpty { doneDays.removeAll { $0 == Day.today } }   // 今天的都删了，「练完了」也撤掉
+    }
+    // 今天的训练（空的、一个动作都没有的不算）
+    var todays: [Workout] { workouts.filter { $0.date == Day.today && !$0.exercises.isEmpty } }
 
     // 每个部位上次是哪天练的
     func lastTrained(_ part: String) -> String? {
