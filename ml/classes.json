@@ -1,22 +1,171 @@
 [
- {"id":"leg_press","name":"腿举","q":["leg press machine","leg press gym"]},
- {"id":"hack_squat","name":"哈克深蹲","q":["hack squat machine"]},
- {"id":"leg_extension","name":"腿屈伸","q":["leg extension machine"]},
- {"id":"leg_curl","name":"腿弯举","q":["leg curl machine","hamstring curl machine"]},
- {"id":"lat_pulldown","name":"高位下拉","q":["lat pulldown machine","lat pull down gym"]},
- {"id":"seated_row","name":"坐姿划船","q":["seated row machine","cable row machine"]},
- {"id":"chest_press","name":"坐姿推胸","q":["chest press machine"]},
- {"id":"pec_deck","name":"蝴蝶机","q":["pec deck machine","pec fly machine","butterfly machine gym"]},
- {"id":"shoulder_press","name":"坐姿肩推","q":["shoulder press machine"]},
- {"id":"smith_machine","name":"史密斯机","q":["smith machine"]},
- {"id":"cable_crossover","name":"龙门架","q":["cable crossover machine","cable machine gym"]},
- {"id":"assisted_pullup","name":"辅助引体","q":["assisted pull up machine","assisted dip machine"]},
- {"id":"hip_abduction","name":"髋外展/内收","q":["hip abduction machine","hip adductor machine"]},
- {"id":"calf_raise","name":"提踵机","q":["calf raise machine"]},
- {"id":"back_extension","name":"罗马椅","q":["back extension bench","roman chair hyperextension"]},
- {"id":"bench_press","name":"卧推架","q":["bench press rack","weight bench barbell"]},
- {"id":"squat_rack","name":"深蹲架","q":["squat rack","power rack gym"]},
- {"id":"treadmill","name":"跑步机","q":["treadmill"]},
- {"id":"spin_bike","name":"动感单车","q":["exercise bike gym","spinning bike"]},
- {"id":"rowing_machine","name":"划船机","q":["rowing machine ergometer"]}
+ {
+  "id": "leg_press",
+  "name": "腿举",
+  "q": [
+   "leg press machine",
+   "leg press gym"
+  ]
+ },
+ {
+  "id": "hack_squat",
+  "name": "哈克深蹲",
+  "q": [
+   "hack squat machine"
+  ]
+ },
+ {
+  "id": "leg_extension",
+  "name": "腿屈伸",
+  "q": [
+   "leg extension machine"
+  ]
+ },
+ {
+  "id": "leg_curl",
+  "name": "腿弯举",
+  "q": [
+   "leg curl machine",
+   "hamstring curl machine"
+  ]
+ },
+ {
+  "id": "lat_pulldown",
+  "name": "高位下拉",
+  "q": [
+   "lat pulldown machine",
+   "lat pull down gym"
+  ]
+ },
+ {
+  "id": "seated_row",
+  "name": "坐姿划船",
+  "q": [
+   "seated row machine",
+   "cable row machine"
+  ]
+ },
+ {
+  "id": "tbar_row",
+  "name": "T杠划船",
+  "q": [
+   "t-bar row machine",
+   "t bar row"
+  ]
+ },
+ {
+  "id": "chest_press",
+  "name": "坐姿推胸",
+  "q": [
+   "chest press machine"
+  ]
+ },
+ {
+  "id": "pec_deck",
+  "name": "蝴蝶机",
+  "q": [
+   "pec deck machine",
+   "pec fly machine",
+   "butterfly machine gym"
+  ]
+ },
+ {
+  "id": "shoulder_press",
+  "name": "坐姿肩推",
+  "q": [
+   "shoulder press machine"
+  ]
+ },
+ {
+  "id": "smith_machine",
+  "name": "史密斯机",
+  "q": [
+   "smith machine"
+  ]
+ },
+ {
+  "id": "cable_crossover",
+  "name": "龙门架",
+  "q": [
+   "cable crossover machine",
+   "cable machine gym"
+  ]
+ },
+ {
+  "id": "assisted_pullup",
+  "name": "辅助引体",
+  "q": [
+   "assisted pull up machine",
+   "assisted dip machine"
+  ]
+ },
+ {
+  "id": "hip_abduction",
+  "name": "髋外展/内收",
+  "q": [
+   "hip abduction machine",
+   "hip adductor machine"
+  ]
+ },
+ {
+  "id": "calf_raise",
+  "name": "提踵机",
+  "q": [
+   "calf raise machine"
+  ]
+ },
+ {
+  "id": "machine_curl",
+  "name": "器械弯举",
+  "q": [
+   "bicep curl machine",
+   "preacher curl machine"
+  ]
+ },
+ {
+  "id": "back_extension",
+  "name": "罗马椅",
+  "q": [
+   "back extension bench",
+   "roman chair hyperextension"
+  ]
+ },
+ {
+  "id": "bench_press",
+  "name": "卧推架",
+  "q": [
+   "bench press rack",
+   "weight bench barbell"
+  ]
+ },
+ {
+  "id": "squat_rack",
+  "name": "深蹲架",
+  "q": [
+   "squat rack",
+   "power rack gym"
+  ]
+ },
+ {
+  "id": "treadmill",
+  "name": "跑步机",
+  "q": [
+   "treadmill"
+  ]
+ },
+ {
+  "id": "spin_bike",
+  "name": "动感单车",
+  "q": [
+   "exercise bike gym",
+   "spinning bike"
+  ]
+ },
+ {
+  "id": "rowing_machine",
+  "name": "划船机",
+  "q": [
+   "rowing machine ergometer"
+  ]
+ }
 ]

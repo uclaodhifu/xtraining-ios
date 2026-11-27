@@ -29,13 +29,49 @@ def commons(q):
         if not p["title"].lower().endswith((".jpg", ".jpeg", ".png")): continue
         out.append({"src": "commons", "id": str(p["pageid"]), "url": ii.get("thumburl") or ii.get("url"), "orig": ii.get("descriptionurl", ""), "license": lic, "creator": m.get("Artist", {}).get("value", "")[:120], "title": p["title"]})
     return out
+# free-exercise-db（公有领域）：每个动作 2 张健身房实拍（起始/结束），按名字归到我们的器械类别
+FEDB = "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/"
+RULES = [
+    ("hack_squat", lambda n, e: "hack squat" in n),
+    ("smith_machine", lambda n, e: "smith" in n),
+    ("leg_press", lambda n, e: "leg press" in n),
+    ("leg_extension", lambda n, e: "leg extension" in n),
+    ("leg_curl", lambda n, e: "leg curl" in n),
+    ("lat_pulldown", lambda n, e: "pulldown" in n),
+    ("tbar_row", lambda n, e: "t-bar" in n),
+    ("seated_row", lambda n, e: "seated cable row" in n or "leverage iso row" in n or "leverage high row" in n or "seated row" in n),
+    ("chest_press", lambda n, e: ("chest press" in n and e == "machine") or n == "machine bench press"),
+    ("pec_deck", lambda n, e: n == "butterfly" or "machine flyes" in n or "pec deck" in n),
+    ("shoulder_press", lambda n, e: e == "machine" and "shoulder" in n and "press" in n),
+    ("assisted_pullup", lambda n, e: "dip machine" in n or "assisted" in n),
+    ("hip_abduction", lambda n, e: "thigh abductor" in n or "thigh adductor" in n),
+    ("calf_raise", lambda n, e: e == "machine" and "calf" in n),
+    ("back_extension", lambda n, e: "hyperextension" in n or "glute ham raise" in n),
+    ("machine_curl", lambda n, e: e == "machine" and "curl" in n),
+    ("treadmill", lambda n, e: "treadmill" in n),
+    ("spin_bike", lambda n, e: "bicycling, stationary" in n or "recumbent bike" in n),
+    ("rowing_machine", lambda n, e: "rowing, stationary" in n),
+    ("bench_press", lambda n, e: e == "barbell" and "bench press" in n),
+    ("squat_rack", lambda n, e: e == "barbell" and "squat" in n),
+    ("cable_crossover", lambda n, e: e == "cable"),
+]
+fedb = {}
+try:
+    for x in json.loads(get(FEDB + "dist/exercises.json", 60)):
+        n, e = x["name"].lower(), x.get("equipment") or ""
+        for cid, f in RULES:
+            if f(n, e):
+                for im in x.get("images", []):
+                    fedb.setdefault(cid, []).append({"src": "fedb", "id": im.replace("/", "_").replace(".jpg", ""), "url": FEDB + "exercises/" + im, "orig": "https://github.com/yuhonas/free-exercise-db", "license": "unlicense", "creator": "free-exercise-db", "title": x["name"]})
+                break
+except Exception as ex: print("fedb", ex)
 classes = json.load(open("ml/classes.json"))
 only = set(filter(None, os.environ.get("ONLY", "").split(",")))
 os.makedirs("ml/review", exist_ok=True)
 rows = []
 for c in classes:
     if only and c["id"] not in only: continue
-    cand, seen = [], set()
+    cand, seen = list(fedb.get(c["id"], [])), set()
     for q in c["q"]:
         for r in openverse(q) + commons(q):
             if r["url"] in seen: continue
@@ -48,7 +84,7 @@ for c in classes:
             im = Image.open(io.BytesIO(get(r["url"], 20))).convert("RGB")
             if min(im.size) < 160: continue
             im.thumbnail((512, 512))
-            n = f"{r['src'][0]}{r['id'][:12]}.jpg"; im.save(f"{d}/{n}", quality=88)
+            n = f"{r['src'][0]}{r['id'][-40:]}.jpg"; im.save(f"{d}/{n}", quality=88)
             got.append((n, im)); rows.append([c["id"], n, r["src"], r["orig"], r["license"], r["creator"], r["title"]])
         except Exception as e: print("dl", e)
     print(c["id"], "candidates", len(cand), "kept", len(got), flush=True)
