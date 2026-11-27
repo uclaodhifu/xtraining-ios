@@ -121,8 +121,9 @@ struct HomeView: View {
         } else {
             BigCard {
                 HeroBanner(tag: "今天练什么", title: heroTitle, sub: why,
-                           button: hasDraft ? "继续训练" : (chosen.wrappedValue.isEmpty ? "开始训练" : "开始训练 · " + chosen.wrappedValue.joined(separator: " + ")),
-                           action: { Haptic.tap(.medium); editing = newWorkout(chosen.wrappedValue) }) {
+                           button: hasDraft || !store.todays.isEmpty ? "继续训练" : (chosen.wrappedValue.isEmpty ? "开始训练" : "开始训练 · " + chosen.wrappedValue.joined(separator: " + ")),
+                           // 今天已经记过（保存过）就打开今天那次接着记；要另开一次用右上角的 ＋
+                           action: { Haptic.tap(.medium); editing = hasDraft ? newWorkout(chosen.wrappedValue) : (store.todays.max { $0.createdAt < $1.createdAt } ?? newWorkout(chosen.wrappedValue)) }) {
                     HStack(spacing: 8) {
                         Button { showCycle = true } label: {
                             Text(cycleOn ? "周期" : "＋ 周期").font(.footnote.bold()).foregroundStyle(.white)

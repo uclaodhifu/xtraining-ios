@@ -755,23 +755,48 @@ struct StrID: Identifiable { let id: String }
 
 
 // 键盘输入格：自己存一份文字，打字时不被外面的数据刷新打断（iOS 27.3 打 120 会吞 0）
-struct NumField: View {
+struct NumField: UIViewRepresentable {
+    // 用 UIKit 的输入框：iOS 27.3 上 SwiftUI 的 TextField 在这里打字会丢字（打不出 12、120）
     @Binding var value: String
     var decimal: Bool
-    @State private var text = ""
-    @FocusState private var focused: Bool
-    var body: some View {
-        TextField("", text: $text)
-            .keyboardType(decimal ? .decimalPad : .numberPad).multilineTextAlignment(.center)
-            .font(Paper.hand(24)).monospacedDigit().foregroundStyle(Paper.ink)
-            .focused($focused)
-            .onAppear { text = value }
-            .onChange(of: text) { _, v in
-                let n = v.filter { "0123456789.".contains($0) }
-                if n != v { text = n; return }
-                if n != value { value = n }
-            }
-            .onChange(of: value) { _, v in if !focused && v != text { text = v } }
-            .onChange(of: focused) { _, f in if !f && value != text { text = value } }
+
+    func makeUIView(context: Context) -> UITextField {
+        let f = UITextField()
+        f.keyboardType = decimal ? .decimalPad : .numberPad
+        f.textAlignment = .center
+        f.font = UIFont(name: "Noteworthy-Bold", size: 24) ?? .systemFont(ofSize: 24, weight: .bold)
+        f.textColor = UIColor(Paper.ink)
+        f.tintColor = UIColor(Paper.ink)
+        f.text = value
+        f.delegate = context.coordinator
+        f.addTarget(context.coordinator, action: #selector(Coord.changed(_:)), for: .editingChanged)
+        f.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        f.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        // 键盘上面的「完成」
+        let bar = UIToolbar(frame: CGRect(x: 0, y: 0, width: 320, height: 44))
+        bar.items = [UIBarButtonItem(systemItem: .flexibleSpace),
+                     UIBarButtonItem(title: "完成", style: .done, target: f, action: #selector(UIResponder.resignFirstResponder))]
+        f.inputAccessoryView = bar
+        return f
+    }
+    func updateUIView(_ f: UITextField, context: Context) {
+        context.coordinator.parent = self
+        if !f.isFirstResponder && f.text != value { f.text = value }
+    }
+    func makeCoordinator() -> Coord { Coord(self) }
+
+    final class Coord: NSObject, UITextFieldDelegate {
+        var parent: NumField
+        init(_ p: NumField) { parent = p }
+        @objc func changed(_ f: UITextField) {
+            let t = f.text ?? ""
+            let n = t.filter { "0123456789.".contains($0) }
+            if n != t { f.text = n }
+            if parent.value != n { parent.value = n }
+        }
+        func textFieldDidEndEditing(_ f: UITextField) {
+            let n = (f.text ?? "").filter { "0123456789.".contains($0) }
+            if parent.value != n { parent.value = n }
+        }
     }
 }
