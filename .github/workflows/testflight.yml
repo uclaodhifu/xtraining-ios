@@ -82,7 +82,10 @@ jobs:
           BUILD_NO: ${{ github.run_number }}
           BEFORE: ${{ github.event.before }}
         run: |
-          if [ -n "$BEFORE" ] && git cat-file -e "$BEFORE" 2>/dev/null; then
+          # 优先用中文更新说明（testflight-notes.txt，每次发版前写好）
+          if [ -s testflight-notes.txt ]; then
+            NOTES=$(cat testflight-notes.txt)
+          elif [ -n "$BEFORE" ] && git cat-file -e "$BEFORE" 2>/dev/null; then
             NOTES=$(git log --no-merges --pretty='• %s' "$BEFORE..HEAD" | head -15)
           else
             NOTES=$(git log --no-merges --pretty='• %s' -1)

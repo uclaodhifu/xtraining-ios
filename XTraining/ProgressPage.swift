@@ -57,21 +57,16 @@ struct PartProgress: View {
         let nm = names(ss)
         return ScrollView {
             VStack(spacing: 14) {
-                YesterdayCard()   // 跟着页面一起滚走
-                MuscleMapCard()   // 训练分布（从首页挪过来）
                 if ss.isEmpty {
                     VStack(spacing: 8) {
                         Text("📈").font(.system(size: 44))
                         Text("还没练过\(part)").font(.headline)
-                        Text("记几次训练，这里就会出现曲线").font(.subheadline).foregroundStyle(.secondary)
+                        Text("记几次训练，这里就会出现进步分析").font(.subheadline).foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: .infinity).padding(.vertical, 50).card()
+                    MuscleMapCard()
                 } else {
-                    sessionStrip(ss)
-                    tiles(ss)
-                    SetsChart(part: part, rows: setRows(ss))
-                    OverloadEntry(part: part, sessions: ss, names: nm)   // 渐进超负荷（替换原来的目标重量图）
-                    exerciseList(ss, nm)
+                    ProgressSections(part: part, ss: ss, names: nm, sets: SetsChart(part: part, rows: setRows(ss)))
                 }
             }
             .padding(.horizontal, 16).padding(.bottom, 30)

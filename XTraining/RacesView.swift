@@ -228,6 +228,33 @@ struct RaceList: View {
                         }
                     }
                     .frame(maxWidth: .infinity).padding(.vertical, 60).padding(.horizontal, 30)
+                } else if !past {
+                    // 新样式：最上面一张翻页钟大卡（点下面的比赛就换上来），下面是其余比赛
+                    let top = items.first { $0.id == open } ?? items.first { store.follow.contains($0.id) } ?? items[0]
+                    VStack(alignment: .leading, spacing: 10) {
+                        RaceFlipCard(e: top).id("flip-top")
+                            .transition(.opacity.combined(with: .scale(scale: 0.97)))
+                        if items.count > 1 {
+                            Text("接下来").font(.subheadline.bold()).foregroundStyle(.secondary).padding(.top, 8).padding(.leading, 4)
+                        }
+                        ForEach(items.filter { $0.id != top.id }) { e in
+                            RaceMiniRow(e: e)
+                                .onTapGesture {
+                                    Haptic.tap()
+                                    withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) { open = e.id; proxy.scrollTo("flip-top", anchor: .top) }
+                                }
+                                .contextMenu {
+                                    Button(store.follow.contains(e.id) ? "取消追赛" : "追赛", systemImage: "bell") { store.toggleFollow(e) }
+                                }
+                        }
+                    }
+                    .padding(.horizontal, 16).padding(.top, 4)
+                    .frame(maxWidth: 720).frame(maxWidth: .infinity)
+                    if !feed.updated.isEmpty {
+                        Text("赛程更新于 \(feed.updated) · 下拉刷新").font(.caption2).foregroundStyle(.tertiary)
+                            .frame(maxWidth: .infinity).padding(.top, 14)
+                    }
+                    Color.clear.frame(height: 30)
                 } else {
                     // 顶部一排比赛日期，点了跳过去
                     ScrollView(.horizontal, showsIndicators: false) {

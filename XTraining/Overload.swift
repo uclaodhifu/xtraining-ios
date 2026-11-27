@@ -208,6 +208,29 @@ struct OverloadBody: View {
     }
 }
 
+
+// 进步页（按部位）：渐进超负荷放在最前面，下面是体检、阻力曲线、平均组数、训练分布、参考文献
+struct ProgressSections<Sets: View>: View {
+    let part: String
+    let ss: [Workout]
+    let names: [String]
+    let sets: Sets
+    var body: some View {
+        let sum = OverloadSummary(part: part, ss: ss, names: names)
+        VStack(spacing: 14) {
+            SummaryCard(sum: sum)
+            ExerciseCards(part: part, ss: ss, names: names)
+            CheckupCard(part: part, ss: ss)
+            CurveCard(part: part, ss: ss)
+            sets
+            MuscleMapCard()
+            RefsCard()
+            Text("数据只是估算，用来对比自己前后的变化\n有伤病或不适请先咨询医生或教练")
+                .font(.caption2).foregroundStyle(.secondary).multilineTextAlignment(.center)
+        }
+    }
+}
+
 private struct SummaryCard: View {
     let sum: OverloadSummary
     var body: some View {
@@ -361,22 +384,28 @@ private struct ExerciseRow: View {
 private struct MiniBars: View {
     let pts: [Overload.Pt]
     var body: some View {
+        let lo = (pts.map(\.e1).min() ?? 0) * 0.85, hi = (pts.map(\.e1).max() ?? 1) * 1.02
         Chart {
             ForEach(Array(pts.enumerated()), id: \.offset) { i, p in
                 let st = i == 0 ? Overload.State.none : Overload.state(p, pts[i - 1])
-                BarMark(x: .value("d", slashDate(p.date) + "#\(i)"), y: .value("e", p.e1), width: .ratio(0.55))
+                // 柱子从图的底边开始画（不是从 0），不会画到卡片外面
+                BarMark(x: .value("d", "\(i)"), yStart: .value("lo", lo), yEnd: .value("e", p.e1), width: .ratio(0.5))
                     .foregroundStyle(st == .done ? Tone.up.opacity(0.75) : st == .miss ? Tone.down.opacity(0.55) : Color(hex: 0x0a84ff).opacity(0.3))
                     .cornerRadius(4)
             }
         }
         .chartXAxis {
             AxisMarks { v in
-                AxisValueLabel { if let s = v.as(String.self) { Text(s.components(separatedBy: "#")[0]).font(.system(size: 9)) } }
+                AxisValueLabel {
+                    if let s = v.as(String.self), let i = Int(s), i < pts.count { Text(slashDate(pts[i].date)).font(.system(size: 9)) }
+                }
             }
         }
         .chartYAxis(.hidden)
-        .chartYScale(domain: (pts.map(\.e1).min() ?? 0) * 0.85...(pts.map(\.e1).max() ?? 1) * 1.03)
-        .frame(height: 70)
+        .chartYScale(domain: lo...hi)
+        .chartPlotStyle { $0.clipped() }
+        .frame(height: 64)
+        .clipped()
         .transaction { $0.animation = nil }
     }
 }
