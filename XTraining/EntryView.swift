@@ -776,10 +776,22 @@ struct NumField: UIViewRepresentable {
     var onFocus: ((Bool) -> Void)? = nil
 
     @MainActor static var editingLabel: String? = nil
+    // 打字中输入框被换掉（页面刷新把它重建了）：记下刚才打到哪，新的输入框接着打，键盘不收
+    @MainActor static var lost: (label: String, text: String, at: Date)? = nil
 
     func makeUIView(context: Context) -> UITextField {
         if let e = NumField.editingLabel { BugLog.add("⚠ 输入框重建：「\(e)」正在打字时又建了一个「\(label)」") }
         let f = UITextField()
+        if let l = NumField.lost, l.label == label, Date().timeIntervalSince(l.at) < 1 {
+            NumField.lost = nil
+            BugLog.add("⚠ 接着打：「\(label)」恢复成 \"\(l.text)\"")
+            DispatchQueue.main.async {
+                f.text = l.text
+                f.becomeFirstResponder()
+            }
+        }
+        f.inlinePredictionType = .no
+        f.textContentType = nil
         f.keyboardType = decimal ? .decimalPad : .numberPad
         f.textAlignment = align
         f.font = font ?? UIFont(name: "Noteworthy-Bold", size: 24) ?? .systemFont(ofSize: 24, weight: .bold)
@@ -813,12 +825,15 @@ struct NumField: UIViewRepresentable {
         if f.isFirstResponder {
             BugLog.add("⚠ 输入框被拆掉：「\(coordinator.parent.label)」打字中，格子里是 \"\(f.text ?? "")\"")
             NumField.editingLabel = nil
+            NumField.lost = (coordinator.parent.label, f.text ?? "", Date())
+            coordinator.dismantled = true
         }
     }
     func makeCoordinator() -> Coord { Coord(self) }
 
     final class Coord: NSObject, UITextFieldDelegate {
         var parent: NumField
+        var dismantled = false
         init(_ p: NumField) { parent = p }
         func textFieldShouldBeginEditing(_ f: UITextField) -> Bool {
             parent.onFocus?(true)      // 在键盘弹出之前就通知（手写板上的「认成」靠这个不被关掉）
@@ -840,6 +855,11 @@ struct NumField: UIViewRepresentable {
             if parent.value != n { parent.value = n }
         }
         func textFieldDidEndEditing(_ f: UITextField) {
+            if dismantled { return }    // 被拆掉引起的收起：交给新的输入框接着打，别把半截数字写回去
+            if f.window == nil {        // 输入框已经不在页面上了（被刷新掉）
+                BugLog.add("⚠ 输入框被移走：「\(parent.label)」打字中，格子里是 \"\(f.text ?? "")\"")
+                NumField.lost = (parent.label, f.text ?? "", Date())
+            }
             let n = (f.text ?? "").filter { "0123456789.".contains($0) }
             if parent.value != n { parent.value = n }
             NumField.editingLabel = nil
