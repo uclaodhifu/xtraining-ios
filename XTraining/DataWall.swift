@@ -15,7 +15,6 @@ struct DataWall: View {
                 PRTile()
                 StreakTile()
             }
-            MuscleMapCard()
         }
     }
 }
