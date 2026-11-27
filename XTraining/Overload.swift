@@ -202,7 +202,6 @@ struct OverloadBody: View {
             CheckupCard(part: part, ss: ss)
             CurveCard(part: part, ss: ss)
             RefsCard()
-            LatestPapersCard()
             Text("数据只是估算，用来对比自己前后的变化\n有伤病或不适请先咨询医生或教练")
                 .font(.caption2).foregroundStyle(.secondary).multilineTextAlignment(.center)
         }
