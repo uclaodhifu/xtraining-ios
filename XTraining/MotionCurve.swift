@@ -661,6 +661,8 @@ struct MotionCurveSheet: View {
             }
             .card()
 
+            VerdictCard(kind: kind, name: name)
+
             if r.lever != nil || !r.joints.isEmpty || !r.usedHand {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("转轴、杠铃片、关节一起看出来的").font(.headline)
@@ -797,5 +799,122 @@ struct VideoCamera: UIViewControllerRepresentable {
             done(info[.mediaURL] as? URL)
         }
         func imagePickerControllerDidCancel(_ picker: UIImagePickerController) { done(nil) }
+    }
+}
+
+// MARK: - 按阻力曲线评价动作（增肌为主；依据拉长位训练研究，属于估算）
+
+struct CurveVerdict {
+    let muscle: String      // 胸 / 背 / 肩 / 股四 / 腘绳 / 臀 / 二头 / 三头 / 腹肌
+    let stars: Int
+    let label: String       // 很适合 / 可以 / 建议补一个
+    let reason: String
+    let tip: String
+}
+
+enum CurveAdvice {
+    struct Row { let muscle: String; let best: [CurveKind]; let bestText: String; let why: String; let example: String }
+    static let table: [Row] = [
+        Row(muscle: "胸", best: [.descending], bestText: "下降阻力", why: "手臂打开、胸被拉开时最重", example: "上斜哑铃飞鸟、推胸机起点重的"),
+        Row(muscle: "背", best: [.descending], bestText: "下降阻力", why: "手臂伸直、背被拉长时最重", example: "挂片划船、全程引体、直臂下拉"),
+        Row(muscle: "肩", best: [.flat, .descending], bestText: "平稳 / 下降", why: "手臂垂下时也要有阻力", example: "哑铃侧平举是上升阻力（下面没劲），换身后绳索侧平举"),
+        Row(muscle: "股四", best: [.descending], bestText: "下降阻力", why: "膝盖弯得深时最重", example: "深蹲、哈克深蹲、腿屈伸起点重的"),
+        Row(muscle: "腘绳", best: [.descending], bestText: "下降阻力", why: "腿伸直时最重", example: "坐姿腿弯举（比俯卧好）、罗马尼亚硬拉"),
+        Row(muscle: "臀", best: [.descending], bestText: "下降为主，上升补充", why: "臀被拉长（蹲深）时最重", example: "深蹲、箭步为主；臀推是上升阻力，用来补顶峰"),
+        Row(muscle: "二头", best: [.descending], bestText: "下降阻力", why: "手臂伸直时最重", example: "上斜弯举、牧师凳弯举"),
+        Row(muscle: "三头", best: [.descending], bestText: "下降阻力", why: "手肘弯到底时最重", example: "过头臂屈伸"),
+        Row(muscle: "腹肌", best: [.descending], bestText: "下降阻力", why: "腹部被拉长（身体后仰）时最重", example: "绳索卷腹、健腹轮"),
+    ]
+
+    // 按动作名认是哪块肌肉
+    static func muscle(for name: String) -> String? {
+        let n = name
+        guard let part = Parts.of(n) else { return nil }
+        switch part {
+        case "腿":
+            if ["臀推", "臀桥", "臀"].contains(where: n.contains) { return "臀" }
+            if ["腿弯举", "罗马尼亚", "直腿硬拉", "腘绳"].contains(where: n.contains) { return "腘绳" }
+            return "股四"
+        case "手臂":
+            if ["臂屈伸", "下压", "三头", "窄距"].contains(where: n.contains) { return "三头" }
+            return "二头"
+        case "胸", "背", "肩", "腹肌": return part
+        default: return nil
+        }
+    }
+
+    static func verdict(kind: CurveKind, name: String) -> CurveVerdict? {
+        guard let m = muscle(for: name), let row = table.first(where: { $0.muscle == m }) else { return nil }
+        let ok = row.best.contains(kind)
+        let stars: Int
+        let label: String
+        if ok { stars = 5; label = "很适合" }
+        else if m == "臀" && kind == .ascending { stars = 4; label = "可以" }
+        else if kind == .bell || kind == .flat || (kind == .descending) { stars = 4; label = "可以" }
+        else { stars = 3; label = "建议补一个" }
+        let reason: String
+        if ok {
+            reason = "\(m)在\(row.why.replacingOccurrences(of: "时最重", with: ""))的时候最该吃力。这个动作是\(kind.title)，正好符合，是练\(m)很理想的阻力。"
+        } else if stars == 4 {
+            reason = m == "臀" && kind == .ascending
+                ? "这是上升阻力，臀在收紧（顶峰）时最重。适合用来补顶峰，主项最好还是蹲、箭步这类拉长位吃力的。"
+                : "这是\(kind.title)，能练到\(m)，但\(m)最好在\(row.why.replacingOccurrences(of: "时最重", with: ""))时吃力（\(row.bestText)）。"
+        } else {
+            reason = "这是\(kind.title)，\(m)被拉长的时候阻力小，跟\(m)最适合的\(row.bestText)正好相反。"
+        }
+        let tip: String
+        switch (ok, kind) {
+        case (true, .descending): tip = "顶端偏轻，收缩感会弱一点。可以在顶端停 1 秒。"
+        case (true, _): tip = "保持全程，别只做半程。"
+        case (false, .ascending): tip = "补一个拉长位的动作，比如：\(row.example)。也可以每组最后加几次只做前半程。"
+        default: tip = "配一个拉长位的动作更好，比如：\(row.example)。"
+        }
+        return CurveVerdict(muscle: m, stars: stars, label: label, reason: reason, tip: tip)
+    }
+}
+
+struct VerdictCard: View {
+    let kind: CurveKind
+    let name: String
+    @State private var showTable = false
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let v = CurveAdvice.verdict(kind: kind, name: name) {
+                HStack {
+                    Text("这个动作怎么样").font(.headline)
+                    Spacer()
+                    Text("\(v.muscle) · \(v.label)").font(.caption.bold()).padding(.horizontal, 8).padding(.vertical, 4)
+                        .background((v.stars >= 5 ? Tone.up : v.stars == 4 ? Tone.gold : Tone.down).opacity(0.15), in: RoundedRectangle(cornerRadius: 7))
+                        .foregroundStyle(v.stars >= 5 ? Tone.up : v.stars == 4 ? Color(hex: 0xa35f00) : Tone.down)
+                }
+                Text(String(repeating: "★", count: v.stars) + String(repeating: "☆", count: 5 - v.stars)).foregroundStyle(Tone.gold)
+                Text(v.reason).font(.subheadline)
+                Text("💡 " + v.tip).font(.footnote).padding(10).frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            } else {
+                Text("这个动作怎么样").font(.headline)
+                Text("在下面填上动作名（比如 T 杠划船），就能按部位评价这个阻力适不适合。").font(.subheadline).foregroundStyle(.secondary)
+            }
+            Button { withAnimation(.snappy) { showTable.toggle() } } label: {
+                Label(showTable ? "收起" : "各部位用什么阻力最好", systemImage: showTable ? "chevron.up" : "list.bullet").font(.footnote)
+            }
+            if showTable {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("增肌为主：肌肉被拉长时吃力的动作更好").font(.caption).foregroundStyle(.secondary)
+                    ForEach(CurveAdvice.table, id: \.muscle) { r in
+                        HStack(alignment: .top, spacing: 10) {
+                            Text(r.muscle).font(.subheadline.bold()).frame(width: 40, alignment: .leading)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(r.bestText + " · " + r.why).font(.footnote.bold())
+                                Text(r.example).font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    Text("打分：符合最佳阻力 5 星；钟形、平稳 4 星；相反 3 星，建议换或补一个动作。").font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            Text("依据拉长位训练相关研究（见参考文献），属于估算。增肌最关键的还是练到接近力竭，阻力曲线是加分项。").font(.caption2).foregroundStyle(.tertiary)
+        }
+        .card()
     }
 }
