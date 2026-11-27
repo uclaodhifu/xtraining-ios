@@ -208,6 +208,29 @@ struct OverloadBody: View {
     }
 }
 
+
+// 进步页（按部位）：渐进超负荷放在最前面，下面是体检、阻力曲线、平均组数、训练分布、参考文献
+struct ProgressSections<Sets: View>: View {
+    let part: String
+    let ss: [Workout]
+    let names: [String]
+    let sets: Sets
+    var body: some View {
+        let sum = OverloadSummary(part: part, ss: ss, names: names)
+        VStack(spacing: 14) {
+            SummaryCard(sum: sum)
+            ExerciseCards(part: part, ss: ss, names: names)
+            CheckupCard(part: part, ss: ss)
+            CurveCard(part: part, ss: ss)
+            sets
+            MuscleMapCard()
+            RefsCard()
+            Text("数据只是估算，用来对比自己前后的变化\n有伤病或不适请先咨询医生或教练")
+                .font(.caption2).foregroundStyle(.secondary).multilineTextAlignment(.center)
+        }
+    }
+}
+
 private struct SummaryCard: View {
     let sum: OverloadSummary
     var body: some View {
