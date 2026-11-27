@@ -75,7 +75,16 @@ struct SavedCurve: Codable, Identifiable, Hashable {
     var lowPct: Int? = nil
     var seat: String? = nil       // 座椅档位
     var date: Double = Date().timeIntervalSince1970
-    var kind: CurveKind { CurveKind.of(values) }
+    var pattern: String? = nil    // 新版引擎的形态（CurvePattern.rawValue），有就以它为准
+    var kind: CurveKind {
+        switch pattern.flatMap(CurvePattern.init(rawValue:)) {
+        case .descending: return .descending
+        case .ascending: return .ascending
+        case .bellShaped: return .bell
+        case .flat: return .flat
+        default: return CurveKind.of(values)
+        }
+    }
 }
 
 // 录过的曲线存在本机（xt.curves），以后进步页的阻力曲线按这个算
