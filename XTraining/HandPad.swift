@@ -99,6 +99,7 @@ struct HandPad: View {
     var textMode = false
     var nextLabel = "下一格  →"
     var plus = false          // 次数格：多一个「＋」键，写 10+5（组内暂停）
+    var padHeight: CGFloat = 230   // 横屏时矮一点
     var onInk: ((PKDrawing) -> Void)? = nil
     var onNext: () -> Void
     var onClose: () -> Void
@@ -155,7 +156,7 @@ struct HandPad: View {
                 }
                     .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
-            .frame(height: 230)
+            .frame(height: padHeight)
             .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Paper.ink.opacity(0.15)))
             HStack(spacing: 8) {
                 key("清除", wide: false) { clear() }

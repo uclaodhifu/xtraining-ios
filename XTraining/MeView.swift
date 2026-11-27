@@ -6,6 +6,7 @@ struct MeView: View {
     @EnvironmentObject var store: Store
     @AppStorage("theme") private var theme = "system"
     @AppStorage(InputMode.key) private var inputMode = 0
+    @AppStorage("xt.entryLandscape") private var alwaysLand = false
     @AppStorage("brandTitle") private var brandTitle = ""
     @AppStorage("skin") private var skin = "ins"
     @State private var notesImport = false
@@ -71,10 +72,11 @@ struct MeView: View {
                         Text("键盘").tag(2)
                     }
                     .pickerStyle(.segmented)
+                    Toggle("记录时总是横屏", isOn: $alwaysLand)
                 } header: { Text("输入方式") } footer: {
-                    Text(inputMode == 0 ? "重量和次数用手指写，格子里留原样笔迹；动作名、备注用键盘。"
+                    Text((inputMode == 0 ? "重量和次数用手指写，格子里留原样笔迹；动作名、备注用键盘。"
                          : inputMode == 1 ? "重量、次数、动作名都手写，格子里留着你写的原样笔迹，像一本电子手写笔记。数字照样会认出来，涨跌和统计不受影响。"
-                         : "都用系统键盘打字。")
+                         : "都用系统键盘打字。") + "\n横屏：一行一个动作、一格一组，右边手写。记录页右上角也能随时切换。")
                 }
                 Section {
                     BugRecordRow()

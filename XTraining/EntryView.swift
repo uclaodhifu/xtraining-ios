@@ -21,6 +21,11 @@ struct EntryView: View {
     @AppStorage(InputMode.key) private var inputMode = 0
     @State private var restored: Bool
     @Environment(\.scenePhase) private var phase
+    @Environment(\.verticalSizeClass) private var vClass
+    @AppStorage("xt.entryLandscape") private var alwaysLand = false   // 我 → 记录时总是横屏
+    @State private var land = false            // 横屏记录
+    @State private var prevLock: UIInterfaceOrientationMask = .portrait
+    @State private var askName = false         // 横屏里加动作：弹个输入框
 
     init(workout: Workout) {
         _workout = State(initialValue: workout)
@@ -44,6 +49,8 @@ struct EntryView: View {
     var body: some View {
         NavigationStack {
             ScrollViewReader { proxy in
+            Group {
+            if wide { landBody } else {
             ScrollView {
                 VStack(spacing: 14) {
                     if restored && isNew { draftBanner }
@@ -62,9 +69,13 @@ struct EntryView: View {
             .scrollDismissesKeyboard(.interactively)
             // 卡片拖到空白处松手，也要把“正在拖”的状态清掉，免得卡片一直是高亮的
             .dropDestination(for: CardDrag.self) { _, _ in dragging = nil; return true }
+            }
+            }
             .safeAreaInset(edge: .bottom) {
                 // 写重量/次数时，底下换成手写板；写完收起来又是休息计时
-                if addingByHand {
+                if wide {
+                    EmptyView()   // 横屏：手写板在右边
+                } else if addingByHand {
                     HandPad(value: $newName, title: "手写加动作", textMode: true, nextLabel: "加上这个动作",
                             onInk: { nameInk = $0 }, onNext: { addByHand() },
                             onClose: { withAnimation(.snappy) { addingByHand = false } })
@@ -98,9 +109,14 @@ struct EntryView: View {
             .onChange(of: phase) { _, p in
                 if p != .active, isNew, !closed, !workout.exercises.isEmpty || !workout.note.isEmpty { EntryDraft.save(workout) }
             }
-            .onAppear { BugLog.add("页面 " + (isNew ? "开始训练" : "修改训练") + "，输入方式 \(inputMode)") }
+            .onAppear {
+                BugLog.add("页面 " + (isNew ? "开始训练" : "修改训练") + "，输入方式 \(inputMode)")
+                prevLock = AppDelegate.lock
+                if alwaysLand && UIDevice.current.userInterfaceIdiom == .phone { setLand(true) }
+            }
             .onDisappear {
                 BugLog.add("关掉 训练页")
+                if land { Orientation.set(prevLock) }
                 autoSave()
                 // 新训练没点保存就关掉了：再存一次草稿，首页显示「继续训练」
                 if isNew, !closed, !workout.exercises.isEmpty || !workout.note.isEmpty { EntryDraft.save(workout) }
@@ -111,8 +127,16 @@ struct EntryView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button(isNew ? "取消" : "关闭") { dismiss() } }
+                if UIDevice.current.userInterfaceIdiom == .phone {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button { setLand(!land) } label: {
+                            Label(land ? "竖屏" : "横屏", systemImage: land ? "rectangle.portrait.rotate" : "rectangle.landscape.rotate")
+                                .labelStyle(.titleAndIcon).font(.subheadline)
+                        }
+                    }
+                }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") { save() }.bold()
+                    Button(wide ? "完成" : "保存") { save() }.bold()
                         .disabled(workout.exercises.isEmpty && workout.parts.isEmpty)
                 }
                 ToolbarItemGroup(placement: .keyboard) { Spacer(); Button("完成") { hideKeyboard() } }
@@ -120,6 +144,11 @@ struct EntryView: View {
             .sheet(item: $infoFor) { ExerciseInfoSheet(ex: $0) }
             .sheet(item: Binding(get: { plateFor.map(StrID.init) }, set: { plateFor = $0?.id })) { m in
                 PlateSettings(name: m.id).presentationDetents([.medium])
+            }
+            .alert("加动作", isPresented: $askName) {
+                TextField("比如 卧推", text: $newName)
+                Button("加上") { add(newName); newName = ""; focusFirstEmpty() }
+                Button("取消", role: .cancel) { newName = "" }
             }
             .confirmationDialog("确定删除？", isPresented: $confirmDelete, titleVisibility: .visible) {
                 Button("删除", role: .destructive) { closed = true; store.delete(workout); dismiss() }
@@ -930,5 +959,170 @@ struct NumField: UIViewRepresentable {
             BugLog.add("键盘 \(parent.label) 收起，最后是 \"\(n)\"，存进去的是 \"\(parent.value)\"，字要 \(Int((f.text ?? "" as String).size(withAttributes: [.font: f.font ?? UIFont.systemFont(ofSize: 24)]).width)) 宽 / 格子 \(Int(f.bounds.width))")
             parent.onFocus?(false)
         }
+    }
+}
+
+
+// MARK: - 横屏记录：一行一个动作，一格一组，右边是手写板
+extension EntryView {
+    private var wide: Bool { land && vClass == .compact }
+
+    private func setLand(_ on: Bool) {
+        BugLog.add(on ? "切到横屏记录" : "切回竖屏记录")
+        withAnimation(.snappy) { land = on }
+        Orientation.set(on ? .landscape : prevLock)
+        Haptic.tap()
+    }
+
+    private var landBody: some View {
+        HStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    landHeader
+                    if workout.exercises.isEmpty {
+                        Text("点下面「＋ 加动作」开始记").font(.subheadline).foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity).padding(.vertical, 24)
+                    }
+                    ForEach(Array(workout.exercises.enumerated()), id: \.element.id) { i, ex in
+                        landRow(i, exBinding(ex.id))
+                    }
+                    landAdd.padding(.vertical, 10)
+                }
+                .padding(.horizontal, 12).padding(.bottom, 20)
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .background(Paper.bg)
+            if inputMode != 2 {
+                Group {
+                    if let c = writing {
+                        HandPad(value: cellBinding(c), title: cellTitle(c), plus: !c.weight, padHeight: 150,
+                                onInk: { saveInk(c, $0) },
+                                onNext: { nextCell(c) },
+                                onClose: { withAnimation(.snappy) { writing = nil } })
+                    } else {
+                        VStack(spacing: 8) {
+                            Image(systemName: "hand.draw").font(.title).foregroundStyle(Paper.pencil)
+                            Text("点左边的格子，在这里手写").font(.subheadline).foregroundStyle(Paper.pencil)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                }
+                .frame(width: 300)
+                .background(Color(.systemGroupedBackground))
+            }
+        }
+    }
+
+    private var landHeader: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text(slashDate(workout.date)).font(Paper.hand(24))
+            Text(workout.parts.isEmpty ? "今天练什么" : workout.parts.joined(separator: " + "))
+                .font(.system(size: 18, weight: .heavy))
+            Spacer()
+            Text("已记 \(workout.setCount) 组").font(.caption.bold()).foregroundStyle(Paper.pencil)
+        }
+        .foregroundStyle(Paper.ink)
+        .padding(.vertical, 8)
+        .overlay(alignment: .bottom) { Rectangle().fill(Paper.rule).frame(height: 1) }
+    }
+
+    @ViewBuilder private func landRow(_ i: Int, _ x: Binding<Exercise>) -> some View {
+        let name = x.wrappedValue.name
+        let color = Parts.of(name).map(Parts.color) ?? Brand.pink
+        let prev = store.sorted.first { $0.id != workout.id && $0.date <= workout.date && $0.exercises.contains { $0.name == name } }?
+            .exercises.first { $0.name == name }
+        HStack(alignment: .center, spacing: 8) {
+            HStack(spacing: 6) {
+                Text("\(i + 1)").font(.caption.bold()).foregroundStyle(.white)
+                    .frame(width: 20, height: 20).background(Circle().fill(color))
+                VStack(alignment: .leading, spacing: 1) {
+                    if let ink = InkStore.has(x.wrappedValue.inkName) { InkView(id: ink, height: 22) }
+                    else { Text(name).font(.subheadline.bold()).foregroundStyle(Paper.ink).lineLimit(2).minimumScaleFactor(0.7) }
+                    if x.wrappedValue.isRP { Text("（组内暂停）").font(.caption2.bold()).foregroundStyle(.orange) }
+                }
+            }
+            .frame(width: 118, alignment: .leading)
+            if x.wrappedValue.isCardio {
+                NumField(value: Binding(get: { x.wrappedValue.sets.first?.min ?? "" }, set: { v in
+                    if x.wrappedValue.sets.isEmpty { x.wrappedValue.sets = [SetRow()] }
+                    x.wrappedValue.sets[0].min = v.filter { "0123456789.".contains($0) }
+                }), decimal: true, label: "\(name) 时长", placeholder: "0")
+                .frame(width: 70, height: 36)
+                .overlay(alignment: .bottom) { Rectangle().fill(Paper.ink.opacity(0.3)).frame(height: 1.5) }
+                Text("分钟").font(.caption).foregroundStyle(Paper.pencil)
+                Spacer()
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(Array(x.wrappedValue.sets.enumerated()), id: \.element.id) { si, s in
+                            landCell(x, si, s, prev, name)
+                        }
+                        Button {
+                            withAnimation(.snappy) { x.wrappedValue.sets.append(x.wrappedValue.sets.last.map { SetRow(w: $0.w, r: $0.r, p: $0.p) } ?? SetRow()) }
+                            Haptic.tap()
+                        } label: {
+                            Image(systemName: "plus").font(.headline).foregroundStyle(Paper.pencil)
+                                .frame(width: 40, height: 52)
+                                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Paper.ink.opacity(0.2), style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.vertical, 6)
+                }
+            }
+        }
+        .padding(.vertical, 4)
+        .overlay(alignment: .bottom) { Rectangle().fill(Paper.rule).frame(height: 1) }
+    }
+
+    private func landCell(_ x: Binding<Exercise>, _ si: Int, _ s: SetRow, _ prev: Exercise?, _ name: String) -> some View {
+        let ps: SetRow? = prev.flatMap { si < $0.sets.count ? $0.sets[si] : nil }
+        let exID = x.wrappedValue.id
+        return VStack(spacing: 0) {
+            HStack(spacing: 1) {
+                if store.plateCfg[name] != nil {
+                    // 挂片的动作：重量按挂片算，点一下去调挂片
+                    Text(s.w.isEmpty ? "挂片" : s.w).font(Paper.hand(20)).foregroundStyle(Paper.ink)
+                        .frame(maxWidth: .infinity, minHeight: 38)
+                        .onTapGesture { plateFor = name }
+                } else {
+                    cellField(prevHint(prev, si, \.w, WU.s), setBinding(x, s.id, \.w), WriteCell(ex: exID, set: s.id, weight: true), ink: InkStore.has(s.inkW))
+                }
+                Text("×").font(Paper.hand(16)).foregroundStyle(Paper.ink.opacity(0.6))
+                cellField(prevHint(prev, si, \.r, "次"), setBinding(x, s.id, \.r), WriteCell(ex: exID, set: s.id, weight: false), ink: InkStore.has(s.inkR))
+            }
+            Text(ps.map { "上次 \($0.w.isEmpty ? "—" : $0.w)×\($0.r.isEmpty ? "—" : $0.r)" } ?? "第\(si + 1)组")
+                .font(.system(size: 9, weight: .semibold, design: .rounded)).monospacedDigit()
+                .foregroundStyle(Paper.pencil).lineLimit(1)
+        }
+        .frame(width: 112)
+        .padding(.horizontal, 4).padding(.bottom, 3)
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Paper.ink.opacity(0.04)))
+        .id(s.id)
+        .contextMenu {
+            Button("删掉这一组", role: .destructive) { withAnimation { x.wrappedValue.sets.removeAll { $0.id == s.id } } }
+        }
+    }
+
+    private var landAdd: some View {
+        Menu {
+            Button { askName = true } label: { Label("输入动作名…", systemImage: "keyboard") }
+            let sug = suggestions
+            if !sug.isEmpty {
+                Section("推荐") {
+                    ForEach(sug, id: \.self) { n in Button(n) { add(n); focusFirstEmpty() } }
+                }
+            }
+        } label: {
+            Label("加动作", systemImage: "plus").font(.subheadline.bold()).foregroundStyle(Paper.ink)
+                .frame(width: 140, height: 38)
+                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Paper.ink.opacity(0.2), style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
+        }
+    }
+
+    // 加了新动作，手写板直接跳到它的第一格
+    private func focusFirstEmpty() {
+        guard wide, inputMode != 2, let x = workout.exercises.last, !x.isCardio, let s = x.sets.first else { return }
+        withAnimation(.snappy) { writing = WriteCell(ex: x.id, set: s.id, weight: store.plateCfg[x.name] == nil) }
     }
 }
