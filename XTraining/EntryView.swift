@@ -802,6 +802,9 @@ struct NumField: UIViewRepresentable {
         f.textColor = color ?? UIColor(Paper.ink)
         f.tintColor = color ?? UIColor(Paper.ink)
         f.placeholder = placeholder.isEmpty ? nil : placeholder
+        // 格子窄、手写字体大：三位数（120）放不下会被挤掉最后一位，看起来像没打进去。放不下就自动缩小字
+        f.adjustsFontSizeToFitWidth = true
+        f.minimumFontSize = 11
         f.autocorrectionType = .no
         f.spellCheckingType = .no
         f.smartInsertDeleteType = .no
@@ -867,7 +870,7 @@ struct NumField: UIViewRepresentable {
         }
         func textFieldDidBeginEditing(_ f: UITextField) {
             NumField.editingLabel = parent.label
-            BugLog.add("键盘 \(parent.label) 弹出，格子里是 \"\(f.text ?? "")\"")
+            BugLog.add("键盘 \(parent.label) 弹出，格子里是 \"\(f.text ?? "")\"，格子宽 \(Int(f.bounds.width))")
         }
         func textField(_ f: UITextField, shouldChangeCharactersIn range: NSRange, replacementString string: String) -> Bool {
             BugLog.add("按键 \(parent.label) " + (string.isEmpty ? "⌫ 删除" : "\"\(string)\"") + "（原来 \"\(f.text ?? "")\"）")
@@ -889,7 +892,7 @@ struct NumField: UIViewRepresentable {
             let n = (f.text ?? "").filter { allowed.contains($0) }
             if parent.value != n { parent.value = n }
             NumField.editingLabel = nil
-            BugLog.add("键盘 \(parent.label) 收起，最后是 \"\(n)\"")
+            BugLog.add("键盘 \(parent.label) 收起，最后是 \"\(n)\"，存进去的是 \"\(parent.value)\"，字要 \(Int((f.text ?? "" as String).size(withAttributes: [.font: f.font ?? UIFont.systemFont(ofSize: 24)]).width)) 宽 / 格子 \(Int(f.bounds.width))")
             parent.onFocus?(false)
         }
     }
