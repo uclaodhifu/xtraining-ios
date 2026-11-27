@@ -13,23 +13,32 @@ enum DigitReader {
         let strokes: [[P]] = d.strokes.map { s in
             s.path.interpolatedPoints(by: .distance(3)).map { $0.location.applying(s.transform) }
         }.filter { !$0.isEmpty }
-        let boxed = strokes.map { ($0, box($0)) }.sorted { $0.1.minX < $1.1.minX }
-        var out: [([[P]], CGRect)] = []
-        for (pts, b) in boxed {
+        let boxed = strokes.map { ($0, box($0), straight($0)) }.sorted { $0.1.minX < $1.1.minX }
+        var out: [([[P]], CGRect, Bool)] = []   // 笔画、外框、是不是只有一笔直线
+        for (pts, b, line) in boxed {
             if let last = out.last {
                 let overlap = min(last.1.maxX, b.maxX) - max(last.1.minX, b.minX)
                 // 只有左右重叠一大半才算同一个字（4、5、7 的两笔）；挨得近的 2 和 0 不能合成一个，不然 120 会认成 12
-                // 又细又高的一笔（1）贴在另一个字的左边：是单独的 1，不能合进去（不然 12 会认成 2）
-                let lone = { (n: CGRect, o: CGRect) -> Bool in
-                    n.width < n.height * 0.4 && n.height > max(n.height, o.height) * 0.6 && n.midX < o.minX + o.width * 0.3
+                // 一笔又细又高的直线（1）贴在另一个字的左边：是单独的 1，不能合进去（不然 12 会认成 2）
+                // 必须是直线：8、3 这种分两笔写的弯弧不算，不然 85 会认成 155
+                let lone = { (n: CGRect, nLine: Bool, o: CGRect) -> Bool in
+                    nLine && n.width < n.height * 0.4 && n.height > o.height * 0.6 && n.midX < o.minX + o.width * 0.3
                 }
-                if overlap > min(last.1.width, b.width) * 0.55 && !lone(last.1, b) && !lone(b, last.1) {
-                    out[out.count - 1].0.append(pts); out[out.count - 1].1 = last.1.union(b); continue
+                if overlap > min(last.1.width, b.width) * 0.55 && !lone(last.1, last.2, b) && !lone(b, line, last.1) {
+                    out[out.count - 1].0.append(pts); out[out.count - 1].1 = last.1.union(b); out[out.count - 1].2 = false; continue
                 }
             }
-            out.append(([pts], b))
+            out.append(([pts], b, line))
         }
         return out.map { $0.0 }
+    }
+
+    // 一笔是不是差不多直的：笔画长度不超过首尾距离的 1.2 倍
+    private static func straight(_ p: [P]) -> Bool {
+        guard p.count > 1, let a = p.first, let b = p.last else { return false }
+        var len: CGFloat = 0
+        for i in 1..<p.count { len += hypot(p[i].x - p[i - 1].x, p[i].y - p[i - 1].y) }
+        return len <= hypot(b.x - a.x, b.y - a.y) * 1.2
     }
 
     static func read(_ d: PKDrawing) -> (text: String, digits: Int) {
@@ -83,7 +92,13 @@ enum DigitReader {
         if vision.isEmpty { return mine.text }
         let vd = v.filter(\.isNumber).count
         if vd > mine.digits { return vision }          // 系统认出的位数更多：多半是这边把两个字拆成了一个，信系统的（防止吞 0）
-        if vd != mine.digits || v.count != m.count { return mine.text }
+        if vd < mine.digits {
+            // 笔画这边多拆出了字：只有多出来的都是 1（系统常常漏掉细细的 1）、其余和系统一样时才信笔画，不然信系统（防止 85 认成 155）
+            var extra = mine.digits - vd
+            let kept = String(m.filter { c in if c == "1" && extra > 0 { extra -= 1; return false }; return true })
+            return kept == vision ? mine.text : vision
+        }
+        if v.count != m.count { return mine.text }
         let taught = taughtDigits
         return String(zip(v, m).map { a, b in a == b ? a : (b.isNumber && (taught[String(b)] ?? 0) >= 2 ? b : a) })
     }
