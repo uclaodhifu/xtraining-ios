@@ -1,6 +1,7 @@
 import SwiftUI
 import EventKit
 import EventKitUI
+import UserNotifications
 
 // 赛事页新样式：最上面一张黑色翻页钟卡片（倒计时 月/周/天），下面是其余比赛的小卡片
 
@@ -198,5 +199,134 @@ struct CalendarAdd: UIViewControllerRepresentable {
         let dismiss: DismissAction
         init(_ d: DismissAction) { dismiss = d }
         func eventEditViewController(_ c: EKEventEditViewController, didCompleteWith action: EKEventEditViewAction) { dismiss() }
+    }
+}
+
+// 下面列表里点开的：之前的白卡片 + 赛事方配色海报，倒计时放在海报上，按钮和之前一样
+struct RaceOpenCard: View {
+    @EnvironmentObject var store: Store
+    @Environment(\.openURL) private var openURL
+    let e: Race
+    @State private var addCal = false
+    @State private var denied = false
+
+    private var left: Int { e.date.map { max(0, Day.between(Day.today, $0)) } ?? 0 }
+
+    var body: some View {
+        let followed = store.follow.contains(e.id)
+        let p = e.poster
+        let n = left
+        VStack(alignment: .leading, spacing: 10) {
+            ZStack(alignment: .topLeading) {
+                LinearGradient(colors: [p.0, p.1], startPoint: .topLeading, endPoint: .bottomTrailing)
+                Text(p.2).font(.system(size: 76, weight: .black)).italic()
+                    .foregroundStyle(.white.opacity(0.12)).lineLimit(1).minimumScaleFactor(0.3)
+                    .offset(x: -4, y: -10)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(p.2 + " · " + e.level).font(.system(size: 11, weight: .heavy)).tracking(1).foregroundStyle(.white)
+                        .padding(.horizontal, 7).padding(.vertical, 2)
+                        .background(RoundedRectangle(cornerRadius: 5).fill(.black.opacity(0.2)))
+                    Spacer(minLength: 8)
+                    if n == 0 {
+                        Text(e.isPast ? "已结束" : "今天开赛").font(.system(size: 28, weight: .heavy, design: .rounded))
+                            .foregroundStyle(.white).frame(maxWidth: .infinity)
+                    } else {
+                        HStack(spacing: 10) {
+                            digit(n / 30, "月"); digit((n % 30) / 7, "周"); digit((n % 30) % 7, "天")
+                        }
+                    }
+                }
+                .padding(12)
+            }
+            .frame(height: 124)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(e.name).font(.headline).lineLimit(2)
+                Text([e.city, e.level].compactMap { $0 }.joined(separator: " · ")).font(.caption).foregroundStyle(.secondary)
+                if let d = e.divs { Text(d).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
+                Text(e.timeText).font(.caption2.bold()).foregroundStyle(Brand.pink)
+            }
+            .padding(.horizontal, 4)
+
+            HStack(spacing: 8) {
+                Button {
+                    store.toggleFollow(e); Haptic.tap(.medium)
+                    if !followed { checkPermission() }
+                } label: {
+                    Label(followed ? "已追" : "追赛", systemImage: followed ? "bell.fill" : "bell")
+                        .symbolEffect(.bounce, value: followed)
+                        .font(.subheadline.bold()).frame(maxWidth: .infinity, minHeight: 36)
+                        .foregroundStyle(followed ? Brand.ink : Color.primary)
+                        .background { if followed { Capsule().fill(Brand.gradient) } else { Capsule().fill(Color(.tertiarySystemFill)) } }
+                }
+                .buttonStyle(.plain)
+                if e.isWorld {
+                    if let u = e.url, let url = URL(string: u) {
+                        Button { openURL(url) } label: {
+                            Label("官网", systemImage: "globe").font(.subheadline.bold()).frame(maxWidth: .infinity, minHeight: 36)
+                                .foregroundStyle(.white).background(Capsule().fill(Color.blue))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                } else {
+                    Button { douyin() } label: {
+                        Label("抖音看", systemImage: "play.rectangle.fill").font(.subheadline.bold()).frame(maxWidth: .infinity, minHeight: 36)
+                            .foregroundStyle(.white).background(Capsule().fill(Color.black))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            HStack(spacing: 8) {
+                small("加日历", "calendar.badge.plus") { addCal = true }
+                if !e.isWorld, let u = e.url, let url = URL(string: u) {
+                    small("赛事主页", "link") { openURL(url) }
+                }
+            }
+        }
+        .card()
+        .sheet(isPresented: $addCal) { CalendarAdd(e: e).ignoresSafeArea() }
+        .alert("通知被关掉了", isPresented: $denied) {
+            Button("去设置") { if let u = URL(string: UIApplication.openSettingsURLString) { openURL(u) } }
+            Button("先不用", role: .cancel) {}
+        } message: { Text("打开 X Training 的通知，追的比赛才能按时提醒你。") }
+    }
+
+    private func digit(_ v: Int, _ label: String) -> some View {
+        VStack(spacing: 4) {
+            Text(String(format: "%02d", min(v, 99)))
+                .font(.system(size: 26, weight: .black, design: .rounded)).monospacedDigit().foregroundStyle(.white)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.black.opacity(0.28)))
+                .overlay { Rectangle().fill(.black.opacity(0.35)).frame(height: 2) }
+            Text(label).font(.system(size: 10, weight: .heavy)).tracking(3).foregroundStyle(.white.opacity(0.85))
+        }
+    }
+
+    private func small(_ t: String, _ icon: String, _ go: @escaping () -> Void) -> some View {
+        Button(action: go) {
+            Label(t, systemImage: icon).font(.caption.bold()).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, minHeight: 30)
+                .background(Capsule().fill(Color(.quaternarySystemFill)))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func checkPermission() {
+        Task {
+            try? await Task.sleep(for: .seconds(1.2))
+            let s = await UNUserNotificationCenter.current().notificationSettings()
+            if s.authorizationStatus == .denied { denied = true }
+        }
+    }
+
+    private func douyin() {
+        let kw = e.dy ?? e.name
+        let q = kw.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        if let app = URL(string: "snssdk1128://search?keyword=\(q)"), UIApplication.shared.canOpenURL(app) {
+            openURL(app)
+        } else if let web = URL(string: "https://www.douyin.com/search/\(q)") {
+            openURL(web)
+        }
     }
 }
