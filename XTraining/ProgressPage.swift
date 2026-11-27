@@ -70,14 +70,7 @@ struct PartProgress: View {
                     sessionStrip(ss)
                     tiles(ss)
                     SetsChart(part: part, rows: setRows(ss))
-                    ForEach(Array(charts.enumerated()), id: \.offset) { i, name in
-                        LiftChart(part: part, index: i, name: name, options: nm, sessions: ss)
-                    }
-                    Button {
-                        var list = charts; list.append(nm.first ?? "__first")
-                        store.liftCharts[part] = list
-                    } label: { Label("再加一张目标重量图", systemImage: "plus.circle") }
-                        .frame(maxWidth: .infinity).padding(.vertical, 6)
+                    OverloadEntry(part: part, sessions: ss, names: nm)   // 渐进超负荷（替换原来的目标重量图）
                     exerciseList(ss, nm)
                 }
             }
@@ -380,7 +373,7 @@ struct LiftChart: View {
     }
     private func verdict(_ v: Double, _ target: Double?, _ who: String) -> String {
         guard let target else { return "\(who) \(fmtNum(v))\(WU.s) · 设个目标重量，每次都跟它比" }
-        if v >= target { return v > target ? "\(who)超过目标 \(fmtNum(v - target))kg，可以加目标了 💪" : "\(who)刚好达到目标 ✓" }
+        if v >= target { return v > target ? "\(who)超过目标 \(fmtNum(v - target))\(WU.s)，可以加目标了 💪" : "\(who)刚好达到目标 ✓" }
         return "\(who)离目标还差 \(fmtNum(target - v))\(WU.s)"
     }
     private func current() -> [String] {
