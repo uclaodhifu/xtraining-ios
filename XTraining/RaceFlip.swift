@@ -52,7 +52,7 @@ struct RaceFlipCard: View {
                     store.toggleFollow(e); Haptic.tap(.medium)
                 }
                 action("加日历", "calendar.badge.plus") { addCal = true }
-                if let u = e.url, let url = URL(string: u) {
+                if let u = e.pageURL, let url = URL(string: u) {
                     action("赛事主页", "link") { openURL(url) }
                 }
                 if !e.isWorld {
@@ -93,15 +93,7 @@ struct RaceFlipCard: View {
         .buttonStyle(PressScale())
     }
 
-    private func douyin() {
-        let kw = e.dy ?? e.name
-        let q = kw.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        if let app = URL(string: "snssdk1128://search?keyword=\(q)"), UIApplication.shared.canOpenURL(app) {
-            openURL(app)
-        } else if let web = URL(string: "https://www.douyin.com/search/\(q)") {
-            openURL(web)
-        }
-    }
+    private func douyin() { Race.openDouyin(e, openURL) }
 }
 
 // 翻页钟数字：中间一道缝，上半截亮一点，数字变化时翻动
@@ -279,7 +271,7 @@ struct RaceOpenCard: View {
             }
             HStack(spacing: 8) {
                 small("加日历", "calendar.badge.plus") { addCal = true }
-                if !e.isWorld, let u = e.url, let url = URL(string: u) {
+                if !e.isWorld, let u = e.pageURL, let url = URL(string: u) {
                     small("赛事主页", "link") { openURL(url) }
                 }
             }
@@ -320,13 +312,5 @@ struct RaceOpenCard: View {
         }
     }
 
-    private func douyin() {
-        let kw = e.dy ?? e.name
-        let q = kw.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        if let app = URL(string: "snssdk1128://search?keyword=\(q)"), UIApplication.shared.canOpenURL(app) {
-            openURL(app)
-        } else if let web = URL(string: "https://www.douyin.com/search/\(q)") {
-            openURL(web)
-        }
-    }
+    private func douyin() { Race.openDouyin(e, openURL) }
 }
