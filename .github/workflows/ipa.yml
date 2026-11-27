@@ -21,6 +21,14 @@ jobs:
         run: |
           brew install xcodegen
           xcodegen generate
+      - name: 跑单元测试（模拟器）
+        run: |
+          set -o pipefail
+          ID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for k,v in sorted(d.items(), reverse=True) if 'iOS' in k for x in v if x['name'].startswith('iPhone')))")
+          xcodebuild test -project XTraining.xcodeproj -scheme XTraining -destination "id=$ID" \
+            -derivedDataPath build-test CODE_SIGNING_ALLOWED=NO 2>&1 | tee test.log \
+            | grep -E "error:|Test Case .*(passed|failed)|Executed|TEST (SUCCEEDED|FAILED)" || true
+          grep -q "TEST SUCCEEDED" test.log
       - name: 编译
         run: |
           xcodebuild build \
