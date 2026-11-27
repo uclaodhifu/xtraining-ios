@@ -2,10 +2,7 @@
 name: TestFlight
 
 on:
-  push:                   # 推送到 main 就自动编译、上传、分发给测试员
-    branches: [main]
-    paths-ignore: ['**.md', 'docs/**']
-  workflow_dispatch:      # 也可以在 Actions 页面手动点 “Run workflow”
+  workflow_dispatch:      # 只手动触发：在 Actions 页面点 “Run workflow” 才编译、上传 TestFlight
 
 concurrency:
   group: testflight

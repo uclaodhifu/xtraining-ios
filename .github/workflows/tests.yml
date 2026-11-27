@@ -1,0 +1,40 @@
+# 云端 Mac 上编译整个 App 并在 iPhone 模拟器里跑单元测试（阻力曲线物理引擎等）
+name: 单元测试
+
+on:
+  workflow_dispatch:      # 只手动触发
+
+jobs:
+  test:
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: 选最新的 Xcode
+        run: |
+          sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+          xcodebuild -version
+      - name: 生成 Xcode 工程
+        run: |
+          brew install xcodegen
+          xcodegen generate
+      - name: 找一台 iPhone 模拟器
+        id: sim
+        run: |
+          ID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for k,v in sorted(d.items(), reverse=True) if 'iOS' in k for x in v if x['name'].startswith('iPhone')))")
+          echo "id=$ID" >> "$GITHUB_OUTPUT"
+      - name: 编译 + 跑测试
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project XTraining.xcodeproj -scheme XTraining \
+            -destination "id=${{ steps.sim.outputs.id }}" \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee test.log | grep -E "error:|warning: .*ResistanceCurve|Test Case|Executed|TEST (SUCCEEDED|FAILED)" || true
+          grep -q "TEST SUCCEEDED" test.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-log
+          path: test.log
+          retention-days: 3
