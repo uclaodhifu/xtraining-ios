@@ -17,6 +17,8 @@ struct RootView: View {
                 .tabItem { Label("我", systemImage: "person.crop.circle") }.tag(3)
         }
         .sensoryFeedback(.selection, trigger: tab)
+        .onChange(of: tab) { _, t in BugLog.add("页面 " + ["首页", "赛事", "进步", "我"][min(t, 3)]) }
+        .onChange(of: phase) { _, p in BugLog.add(p == .active ? "回到 App" : p == .background ? "切到后台" : "App 不在前台") }
         // 每次打开/回到 App 都拉一下最新比赛清单
         .task(id: phase) {
             if phase == .active { await RaceFeed.shared.refresh(follow: store.follow) }

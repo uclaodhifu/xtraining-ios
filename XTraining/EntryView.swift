@@ -82,7 +82,7 @@ struct EntryView: View {
             // 打字（动作名、备注）时用系统键盘，手写板先收起
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
                 if PadFix.editing { return }   // 在手写板上改数字，手写板留着
-                if writing != nil || addingByHand { withAnimation(.snappy) { writing = nil; addingByHand = false } }
+                if writing != nil || addingByHand { BugLog.add("键盘弹出，收起手写板"); withAnimation(.snappy) { writing = nil; addingByHand = false } }
             }
             .onChange(of: writing) { _, c in
                 if let c { withAnimation(.snappy) { proxy.scrollTo(c.set, anchor: .center) } }
@@ -98,7 +98,9 @@ struct EntryView: View {
             .onChange(of: phase) { _, p in
                 if p != .active, isNew, !closed, !workout.exercises.isEmpty || !workout.note.isEmpty { EntryDraft.save(workout) }
             }
+            .onAppear { BugLog.add("页面 " + (isNew ? "开始训练" : "修改训练") + "，输入方式 \(inputMode)") }
             .onDisappear {
+                BugLog.add("关掉 训练页")
                 autoSave()
                 // 新训练没点保存就关掉了：再存一次草稿，首页显示「继续训练」
                 if isNew, !closed, !workout.exercises.isEmpty || !workout.note.isEmpty { EntryDraft.save(workout) }
@@ -315,12 +317,11 @@ struct EntryView: View {
                 HStack {
                     Text("时长").font(.caption).foregroundStyle(Paper.pencil)
                     Spacer()
-                    TextField("0", text: Binding(get: { x.wrappedValue.sets.first?.min ?? "" }, set: { v in
+                    NumField(value: Binding(get: { x.wrappedValue.sets.first?.min ?? "" }, set: { v in
                         if x.wrappedValue.sets.isEmpty { x.wrappedValue.sets = [SetRow()] }
                         x.wrappedValue.sets[0].min = v.filter { "0123456789.".contains($0) }
-                    }))
-                    .keyboardType(.decimalPad).multilineTextAlignment(.center).frame(width: 70)
-                    .font(Paper.hand(24)).foregroundStyle(Paper.ink)
+                    }), decimal: true, label: "\(name) 时长", placeholder: "0")
+                    .frame(width: 70, height: 36)
                     .overlay(alignment: .bottom) { Rectangle().fill(Paper.ink.opacity(0.3)).frame(height: 1.5) }
                     Text("分钟").font(.caption).foregroundStyle(Paper.pencil)
                 }
@@ -421,7 +422,7 @@ struct EntryView: View {
         return Group {
             if inputMode == 2 {
                 // 用系统数字键盘
-                NumField(value: text, decimal: cell.weight)
+                NumField(value: text, decimal: cell.weight, label: cellTitle(cell))
                     .overlay {
                         if text.wrappedValue.isEmpty {
                             Text(hint).font(unit ? .system(size: 13, weight: .medium) : Paper.hand(22))
@@ -434,6 +435,7 @@ struct EntryView: View {
                 // 不弹键盘：点一下格子，底下出手写板
                 Button {
                     hideKeyboard(); Haptic.tap()
+                    BugLog.add("点格子 \(cellTitle(cell))，现在是 \"\(text.wrappedValue)\"")
                     withAnimation(.snappy) { addingByHand = false; writing = cell }
                 } label: {
                     ZStack {
@@ -761,18 +763,32 @@ struct StrID: Identifiable { let id: String }
 
 
 // 键盘输入格：自己存一份文字，打字时不被外面的数据刷新打断（iOS 27.3 打 120 会吞 0）
+// 用 UIKit 的输入框：iOS 27.3 上 SwiftUI 的 TextField 打字会丢字（打不出 12、120），所以所有数字格都用这个
+// 每一下按键、格子变化、弹出收起都记进问题日志
 struct NumField: UIViewRepresentable {
-    // 用 UIKit 的输入框：iOS 27.3 上 SwiftUI 的 TextField 在这里打字会丢字（打不出 12、120）
     @Binding var value: String
     var decimal: Bool
+    var label = "数字"
+    var placeholder = ""
+    var font: UIFont? = nil
+    var color: UIColor? = nil
+    var align: NSTextAlignment = .center
+    var onFocus: ((Bool) -> Void)? = nil
+
+    @MainActor static var editingLabel: String? = nil
 
     func makeUIView(context: Context) -> UITextField {
+        if let e = NumField.editingLabel { BugLog.add("⚠ 输入框重建：「\(e)」正在打字时又建了一个「\(label)」") }
         let f = UITextField()
         f.keyboardType = decimal ? .decimalPad : .numberPad
-        f.textAlignment = .center
-        f.font = UIFont(name: "Noteworthy-Bold", size: 24) ?? .systemFont(ofSize: 24, weight: .bold)
-        f.textColor = UIColor(Paper.ink)
-        f.tintColor = UIColor(Paper.ink)
+        f.textAlignment = align
+        f.font = font ?? UIFont(name: "Noteworthy-Bold", size: 24) ?? .systemFont(ofSize: 24, weight: .bold)
+        f.textColor = color ?? UIColor(Paper.ink)
+        f.tintColor = color ?? UIColor(Paper.ink)
+        f.placeholder = placeholder.isEmpty ? nil : placeholder
+        f.autocorrectionType = .no
+        f.spellCheckingType = .no
+        f.smartInsertDeleteType = .no
         f.text = value
         f.delegate = context.coordinator
         f.addTarget(context.coordinator, action: #selector(Coord.changed(_:)), for: .editingChanged)
@@ -787,22 +803,48 @@ struct NumField: UIViewRepresentable {
     }
     func updateUIView(_ f: UITextField, context: Context) {
         context.coordinator.parent = self
-        if !f.isFirstResponder && f.text != value { f.text = value }
+        if f.text != value {
+            if f.isFirstResponder {
+                if (f.text ?? "") != value { BugLog.add("键盘 \(label) 外面的值是 \"\(value)\"，格子里是 \"\(f.text ?? "")\"（打字中，不覆盖）") }
+            } else { f.text = value }
+        }
+    }
+    static func dismantleUIView(_ f: UITextField, coordinator: Coord) {
+        if f.isFirstResponder {
+            BugLog.add("⚠ 输入框被拆掉：「\(coordinator.parent.label)」打字中，格子里是 \"\(f.text ?? "")\"")
+            NumField.editingLabel = nil
+        }
     }
     func makeCoordinator() -> Coord { Coord(self) }
 
     final class Coord: NSObject, UITextFieldDelegate {
         var parent: NumField
         init(_ p: NumField) { parent = p }
+        func textFieldShouldBeginEditing(_ f: UITextField) -> Bool {
+            parent.onFocus?(true)      // 在键盘弹出之前就通知（手写板上的「认成」靠这个不被关掉）
+            return true
+        }
+        func textFieldDidBeginEditing(_ f: UITextField) {
+            NumField.editingLabel = parent.label
+            BugLog.add("键盘 \(parent.label) 弹出，格子里是 \"\(f.text ?? "")\"")
+        }
+        func textField(_ f: UITextField, shouldChangeCharactersIn range: NSRange, replacementString string: String) -> Bool {
+            BugLog.add("按键 \(parent.label) " + (string.isEmpty ? "⌫ 删除" : "\"\(string)\"") + "（原来 \"\(f.text ?? "")\"）")
+            return true
+        }
         @objc func changed(_ f: UITextField) {
             let t = f.text ?? ""
             let n = t.filter { "0123456789.".contains($0) }
             if n != t { f.text = n }
+            BugLog.add("  → 格子 \(parent.label) \"\(n)\"")
             if parent.value != n { parent.value = n }
         }
         func textFieldDidEndEditing(_ f: UITextField) {
             let n = (f.text ?? "").filter { "0123456789.".contains($0) }
             if parent.value != n { parent.value = n }
+            NumField.editingLabel = nil
+            BugLog.add("键盘 \(parent.label) 收起，最后是 \"\(n)\"")
+            parent.onFocus?(false)
         }
     }
 }

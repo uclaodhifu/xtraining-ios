@@ -19,7 +19,11 @@ enum DigitReader {
             if let last = out.last {
                 let overlap = min(last.1.maxX, b.maxX) - max(last.1.minX, b.minX)
                 // 只有左右重叠一大半才算同一个字（4、5、7 的两笔）；挨得近的 2 和 0 不能合成一个，不然 120 会认成 12
-                if overlap > min(last.1.width, b.width) * 0.55 {
+                // 又细又高的一笔（1）贴在另一个字的左边：是单独的 1，不能合进去（不然 12 会认成 2）
+                let lone = { (n: CGRect, o: CGRect) -> Bool in
+                    n.width < n.height * 0.4 && n.height > max(n.height, o.height) * 0.6 && n.midX < o.minX + o.width * 0.3
+                }
+                if overlap > min(last.1.width, b.width) * 0.55 && !lone(last.1, b) && !lone(b, last.1) {
                     out[out.count - 1].0.append(pts); out[out.count - 1].1 = last.1.union(b); continue
                 }
             }
@@ -41,7 +45,7 @@ enum DigitReader {
             let b = boxes[i]
             if b.width < h * 0.3 && b.height < h * 0.3 && b.midY > bottom - h * 0.45 { s += "."; continue }
             n += 1
-            if b.width < b.height * 0.28 { s += "1"; continue }   // 又细又高就是 1
+            if b.width < b.height * 0.35 { s += "1"; continue }   // 又细又高就是 1
             s += classify(c, tpl)
         }
         // 只留一个小数点

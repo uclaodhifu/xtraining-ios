@@ -14,7 +14,7 @@ struct WeightView: View {
                 Section {
                     DatePicker("日期", selection: $day, in: ...Date(), displayedComponents: .date)
                     HStack {
-                        TextField("体重", text: $kg).keyboardType(.decimalPad)
+                        NumField(value: $kg, decimal: true, label: "体重", placeholder: "体重", font: .preferredFont(forTextStyle: .body), color: .label, align: .left)
                         Text("kg").foregroundStyle(.secondary)
                         Button("记下") {
                             if let v = Double(kg.replacingOccurrences(of: ",", with: ".")), v > 0 {
