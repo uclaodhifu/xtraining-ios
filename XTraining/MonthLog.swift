@@ -140,6 +140,7 @@ struct MonthLogTable: View {
                                     .padding(.horizontal, 14).padding(.vertical, 8)
                                     .background(Capsule().fill(Color(.systemBackground)))
                             }
+                            .contextMenu { PartMenuItems(name: rows[i]) }
                             .dropDestination(for: CardDrag.self) { _, _ in
                                 draggingRow = nil; Haptic.success(); return true
                             } isTargeted: { on in
@@ -177,7 +178,7 @@ struct MonthLogTable: View {
                 }
             }
             HStack(spacing: 12) {
-                Label("按住动作名可拖动排序 · 长按日期设初始重量", systemImage: "hand.draw").foregroundStyle(.secondary)
+                Label("拖动动作名排序 · 长按动作改部位 · 长按日期设初始重量", systemImage: "hand.draw").foregroundStyle(.secondary)
                 legend("进步", Tone.fill(.up))
                 legend("退步", Tone.fill(.down))
                 legend("持平", Tone.fill(.same))

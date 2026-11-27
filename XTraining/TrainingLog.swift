@@ -42,6 +42,21 @@ enum Baseline {
     }
 }
 
+// 长按动作名：改它属于哪个部位
+struct PartMenuItems: View {
+    @EnvironmentObject var store: Store
+    let name: String
+    var body: some View {
+        Section("「\(name)」算哪个部位") {
+            ForEach(Parts.all, id: \.self) { p in
+                Button { store.setPart(name, p); Haptic.success() } label: {
+                    if Parts.of(name) == p { Label(p, systemImage: "checkmark") } else { Text(p) }
+                }
+            }
+        }
+    }
+}
+
 // 动作名的手写笔迹（最近一次写过的）
 func inkName(_ name: String, part: String, in ws: [Workout]) -> String? {
     for w in ws.reversed() { if let x = w.exercises(of: part).first(where: { $0.name == name }), let ink = InkStore.has(x.inkName) { return ink } }
@@ -129,6 +144,8 @@ struct TrainingLogTable: View {
                                 else { Text(n).font(.caption2.bold()).lineLimit(2).minimumScaleFactor(0.6).multilineTextAlignment(.center) }
                             }
                             .frame(width: nameW, height: rowH)
+                            .contentShape(Rectangle())
+                            .contextMenu { PartMenuItems(name: n) }
                             ForEach(Array(cols.enumerated()), id: \.offset) { ci, w in
                                 cell(n, w, hist, first + ci)
                                     .frame(maxWidth: .infinity).frame(height: rowH)
@@ -146,6 +163,7 @@ struct TrainingLogTable: View {
                     legend("arrow.up", .green, "进步")
                     legend("arrow.down", .red, "退步")
                     legend("equal", .primary, "持平")
+                    Text("长按动作改部位").foregroundStyle(.secondary)
                     Spacer()
                     if names.count > maxRows {
                         Button(showAll ? "收起" : "全部 \(names.count) 个") { withAnimation(.snappy) { showAll.toggle() } }

@@ -248,6 +248,20 @@ struct EntryView: View {
                 } else {
                     TextField("动作名", text: x.name).font(.subheadline.bold())
                 }
+                if !name.isEmpty && !x.wrappedValue.isCardio || Parts.custom[name] != nil {
+                    // 这个动作算哪个部位：点一下改（比如哑铃飞鸟改成肩）
+                    Menu {
+                        ForEach(Parts.all, id: \.self) { p in
+                            Button { store.setPart(name, p); if !workout.parts.contains(p) { workout.parts.append(p) }; Haptic.tap() } label: {
+                                if Parts.of(name) == p { Label(p, systemImage: "checkmark") } else { Text(p) }
+                            }
+                        }
+                    } label: {
+                        Text(Parts.of(name) ?? workout.parts.first ?? "部位").font(.caption.bold())
+                            .padding(.horizontal, 8).padding(.vertical, 3)
+                            .foregroundStyle(color).background(Capsule().fill(color.opacity(0.15)))
+                    }
+                }
                 if let lib = ExerciseLib.find(name) {
                     Button { infoFor = lib } label: { Image(systemName: "info.circle").foregroundStyle(.secondary) }
                         .buttonStyle(.plain)
@@ -396,9 +410,7 @@ struct EntryView: View {
         return Group {
             if inputMode == 2 {
                 // 用系统数字键盘
-                TextField("", text: text)
-                    .keyboardType(cell.weight ? .decimalPad : .numberPad).multilineTextAlignment(.center)
-                    .font(Paper.hand(24)).monospacedDigit().foregroundStyle(Paper.ink)
+                NumField(value: text, decimal: cell.weight)
                     .overlay {
                         if text.wrappedValue.isEmpty {
                             Text(hint).font(unit ? .system(size: 13, weight: .medium) : Paper.hand(22))
@@ -729,3 +741,26 @@ struct PlateSettings: View {
 }
 
 struct StrID: Identifiable { let id: String }
+
+
+// 键盘输入格：自己存一份文字，打字时不被外面的数据刷新打断（iOS 27.3 打 120 会吞 0）
+struct NumField: View {
+    @Binding var value: String
+    var decimal: Bool
+    @State private var text = ""
+    @FocusState private var focused: Bool
+    var body: some View {
+        TextField("", text: $text)
+            .keyboardType(decimal ? .decimalPad : .numberPad).multilineTextAlignment(.center)
+            .font(Paper.hand(24)).monospacedDigit().foregroundStyle(Paper.ink)
+            .focused($focused)
+            .onAppear { text = value }
+            .onChange(of: text) { _, v in
+                let n = v.filter { "0123456789.".contains($0) }
+                if n != v { text = n; return }
+                if n != value { value = n }
+            }
+            .onChange(of: value) { _, v in if !focused && v != text { text = v } }
+            .onChange(of: focused) { _, f in if !f && value != text { text = value } }
+    }
+}
