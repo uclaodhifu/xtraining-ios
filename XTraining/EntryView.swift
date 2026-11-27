@@ -20,6 +20,7 @@ struct EntryView: View {
     @State private var inkTick = 0
     @AppStorage(InputMode.key) private var inputMode = 0
     @State private var restored: Bool
+    @Environment(\.scenePhase) private var phase
 
     init(workout: Workout) {
         _workout = State(initialValue: workout)
@@ -93,7 +94,17 @@ struct EntryView: View {
                 guard isNew else { return }
                 if w.exercises.isEmpty && w.note.isEmpty { EntryDraft.clear() } else { EntryDraft.save(w) }
             }
-            .onDisappear { autoSave() }
+            // 切到后台（来电话、锁屏、被系统关掉之前）再存一次草稿
+            .onChange(of: phase) { _, p in
+                if p != .active, isNew, !closed, !workout.exercises.isEmpty || !workout.note.isEmpty { EntryDraft.save(workout) }
+            }
+            .onDisappear {
+                autoSave()
+                // 新训练没点保存就关掉了：再存一次草稿，首页显示「继续训练」
+                if isNew, !closed, !workout.exercises.isEmpty || !workout.note.isEmpty { EntryDraft.save(workout) }
+            }
+            // 新训练记了东西就不能下滑关掉（手写往下划、滚到顶再往下拉，容易误关）
+            .interactiveDismissDisabled(isNew && !workout.exercises.isEmpty)
             .navigationTitle(isNew ? "开始训练" : "修改训练")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
