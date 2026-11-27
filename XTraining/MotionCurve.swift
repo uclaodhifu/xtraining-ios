@@ -73,6 +73,7 @@ struct SavedCurve: Codable, Identifiable, Hashable {
     var method: CurveMethod
     var peakPct: Int? = nil       // 最吃力时约是重量的百分之几（只有挂片/哑铃时有）
     var lowPct: Int? = nil
+    var seat: String? = nil       // 座椅档位
     var date: Double = Date().timeIntervalSince1970
     var kind: CurveKind { CurveKind.of(values) }
 }
@@ -106,6 +107,10 @@ struct CurveResult {
     var lowPct: Int?
     var reps: Int
     var seconds: Double
+    var lever: (from: Int, to: Int)? = nil       // 杠杆和水平线的夹角（度），开始 → 结束
+    var armDrop: Int? = nil                       // 挂片离转轴横向距离变化（%，正数=变远/变重）
+    var joints: [(name: String, from: Int, to: Int)] = []   // 主要关节角度，开始 → 结束
+    var usedHand = true                           // false = 手被挡住，只按杠杆角度算
 }
 
 enum MotionError: LocalizedError {
@@ -136,7 +141,8 @@ enum MotionAnalyzer {
     }
 
     // plateBox：Vision 坐标（0…1，左下角为原点）
-    static func analyze(url: URL, method: CurveMethod, plateBox: CGRect?, progress: @escaping (Double) -> Void) async throws -> CurveResult {
+    // plateBox / pivot：Vision 坐标（0…1，左下角为原点）
+    static func analyze(url: URL, method: CurveMethod, plateBox: CGRect?, pivot pivotN: CGPoint? = nil, progress: @escaping (Double) -> Void) async throws -> CurveResult {
         let asset = AVURLAsset(url: url)
         guard let dur = try? await asset.load(.duration), dur.seconds > 0.5 else { throw MotionError.noVideo }
         let secs = min(dur.seconds, 12)
@@ -145,40 +151,58 @@ enum MotionAnalyzer {
         let gen = generator(url)
 
         var hands: [CGPoint?] = [], plates: [CGPoint?] = []
+        var jointAngles: [String: [Double?]] = ["肘": [], "肩": [], "膝": [], "髋": []]
         var size = CGSize(width: 1, height: 1)
         let seq = VNSequenceRequestHandler()
         var lastObs: VNDetectedObjectObservation? = plateBox.map { VNDetectedObjectObservation(boundingBox: $0) }
-        var track: VNTrackObjectRequest? = lastObs.map { VNTrackObjectRequest(detectedObjectObservation: $0) }
+        let track: VNTrackObjectRequest? = lastObs.map { VNTrackObjectRequest(detectedObjectObservation: $0) }
         track?.trackingLevel = .accurate
 
         for i in 0..<n {
             let t = CMTime(seconds: Double(i) / fps, preferredTimescale: 600)
-            guard let got = try? await gen.image(at: t) else { hands.append(nil); plates.append(nil); continue }
+            guard let got = try? await gen.image(at: t) else {
+                hands.append(nil); plates.append(nil); for k in jointAngles.keys { jointAngles[k]?.append(nil) }; continue
+            }
             let cg = got.image
             size = CGSize(width: cg.width, height: cg.height)
-            // 手：两只手腕取平均（只认出一只就用那一只）
+            // 人体：手腕位置 + 肘/肩/膝/髋角度
             let pose = VNDetectHumanBodyPoseRequest()
             try? VNImageRequestHandler(cgImage: cg, options: [:]).perform([pose])
             var hp: CGPoint? = nil
+            var ang: [String: Double] = [:]
             if let o = pose.results?.max(by: { area($0) < area($1) }) {
-                let ws = [VNHumanBodyPoseObservation.JointName.leftWrist, .rightWrist]
-                    .compactMap { try? o.recognizedPoint($0) }.filter { $0.confidence > 0.3 }
-                if !ws.isEmpty {
-                    let x = ws.map(\.location.x).reduce(0, +) / CGFloat(ws.count)
-                    let y = ws.map(\.location.y).reduce(0, +) / CGFloat(ws.count)
-                    hp = CGPoint(x: x * size.width, y: y * size.height)
+                func pt(_ j: VNHumanBodyPoseObservation.JointName) -> CGPoint? {
+                    guard let r = try? o.recognizedPoint(j), r.confidence > 0.3 else { return nil }
+                    return CGPoint(x: r.location.x * size.width, y: r.location.y * size.height)
                 }
+                let ws = [pt(.leftWrist), pt(.rightWrist)].compactMap { $0 }
+                if !ws.isEmpty { hp = CGPoint(x: ws.map(\.x).reduce(0, +) / CGFloat(ws.count), y: ws.map(\.y).reduce(0, +) / CGFloat(ws.count)) }
+                let sides: [[VNHumanBodyPoseObservation.JointName]] = [
+                    [.leftShoulder, .leftElbow, .leftWrist, .leftHip, .leftKnee, .leftAnkle],
+                    [.rightShoulder, .rightElbow, .rightWrist, .rightHip, .rightKnee, .rightAnkle]]
+                var acc: [String: [Double]] = [:]
+                for sd in sides {
+                    let sh = pt(sd[0]), el = pt(sd[1]), wr = pt(sd[2]), hip = pt(sd[3]), kn = pt(sd[4]), an = pt(sd[5])
+                    if let a = angle(sh, el, wr) { acc["肘", default: []].append(a) }
+                    if let a = angle(hip, sh, el) { acc["肩", default: []].append(a) }
+                    if let a = angle(hip, kn, an) { acc["膝", default: []].append(a) }
+                    if let a = angle(sh, hip, kn) { acc["髋", default: []].append(a) }
+                }
+                for (k, v) in acc { ang[k] = v.reduce(0, +) / Double(v.count) }
             }
             hands.append(hp)
+            for k in jointAngles.keys { jointAngles[k]?.append(ang[k]) }
             // 杠铃片：从第一帧你点的位置开始一路跟
             var pp: CGPoint? = nil
             if let req = track, let obs = lastObs {
-                req.inputObservation = obs
-                if i > 0 { try? seq.perform([req], on: cg) }
                 if i == 0 { pp = CGPoint(x: obs.boundingBox.midX * size.width, y: obs.boundingBox.midY * size.height) }
-                else if let o = req.results?.first as? VNDetectedObjectObservation {
-                    lastObs = o
-                    if o.confidence > 0.25 { pp = CGPoint(x: o.boundingBox.midX * size.width, y: o.boundingBox.midY * size.height) }
+                else {
+                    req.inputObservation = obs
+                    try? seq.perform([req], on: cg)
+                    if let o = req.results?.first {
+                        lastObs = o
+                        if o.confidence > 0.25 { pp = CGPoint(x: o.boundingBox.midX * size.width, y: o.boundingBox.midY * size.height) }
+                    }
                 }
             }
             plates.append(pp)
@@ -186,49 +210,74 @@ enum MotionAnalyzer {
             await MainActor.run { progress(p) }
         }
 
-        guard hands.compactMap({ $0 }).count >= max(10, n / 2) else { throw MotionError.noHand }
-        let hand = smooth(fill(hands))
         let diag = hypot(size.width, size.height)
+        let handOK = hands.compactMap({ $0 }).count >= max(10, n / 2)
+        let pivot = pivotN.map { CGPoint(x: $0.x * size.width, y: $0.y * size.height) }
 
-        // 动作的主方向：手的轨迹做主成分，投影到一条线上当“进度”
-        let pts = hand
-        let mx = pts.map(\.x).reduce(0, +) / CGFloat(pts.count), my = pts.map(\.y).reduce(0, +) / CGFloat(pts.count)
-        var a: CGFloat = 0, b: CGFloat = 0, c: CGFloat = 0
-        for p in pts { let dx = p.x - mx, dy = p.y - my; a += dx * dx; b += dx * dy; c += dy * dy }
-        let th = 0.5 * atan2(2 * b, a - c)
-        let v = CGPoint(x: cos(th), y: sin(th))
-        var s = pts.map { ($0.x - mx) * v.x + ($0.y - my) * v.y }
-        let lo = pct(s, 0.05), hi = pct(s, 0.95)
-        guard hi - lo > diag * 0.04 else { throw MotionError.tooSmall }
-
-        // 视频第一帧就是动作的起始位置：第一帧手在的那一头算“开始”
         var plate: [CGPoint] = []
         if method == .plate {
             guard plates.compactMap({ $0 }).count >= max(10, n / 2) else { throw MotionError.noPlate }
             plate = smooth(fill(plates))
         }
-        let s0 = s.prefix(3).reduce(0, +) / CGFloat(min(3, s.count))
-        if s0 - lo > hi - s0 { s = s.map { -$0 } }
-        let lo2 = pct(s, 0.05), hi2 = pct(s, 0.95)
-        let prog = s.map { min(1, max(0, ($0 - lo2) / max(1, hi2 - lo2))) }
+        let useLever = method == .plate && pivot != nil
+        if !useLever && !handOK { throw MotionError.noHand }
+        let hand = handOK ? smooth(fill(hands)) : []
+
+        // 进度（0 = 开始，1 = 动作最远处）。有转轴时按杠杆角度算，否则按手的轨迹
+        var prog: [CGFloat]
+        var theta: [CGFloat] = []
+        var R: CGFloat = 1
+        if useLever, let pv = pivot {
+            var th = plate.map { atan2($0.y - pv.y, $0.x - pv.x) }
+            for i in 1..<th.count {   // 角度展开，避免跨过 ±180° 时跳变
+                while th[i] - th[i - 1] > .pi { th[i] -= 2 * .pi }
+                while th[i] - th[i - 1] < -.pi { th[i] += 2 * .pi }
+            }
+            theta = th
+            R = plate.map { hypot($0.x - pv.x, $0.y - pv.y) }.sorted()[plate.count / 2]
+            plate = th.map { CGPoint(x: pv.x + R * cos($0), y: pv.y + R * sin($0)) }   // 按圆弧去抖
+            guard R > diag * 0.03 else { throw MotionError.tooSmall }
+            let t0 = th.prefix(3).reduce(0, +) / CGFloat(min(3, th.count))
+            let lo = pct(th, 0.05), hi = pct(th, 0.95)
+            let far = abs(hi - t0) > abs(lo - t0) ? hi : lo
+            guard abs(far - t0) > 0.06 else { throw MotionError.tooSmall }
+            prog = th.map { min(1, max(0, ($0 - t0) / (far - t0))) }
+        } else {
+            let pts = hand
+            let mx = pts.map(\.x).reduce(0, +) / CGFloat(pts.count), my = pts.map(\.y).reduce(0, +) / CGFloat(pts.count)
+            var a: CGFloat = 0, b: CGFloat = 0, c: CGFloat = 0
+            for p in pts { let dx = p.x - mx, dy = p.y - my; a += dx * dx; b += dx * dy; c += dy * dy }
+            let th = 0.5 * atan2(2 * b, a - c)
+            let v = CGPoint(x: cos(th), y: sin(th))
+            var s = pts.map { ($0.x - mx) * v.x + ($0.y - my) * v.y }
+            let lo = pct(s, 0.05), hi = pct(s, 0.95)
+            guard hi - lo > diag * 0.04 else { throw MotionError.tooSmall }
+            // 视频第一帧就是动作的起始位置
+            let s0 = s.prefix(3).reduce(0, +) / CGFloat(min(3, s.count))
+            if s0 - lo > hi - s0 { s = s.map { -$0 } }
+            let lo2 = pct(s, 0.05), hi2 = pct(s, 0.95)
+            prog = s.map { min(1, max(0, ($0 - lo2) / max(1, hi2 - lo2))) }
+        }
 
         let bins = 10
         var buckets = Array(repeating: [Double](), count: bins)
         let minMove = diag * 0.004
-        for i in 1..<(pts.count - 1) {
-            let dh = hypot(pts[i + 1].x - pts[i - 1].x, pts[i + 1].y - pts[i - 1].y)
-            guard dh > minMove else { continue }
+        for i in 1..<(prog.count - 1) {
             let bi = min(bins - 1, Int(prog[i] * CGFloat(bins)))
+            if useLever && !handOK {
+                // 手被挡住：只按杠杆，阻力 ∝ 挂片离转轴的横向距离
+                buckets[bi].append(Double(abs(cos(theta[i]))))
+                continue
+            }
+            let dh = hypot(hand[i + 1].x - hand[i - 1].x, hand[i + 1].y - hand[i - 1].y)
+            guard dh > minMove else { continue }
             switch method {
             case .plate:
-                let dy = abs(plate[i + 1].y - plate[i - 1].y)
-                buckets[bi].append(Double(dy / dh))
+                buckets[bi].append(Double(abs(plate[i + 1].y - plate[i - 1].y) / dh))
             case .inHand:
-                let dy = abs(pts[i + 1].y - pts[i - 1].y)
-                buckets[bi].append(Double(dy / dh))
+                buckets[bi].append(Double(abs(hand[i + 1].y - hand[i - 1].y) / dh))
             case .speed:
-                // 只看往上做（离开起点）的那一段
-                guard prog[i + 1] > prog[i - 1] else { continue }
+                guard prog[i + 1] > prog[i - 1] else { continue }   // 只看往外做的那一段
                 buckets[bi].append(Double(1 / dh))
             }
         }
@@ -239,15 +288,48 @@ enum MotionAnalyzer {
         let peak = raw.max() ?? 1
         let values = raw.map { peak > 0 ? $0 / peak : 0 }
 
-        var peakPct: Int? = nil, lowPct: Int? = nil
-        if method != .speed {
-            peakPct = Int((min(1.2, peak) * 100).rounded())
-            lowPct = Int((min(1.2, raw.min() ?? 0) * 100).rounded())
+        var res = CurveResult(values: values, method: method, peakPct: nil, lowPct: nil, reps: 0, seconds: secs)
+        res.usedHand = !(useLever && !handOK)
+        if method != .speed && res.usedHand {
+            res.peakPct = Int((min(1.2, peak) * 100).rounded())
+            res.lowPct = Int((min(1.2, raw.min() ?? 0) * 100).rounded())
         }
-        // 数一下做了几次：进度从下半跨到上半算一次
-        var reps = 0, up = false
-        for p in prog { if !up && p > 0.7 { up = true; reps += 1 } else if up && p < 0.3 { up = false } }
-        return CurveResult(values: values, method: method, peakPct: peakPct, lowPct: lowPct, reps: reps, seconds: secs)
+        // 开始 / 结束时的样子：开始 = 前 3 帧，结束 = 进度 > 0.9 的帧
+        let startIdx = Array(0..<min(3, prog.count))
+        let endIdx = prog.indices.filter { prog[$0] > 0.9 }
+        func avg(_ a: [CGFloat]) -> CGFloat { a.isEmpty ? 0 : a.reduce(0, +) / CGFloat(a.count) }
+        if useLever, !endIdx.isEmpty {
+            func deg(_ t: CGFloat) -> Int { Int((abs(Double(atan(tan(t)))) * 180 / .pi).rounded()) }
+            let a0 = avg(startIdx.map { theta[$0] }), a1 = avg(endIdx.map { theta[$0] })
+            res.lever = (from: deg(a0), to: deg(a1))
+            let h0 = abs(cos(a0)), h1 = abs(cos(a1))
+            if h0 > 0.01 { res.armDrop = Int(((h1 - h0) / h0 * 100).rounded()) }
+        }
+        // 关节：取变化最大的两个
+        var js: [(String, Int, Int, Double)] = []
+        for (k, arr) in jointAngles {
+            let vals = arr.compactMap { $0 }
+            guard vals.count >= n / 3, !endIdx.isEmpty else { continue }
+            let st = startIdx.compactMap { arr[$0] }, en = endIdx.compactMap { $0 < arr.count ? arr[$0] : nil }
+            guard !st.isEmpty, !en.isEmpty else { continue }
+            let a0 = st.reduce(0, +) / Double(st.count), a1 = en.reduce(0, +) / Double(en.count)
+            js.append((k, Int(a0.rounded()), Int(a1.rounded()), abs(a1 - a0)))
+        }
+        res.joints = js.filter { $0.3 >= 15 }.sorted { $0.3 > $1.3 }.prefix(2).map { (name: $0.0, from: $0.1, to: $0.2) }
+        // 数一下做了几次
+        var up = false
+        for p in prog { if !up && p > 0.7 { up = true; res.reps += 1 } else if up && p < 0.3 { up = false } }
+        return res
+    }
+
+    // 三点夹角（中间那个点为顶点），度
+    private static func angle(_ a: CGPoint?, _ b: CGPoint?, _ c: CGPoint?) -> Double? {
+        guard let a, let b, let c else { return nil }
+        let v1 = CGVector(dx: a.x - b.x, dy: a.y - b.y), v2 = CGVector(dx: c.x - b.x, dy: c.y - b.y)
+        let l1 = hypot(v1.dx, v1.dy), l2 = hypot(v2.dx, v2.dy)
+        guard l1 > 1, l2 > 1 else { return nil }
+        let cosv = max(-1, min(1, (v1.dx * v2.dx + v1.dy * v2.dy) / (l1 * l2)))
+        return Double(acos(cosv)) * 180 / .pi
     }
 
     private static func area(_ o: VNHumanBodyPoseObservation) -> CGFloat {
@@ -356,7 +438,10 @@ struct MotionCurveSheet: View {
     @State private var camera = false
     @State private var url: URL? = nil
     @State private var frame: UIImage? = nil
-    @State private var tap: CGPoint? = nil        // 0…1，左上角为原点
+    @State private var tap: CGPoint? = nil        // 杠铃片，0…1，左上角为原点
+    @State private var pivotTap: CGPoint? = nil   // 转轴
+    @State private var noPivot = false
+    @State private var seat = ""
     @State private var boxSize: CGFloat = 0.18
     @State private var progress = 0.0
     @State private var result: CurveResult? = nil
@@ -458,7 +543,7 @@ struct MotionCurveSheet: View {
                             CurveChart(values: c.values, compact: true).frame(width: 64, height: 30)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(c.name).font(.subheadline.bold())
-                                Text("\(c.kind.title) · \(c.kind.type)").font(.caption).foregroundStyle(.secondary)
+                                Text("\(c.kind.title) · \(c.kind.type)" + (c.seat.map { " · 座椅 \($0) 档" } ?? "")).font(.caption).foregroundStyle(.secondary)
                             }
                             Spacer()
                             Button(role: .destructive) { cs.remove(c.name) } label: { Image(systemName: "trash").font(.footnote) }
@@ -474,14 +559,31 @@ struct MotionCurveSheet: View {
     // 第一帧上点杠铃片
     private var mark: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("在画面里点一下**杠铃片或铁块**，手机会一路跟着它。").font(.subheadline)
+            Text(pivotTap == nil && !noPivot ? "第一帧就是动作开始。先点一下**转轴**（杠杆绕着转的那颗螺栓）" : tap == nil ? "再点一下**杠铃片或铁块**，手机会一路跟着它" : "好了。人体关节手机会自动认，点“开始分析”").font(.subheadline)
+            HStack(spacing: 14) {
+                if pivotTap == nil && !noPivot {
+                    Button("没有转轴（插片、绳索）") { noPivot = true }.font(.footnote)
+                }
+                if pivotTap != nil || tap != nil || noPivot {
+                    Button("重新点") { pivotTap = nil; tap = nil; noPivot = false }.font(.footnote)
+                }
+            }
             if let img = frame {
                 Image(uiImage: img).resizable().scaledToFit()
                     .overlay {
                         GeometryReader { g in
                             ZStack {
                                 Color.clear.contentShape(Rectangle())
-                                    .onTapGesture { loc in tap = CGPoint(x: loc.x / g.size.width, y: loc.y / g.size.height) }
+                                    .onTapGesture { loc in
+                                        let q = CGPoint(x: loc.x / g.size.width, y: loc.y / g.size.height)
+                                        if pivotTap == nil && !noPivot { pivotTap = q } else { tap = q }
+                                    }
+                                if let pv = pivotTap {
+                                    Circle().fill(Color(hex: 0xe8590c)).frame(width: 18, height: 18).overlay(Circle().stroke(.white, lineWidth: 3))
+                                        .overlay(Text("转轴").font(.caption2.bold()).foregroundStyle(.white).padding(3).background(.black.opacity(0.6), in: Capsule()).offset(y: -20))
+                                        .position(x: pv.x * g.size.width, y: pv.y * g.size.height)
+                                        .allowsHitTesting(false)
+                                }
                                 if let t = tap {
                                     let side = g.size.width * boxSize
                                     RoundedRectangle(cornerRadius: 8).stroke(Color.yellow, style: StrokeStyle(lineWidth: 3, dash: [7, 5]))
@@ -518,7 +620,7 @@ struct MotionCurveSheet: View {
     private var analyzing: some View {
         VStack(spacing: 16) {
             ProgressView(value: progress).tint(Color(hex: 0xe8590c))
-            Text("正在一帧一帧看你的手… \(Int(progress * 100))%").font(.subheadline).foregroundStyle(.secondary)
+            Text("正在看转轴、杠铃片和你的关节… \(Int(progress * 100))%").font(.subheadline).foregroundStyle(.secondary)
             Text("全部在手机上算，不联网").font(.caption).foregroundStyle(.tertiary)
         }
         .padding(.top, 40)
@@ -540,7 +642,11 @@ struct MotionCurveSheet: View {
                     Spacer()
                     Text("越往上越吃力").font(.caption).foregroundStyle(.secondary)
                 }
-                CurveChart(values: vals).frame(height: 190)
+                let j0 = r.joints.first
+                CurveChart(values: vals,
+                           start: j0.map { "开始 · \($0.name) \(flipped ? $0.to : $0.from)°" } ?? "开始（拉长位）",
+                           end: j0.map { "结束 · \($0.name) \(flipped ? $0.from : $0.to)°" } ?? "结束（缩短位）")
+                    .frame(height: 190)
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(kind.title).font(.title2.bold()).foregroundStyle(Color(hex: 0xe8590c))
                     Text(kind.type).font(.footnote).foregroundStyle(.secondary)
@@ -554,6 +660,28 @@ struct MotionCurveSheet: View {
                 }
             }
             .card()
+
+            if r.lever != nil || !r.joints.isEmpty || !r.usedHand {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("转轴、杠铃片、关节一起看出来的").font(.headline)
+                    if let lv = r.lever {
+                        row("杠杆和水平线的角度", "\(flipped ? lv.to : lv.from)° → \(flipped ? lv.from : lv.to)°")
+                    }
+                    if let d = r.armDrop {
+                        row("挂片离转轴的横向距离", d >= 0 ? "越来越远，多了 \(d)%" : "越来越近，少了 \(-d)%")
+                    }
+                    if let p = r.peakPct, let l = r.lowPct, r.method == .plate {
+                        row("手上的阻力", "最重 \(p)% → 最轻 \(l)%")
+                    }
+                    if !r.joints.isEmpty {
+                        row("主要关节", r.joints.map { "\($0.name) \(flipped ? $0.to : $0.from)° → \(flipped ? $0.from : $0.to)°" }.joined(separator: "，"))
+                    }
+                    if !r.usedHand {
+                        Text("手被挡住了，这次只按杠杆角度算").font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                .card()
+            }
 
             VStack(alignment: .leading, spacing: 10) {
                 Text("存到哪个动作").font(.headline)
@@ -569,14 +697,19 @@ struct MotionCurveSheet: View {
                         }
                     }
                 }
-                Text("存好以后，进步页的阻力曲线按这条算；换了器械再录一次就更新").font(.caption).foregroundStyle(.secondary)
+                HStack {
+                    Text("座椅档位").font(.subheadline)
+                    TextField("选填，比如 4", text: $seat).textFieldStyle(.roundedBorder).frame(maxWidth: 140)
+                }
+                Text("存好以后，进步页的阻力曲线按这条算；换了器械或座椅档位再录一次就更新").font(.caption).foregroundStyle(.secondary)
             }
             .card()
 
             Button {
                 let n = name.trimmingCharacters(in: .whitespaces)
                 guard !n.isEmpty else { return }
-                cs.save(SavedCurve(name: n, values: vals, method: r.method, peakPct: r.peakPct, lowPct: r.lowPct))
+                let st = seat.trimmingCharacters(in: .whitespaces)
+                cs.save(SavedCurve(name: n, values: vals, method: r.method, peakPct: r.peakPct, lowPct: r.lowPct, seat: st.isEmpty ? nil : st))
                 saved = true
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
             } label: {
@@ -589,15 +722,23 @@ struct MotionCurveSheet: View {
         }
     }
 
+    private func row(_ k: String, _ v: String) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(k).font(.subheadline)
+            Spacer(minLength: 12)
+            Text(v).font(.subheadline.bold()).multilineTextAlignment(.trailing)
+        }
+    }
+
     private func reset() {
-        step = .home; url = nil; frame = nil; tap = nil; result = nil; flipped = false; error = nil; saved = false; progress = 0
+        step = .home; url = nil; frame = nil; tap = nil; pivotTap = nil; noPivot = false; result = nil; flipped = false; error = nil; saved = false; progress = 0
     }
 
     @MainActor private func load(_ u: URL) async {
         error = nil
         url = u
         guard let f = await MotionAnalyzer.firstFrame(u) else { error = MotionError.noVideo.errorDescription; return }
-        frame = f; tap = nil; step = .mark
+        frame = f; tap = nil; pivotTap = nil; noPivot = false; step = .mark
     }
 
     private func run(_ m: CurveMethod) {
@@ -611,7 +752,8 @@ struct MotionCurveSheet: View {
         error = nil; progress = 0; step = .analyzing
         Task {
             do {
-                let r = try await MotionAnalyzer.analyze(url: u, method: m, plateBox: box) { p in progress = p }
+                let pv: CGPoint? = (m == .plate) ? pivotTap.map { CGPoint(x: $0.x, y: 1 - $0.y) } : nil
+                let r = try await MotionAnalyzer.analyze(url: u, method: m, plateBox: box, pivot: pv) { p in progress = p }
                 await MainActor.run { result = r; flipped = false; saved = false; step = .result }
             } catch {
                 await MainActor.run { self.error = error.localizedDescription; step = .mark }
