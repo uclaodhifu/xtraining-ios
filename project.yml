@@ -17,6 +17,8 @@ targets:
     sources: [XTraining, Shared]
     dependencies:
       - target: XTrainingWidgets
+    scheme:
+      testTargets: [XTrainingTests]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID)
@@ -54,6 +56,7 @@ targets:
           - UTTypeIdentifier: com.kaigreen.xtraining.card
             UTTypeDescription: X Training 动作卡片
             UTTypeConformsTo: [public.data]
+        NSPhotoLibraryUsageDescription: 从相册选一段做动作的视频，在手机上分析阻力曲线，视频不会上传。
         NSCameraUsageDescription: 录一段做动作的视频，在手机上分析阻力曲线，视频不会上传。
         NSMicrophoneUsageDescription: 录视频时系统会一起录声音，X Training 不会使用也不会上传。
         NSHealthShareUsageDescription: 读取你在 Apple 健康里的运动、消耗的卡路里和步数，显示在“我”的运动记录日历里。
@@ -80,3 +83,15 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
+  XTrainingTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [XTrainingTests]
+    dependencies:
+      - target: XTraining
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID).tests
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1,2"

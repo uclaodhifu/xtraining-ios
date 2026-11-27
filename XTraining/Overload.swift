@@ -535,7 +535,7 @@ private struct CurveCard: View {
         }
         .card()
         .sheet(isPresented: $record) {
-            MotionCurveSheet(names: recentNames, preset: "")
+            ResistanceCurveFlow(names: recentNames)
         }
     }
     private var recentNames: [String] {
