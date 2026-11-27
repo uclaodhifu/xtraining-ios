@@ -21,11 +21,15 @@ final class Health: ObservableObject {
 
     func connect() async -> Bool {
         guard available else { return false }
-        let read: Set<HKObjectType> = [HKObjectType.workoutType(), HKQuantityType(.activeEnergyBurned), HKQuantityType(.stepCount)]
+        let read: Set<HKObjectType> = [HKObjectType.workoutType(), HKQuantityType(.activeEnergyBurned), HKQuantityType(.stepCount),
+                                       HKQuantityType(.heartRate), HKQuantityType(.restingHeartRate)]
+        // 在 iPhone 上开始训练读耳机心率时，练完要把这次训练存进 Apple 健康
+        let share: Set<HKSampleType> = [HKObjectType.workoutType(), HKQuantityType(.heartRate), HKQuantityType(.activeEnergyBurned)]
         do {
-            try await hk.requestAuthorization(toShare: [], read: read)
+            try await hk.requestAuthorization(toShare: share, read: read)
             connected = true
             UserDefaults.standard.set(true, forKey: "xt.health")
+            UserDefaults.standard.set(true, forKey: "xt.health2")
             return true
         } catch { return false }
     }
@@ -67,6 +71,55 @@ final class Health: ObservableObject {
             }
         }
         return out
+    }
+
+    // 某段时间里 Apple 健康的心率（手表、耳机、手环 App 写进去的都算）
+    func heart(_ a: Date, _ b: Date) async -> [HRPoint] {
+        guard connected, available else { return [] }
+        let q = HKSampleQueryDescriptor(predicates: [.quantitySample(type: HKQuantityType(.heartRate), predicate: HKQuery.predicateForSamples(withStart: a, end: b))],
+                                        sortDescriptors: [SortDescriptor(\.startDate)])
+        let unit = HKUnit.count().unitDivided(by: .minute())
+        let ss = (try? await q.result(for: hk)) ?? []
+        return ss.map { HRPoint(t: $0.startDate.timeIntervalSince1970, v: Int($0.quantity.doubleValue(for: unit).rounded())) }
+    }
+
+    // 最近的心率是哪些设备测的：手表 / 耳机 / 手环
+    func heartSources() async -> Set<String> {
+        guard connected, available else { return [] }
+        let q = HKSampleQueryDescriptor(predicates: [.quantitySample(type: HKQuantityType(.heartRate), predicate: HKQuery.predicateForSamples(withStart: Date().addingTimeInterval(-30 * 86400), end: nil))],
+                                        sortDescriptors: [SortDescriptor(\.startDate, order: .reverse)], limit: 400)
+        var out: Set<String> = []
+        for s in (try? await q.result(for: hk)) ?? [] {
+            let dev = (s.device?.name ?? "") + " " + (s.device?.model ?? "")
+            if dev.contains("AirPods") || dev.contains("Beats") { out.insert("耳机") }
+            else if s.sourceRevision.productType?.contains("Watch") == true || dev.contains("Watch") { out.insert("手表") }
+            else if s.sourceRevision.source.bundleIdentifier.hasPrefix("com.apple") == false { out.insert("手环") }
+        }
+        return out
+    }
+
+    // 每天的静息心率
+    func resting(days: Int) async -> [(String, Double)] {
+        guard connected, available else { return [] }
+        let cal = Calendar.current
+        let start = cal.startOfDay(for: Date().addingTimeInterval(-Double(days) * 86400))
+        let sq = HKStatisticsCollectionQueryDescriptor(
+            predicate: .quantitySample(type: HKQuantityType(.restingHeartRate), predicate: HKQuery.predicateForSamples(withStart: start, end: nil)),
+            options: .discreteAverage, anchorDate: start, intervalComponents: DateComponents(day: 1))
+        var out: [(String, Double)] = []
+        if let coll = try? await sq.result(for: hk) {
+            coll.enumerateStatistics(from: start, to: Date()) { s, _ in
+                if let v = s.averageQuantity()?.doubleValue(for: HKUnit.count().unitDivided(by: .minute())) { out.append((Day.str(s.startDate), v)) }
+            }
+        }
+        return out
+    }
+
+    // 某段时间里 Apple 健康记的运动（起止时间）
+    func workoutSpans(_ a: Date, _ b: Date) async -> [(Date, Date, String)] {
+        guard connected, available else { return [] }
+        let wq = HKSampleQueryDescriptor(predicates: [.workout(HKQuery.predicateForSamples(withStart: a, end: b))], sortDescriptors: [SortDescriptor(\.startDate)])
+        return ((try? await wq.result(for: hk)) ?? []).map { ($0.startDate, $0.endDate, Health.name($0.workoutActivityType)) }
     }
 
     static func name(_ t: HKWorkoutActivityType) -> String {
@@ -169,7 +222,7 @@ struct ActivityCard: View {
                         .foregroundStyle(.white).background(Capsule().fill(Color.red.gradient))
                 }
                 .buttonStyle(.plain)
-                Text(denied ? "没能连接。去「设置 → 健康 → 数据访问与设备 → X Training」打开权限。" : "连接后，会自动读取 Apple 健康里的运动、卡路里和步数。没连接时只显示 App 里记的力量训练。")
+                Text(denied ? "没能连接。去「设置 → 健康 → 数据访问与设备 → X Training」打开权限。" : "连接后，会自动读取 Apple 健康里的运动、卡路里、步数和心率。没连接时只显示 App 里记的力量训练。")
                     .font(.caption2).foregroundStyle(.secondary).multilineTextAlignment(.center)
             }
             // 日历

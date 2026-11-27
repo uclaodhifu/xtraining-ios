@@ -49,6 +49,10 @@ struct MeView: View {
                     ActivityCard()
                         .padding(.vertical, 6)
                 }
+                Section {
+                    HeartCard()
+                        .padding(.vertical, 6)
+                }
                 CloudSection()
                 Section {
                     Picker("重量单位", selection: Binding(get: { unit }, set: { v in if v != unit { askUnit = v } })) {

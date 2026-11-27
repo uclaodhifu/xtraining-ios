@@ -7,5 +7,7 @@ struct RestAttributes: ActivityAttributes {
         var start: Date
         var end: Date
         var exercise: String
+        var bpm: Int? = nil      // 实时心率（有耳机/手表/手环时）
+        var line: Int? = nil     // 恢复线
     }
 }

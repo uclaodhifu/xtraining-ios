@@ -12,6 +12,8 @@ final class RestTimer: ObservableObject {
     private var activity: Activity<RestAttributes>?
     private var exercise = ""
     private var tick: Task<Void, Never>?
+    private var liveBpm: Int?
+    @Published private(set) var hrHit: Int?      // 上一次是心率降到恢复线提醒的（显示用）
 
     var running: Bool { end.map { $0 > Date() } ?? false }
 
@@ -20,6 +22,9 @@ final class RestTimer: ObservableObject {
         self.exercise = exercise
         let now = Date()
         start = now; end = now.addingTimeInterval(TimeInterval(sec))
+        hrHit = nil
+        HRLog.addRest(exercise, at: now)    // 记下这组练完的时间，练完能看每组心率
+        HeartLive.shared.start()
         schedule()
         Task { await live() }
         watch()
@@ -37,6 +42,7 @@ final class RestTimer: ObservableObject {
 
     func stop(keepAlert: Bool = false) {
         tick?.cancel()
+        if start != nil { HRLog.endRest(at: min(Date(), end ?? Date())) }
         start = nil; end = nil
         // 手动停才取消提醒；时间到了自然结束时让通知照常响
         if !keepAlert { UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["rest-end"]) }
@@ -57,8 +63,36 @@ final class RestTimer: ObservableObject {
                     self.stop(keepAlert: true)
                     return
                 }
+                // 心率降到恢复线：不用等倒计时，提醒开下一组（至少歇 20 秒）
+                let hr = HeartLive.shared
+                if let b = hr.fresh, let s = self.start {
+                    if hr.alertOn, Date().timeIntervalSince(s) >= 20, b <= hr.line {
+                        self.heartReady(b)
+                        return
+                    }
+                    if b != self.liveBpm, Int(Date().timeIntervalSince1970) % 3 == 0 {
+                        self.liveBpm = b
+                        await self.live()
+                    }
+                }
             }
         }
+    }
+
+    private func heartReady(_ b: Int) {
+        Haptic.success()
+        let c = UNUserNotificationCenter.current()
+        c.removePendingNotificationRequests(withIdentifiers: ["rest-end"])
+        if UIApplication.shared.applicationState != .active {
+            let n = UNMutableNotificationContent()
+            n.title = "心率回到 \(b) 了"
+            n.body = exercise.isEmpty ? "可以开始下一组 💪" : "可以开始下一组：\(exercise) 💪"
+            n.sound = .default
+            n.interruptionLevel = .timeSensitive
+            c.add(UNNotificationRequest(identifier: "rest-hr", content: n, trigger: nil))
+        }
+        stop(keepAlert: true)
+        hrHit = b
     }
 
     private func schedule() {
@@ -77,7 +111,8 @@ final class RestTimer: ObservableObject {
 
     private func live() async {
         guard let s = start, let e = end, ActivityAuthorizationInfo().areActivitiesEnabled else { return }
-        let st = RestAttributes.ContentState(start: s, end: e, exercise: exercise)
+        let hr = HeartLive.shared
+        let st = RestAttributes.ContentState(start: s, end: e, exercise: exercise, bpm: hr.fresh, line: hr.fresh != nil && hr.alertOn ? hr.line : nil)
         let content = ActivityContent(state: st, staleDate: e)
         if let a = activity {
             await a.update(content)
@@ -91,6 +126,8 @@ final class RestTimer: ObservableObject {
 // 休息条：醒目的绿色卡片；最后 10 秒变红并跳动
 struct RestBar: View {
     @ObservedObject private var t = RestTimer.shared
+    @ObservedObject private var hr = HeartLive.shared
+    @State private var heartSheet = false
     var exercise: String = ""
     private let presets = [60, 90, 120, 180, 300]
     @Namespace private var ns
@@ -137,7 +174,23 @@ struct RestBar: View {
                         }
                         .frame(width: 40, height: 40)
                         VStack(alignment: .leading, spacing: 0) {
-                            Text(urgent ? "准备下一组" : "休息中").font(.caption2.bold()).opacity(0.85)
+                            HStack(spacing: 6) {
+                                Text(urgent ? "准备下一组" : "休息中").font(.caption2.bold()).opacity(0.85)
+                                if let b = hr.fresh {
+                                    Button { heartSheet = true } label: {
+                                        HStack(spacing: 2) {
+                                            Image(systemName: "heart.fill").symbolEffect(.pulse)
+                                            Text("\(b)").monospacedDigit().contentTransition(.numericText())
+                                            if hr.alertOn { Text("→\(hr.line)").opacity(0.7) }
+                                        }
+                                        .font(.caption2.bold())
+                                        .padding(.horizontal, 6).padding(.vertical, 1)
+                                        .background(Color.white.opacity(0.22), in: Capsule())
+                                    }
+                                    .buttonStyle(.plain)
+                                    .animation(.snappy, value: b)
+                                }
+                            }
                             Text(timerInterval: s...e, countsDown: true)
                                 .font(.system(size: 32, weight: .heavy, design: .rounded)).monospacedDigit()
                                 .matchedGeometryEffect(id: "time", in: ns)
@@ -171,7 +224,27 @@ struct RestBar: View {
                 }
             } else {
                 HStack(spacing: 8) {
-                    Image(systemName: "timer").font(.subheadline.bold())
+                    // 心形：点开设置心率来源和恢复线；有实时心率时显示数字
+                    Button { heartSheet = true } label: {
+                        TimelineView(.periodic(from: .now, by: 2)) { _ in
+                            if let b = hr.fresh {
+                                VStack(spacing: -1) {
+                                    Image(systemName: "heart.fill").font(.system(size: 11, weight: .bold)).symbolEffect(.pulse)
+                                    Text("\(b)").font(.caption.bold()).monospacedDigit()
+                                }
+                                .frame(minWidth: 26)
+                            } else if let h = t.hrHit {
+                                VStack(spacing: -1) {
+                                    Image(systemName: "checkmark.circle.fill").font(.system(size: 11, weight: .bold))
+                                    Text("\(h)").font(.caption.bold()).monospacedDigit()
+                                }
+                                .frame(minWidth: 26)
+                            } else {
+                                Image(systemName: "heart").font(.subheadline.bold()).frame(minWidth: 22)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
                     // 手指在这排上左右滑：只换选中的时长，不开始；点一下才开始计时
                     HStack(spacing: 6) {
                         ForEach(presets, id: \.self) { p in
@@ -210,6 +283,7 @@ struct RestBar: View {
         .shadow(color: .black.opacity(0.18), radius: 12, y: 5)
         .padding(.horizontal, 14).padding(.bottom, 6)
         .animation(.snappy, value: t.running)
+        .sheet(isPresented: $heartSheet) { HeartSheet().presentationDetents([.medium, .large]) }
     }
 
     private func start(_ p: Int) {
