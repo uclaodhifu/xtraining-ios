@@ -439,6 +439,39 @@ struct LifterPicker: View {
     }
 }
 
+// 放大到城市后的背景：满屏小圆点，健身房附近（练的人越多范围越大）点变亮变粉
+struct CityDots: View {
+    var proj: GlobeProj
+    var heat: [(CGPoint, Double)]   // 健身房屏幕位置 + 人数
+    var body: some View {
+        Canvas { ctx, size in
+            ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(hex: 0x0b0d24)))
+            let step: CGFloat = 13
+            // 点阵跟着地图走：以一个固定经纬度为锚点对齐
+            let a = proj.p(112, 28).0
+            let ox = a.x.truncatingRemainder(dividingBy: step), oy = a.y.truncatingRemainder(dividingBy: step)
+            var y = oy - step
+            while y < size.height + step {
+                var x = ox - step
+                while x < size.width + step {
+                    var h = 0.0
+                    for (p, c) in heat {
+                        let d = Double(hypot(p.x - x, p.y - y))
+                        h += max(0, 1 - d / (70 + c * 30)) * (0.6 + c * 0.3)
+                    }
+                    h = min(1, h)
+                    let r = 1.1 + h * 1.6
+                    let col = h > 0.05 ? Color(red: (90 + 165 * h) / 255, green: 100 / 255, blue: (200 - 40 * h) / 255) : Color(hex: 0x2a2f66)
+                    ctx.fill(Path(ellipseIn: CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2)), with: .color(col.opacity(0.55 + h * 0.45)))
+                    x += step
+                }
+                y += step
+            }
+        }
+        .allowsHitTesting(false)
+    }
+}
+
 // MARK: - 打卡地球页面
 // 挤在一起的健身房合成一个泡泡（圈里是练过人最多那家的照片），点泡泡或点城市名就转过去放大
 struct GymCluster: Identifiable {
@@ -506,6 +539,10 @@ struct GlobeScreen: View {
                     let figures = Set(singles.filter { $0.count(range) > 0 }.sorted { $0.count(range) > $1.count(range) }.prefix(z > 1.8 ? 16 : 8).map(\.id))
                     ZStack {
                         GlobeBall(proj: proj, flat: z > Self.flatZoom)
+                        if z > Self.flatZoom {
+                            CityDots(proj: proj, heat: clusters.flatMap { c in c.gyms.map { (proj.p($0.lon, $0.lat).0, Double(min(6, $0.count(range)))) } })
+                                .opacity(min(1, (z - Self.flatZoom) / 15))
+                        }
                         GlobeCityLabels(proj: proj, zoom: z,
                                         avoid: clusters.map { c -> CGRect in
                                             let tall = c.gyms.count > 1 || figures.contains(c.gyms[0].id)
