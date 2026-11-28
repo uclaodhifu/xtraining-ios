@@ -21,6 +21,7 @@ struct GymPerson: Codable, Hashable {
     var parts: [String]
     var t: Double
     var a: String? = nil      // 这个人选的打卡小人
+    var p: String? = nil      // 选「我自己」且照片审核通过：照片地址
 }
 
 struct GymPending: Codable, Hashable { var url: String; var uid: String }
@@ -104,6 +105,9 @@ enum GymAPI {
     static func fix(gym: String, uid: String, lat: Double, lon: Double, city: String) async -> Bool {
         await call(req("gymfix", method: "POST", json: ["gym": gym, "uid": uid, "lat": lat, "lon": lon, "city": city])) != nil
     }
+    static func avatar(uid: String, jpg: Data) async -> Bool {
+        await call(req("avatar?uid=\(uid)", method: "POST", body: jpg, type: "image/jpeg", timeout: 40)) != nil
+    }
     static func photo(gym: String, uid: String, jpg: Data) async -> Bool {
         await call(req("photo?gym=\(gym)&uid=\(uid)", method: "POST", body: jpg, type: "image/jpeg", timeout: 40)) != nil
     }
@@ -168,9 +172,15 @@ final class GymStore: NSObject, ObservableObject, CLLocationManagerDelegate {
         } else { failed = true }
         await flush()
         if let c = ud.string(forKey: "xt.charPending"), await GymAPI.setChar(uid: uid, char: c) { ud.removeObject(forKey: "xt.charPending") }
+        if ud.bool(forKey: "xt.avatarPending"), let jpg = AvatarCache.shared.mineJPG, await GymAPI.avatar(uid: uid, jpg: jpg) { ud.removeObject(forKey: "xt.avatarPending") }
     }
 
     // 在「我」页换了小人：告诉服务器，地球上马上换（没网就下次打开地球再补）
+    // 上传自己的头像照片（失败了下次打开再传）
+    func uploadAvatar(_ jpg: Data) {
+        ud.set(true, forKey: "xt.avatarPending")
+        Task { if await GymAPI.avatar(uid: uid, jpg: jpg) { ud.removeObject(forKey: "xt.avatarPending") } }
+    }
     func setChar(_ c: LifterChar) {
         ud.set(c.rawValue, forKey: "xt.charPending")
         objectWillChange.send()

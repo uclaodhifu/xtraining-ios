@@ -256,16 +256,17 @@ enum LiftKind { case squat, flex, jack, wave, jump, run
 }
 
 enum LifterChar: String, CaseIterable, Identifiable {
-    case boy, girl, bald, cap, panda, robot
+    case boy, girl, bald, cap, panda, robot, blogger, photo
     var id: String { rawValue }
-    var name: String { ["阿强", "小美", "大壮", "帽子哥", "滚滚", "铁甲"][Self.allCases.firstIndex(of: self)!] }
-    var desc: String { ["短发小哥", "马尾女生", "光头壮汉", "反戴棒球帽", "健身熊猫", "健身机器人"][Self.allCases.firstIndex(of: self)!] }
-    var shirt: Color { [Color(hex: 0xff7a00), Color(hex: 0xe64980), Color(hex: 0x2f9e44), Color(hex: 0xfab005), Color(hex: 0x222222), Color(hex: 0x868e96)][Self.allCases.firstIndex(of: self)!] }
-    var pants: Color { [Color(hex: 0x2b2d42), Color(hex: 0x343a40), Color(hex: 0x212529), Color(hex: 0x1864ab), Color(hex: 0x222222), Color(hex: 0x495057)][Self.allCases.firstIndex(of: self)!] }
+    private var i: Int { Self.allCases.firstIndex(of: self)! }
+    var name: String { ["阿强", "小美", "大壮", "帽子哥", "滚滚", "铁甲", "博主", "我自己"][i] }
+    var desc: String { ["短发小哥", "马尾女生", "光头壮汉", "反戴棒球帽", "健身熊猫", "健身机器人", "健身博主", "用我的照片"][i] }
+    var shirt: Color { [Color(hex: 0xff7a00), Color(hex: 0xe64980), Color(hex: 0x2f9e44), Color(hex: 0xfab005), Color(hex: 0x222222), Color(hex: 0x868e96), Color(hex: 0x111111), Color(hex: 0xdd2a7b)][i] }
+    var pants: Color { [Color(hex: 0x2b2d42), Color(hex: 0x343a40), Color(hex: 0x212529), Color(hex: 0x1864ab), Color(hex: 0x222222), Color(hex: 0x495057), Color(hex: 0x3a3a3c), Color(hex: 0x2b2d42)][i] }
     var arm: Color {
-        switch self { case .bald: return Color(hex: 0xf2c39b); case .panda: return Color(hex: 0x222222); case .robot: return Color(hex: 0xadb5bd); default: return Color(hex: 0xffd8b5) }
+        switch self { case .bald: return Color(hex: 0xf2c39b); case .panda: return Color(hex: 0x222222); case .robot: return Color(hex: 0xadb5bd); case .blogger: return Color(hex: 0xe9b48a); default: return Color(hex: 0xffd8b5) }
     }
-    var width: CGFloat { switch self { case .bald: return 15; case .panda: return 14; case .girl: return 11; default: return 12 } }
+    var width: CGFloat { switch self { case .bald, .blogger: return 15; case .panda: return 14; case .girl: return 11; default: return 12 } }
     static var mine: LifterChar {
         get { LifterChar(rawValue: UserDefaults.standard.string(forKey: "xt.lifter") ?? "") ?? .boy }
         set { UserDefaults.standard.set(newValue.rawValue, forKey: "xt.lifter") }
@@ -278,6 +279,7 @@ struct Lifter: View {
     var char: LifterChar = .boy
     var t: Double          // 动画时间（秒）
     var size: CGFloat = 40
+    var photo: UIImage? = nil   // 「我自己」：照片当头
     var body: some View {
         Canvas { ctx, sz in
             let k = sz.width / 40
@@ -312,6 +314,18 @@ struct Lifter: View {
                     ctx.fill(Path(ellipseIn: CGRect(x: x - 3.5, y: y - 1.9, width: 3, height: 3.8)), with: .color(Color(hex: 0x222222)))
                     ctx.fill(Path(ellipseIn: CGRect(x: x + 0.5, y: y - 1.9, width: 3, height: 3.8)), with: .color(Color(hex: 0x222222)))
                     circle(x, y + 2.4, 0.8, Color(hex: 0x222222))
+                case .blogger:
+                    circle(x, y, 5.2, Color(hex: 0xe9b48a)); arc(x, y - 0.6, 5.2, Color(hex: 0x1a1a1a))
+                    rect(x - 5.4, y - 2.6, 10.8, 1.8, Color(hex: 0xff3b5c), 0.9)
+                    rect(x - 4.4, y - 0.2, 3.8, 1.9, Color(hex: 0x111111), 0.9); rect(x + 0.6, y - 0.2, 3.8, 1.9, Color(hex: 0x111111), 0.9); rect(x - 0.8, y + 0.3, 1.6, 0.6, Color(hex: 0x111111), 0)
+                case .photo:
+                    if let photo {
+                        let r: CGFloat = 6.6, box = CGRect(x: x - r, y: y - r - 0.6, width: r * 2, height: r * 2)
+                        var c2 = ctx; c2.clip(to: Path(ellipseIn: box)); c2.draw(Image(uiImage: photo), in: box)
+                        ctx.stroke(Path(ellipseIn: box), with: .color(.white), lineWidth: 1)
+                    } else {
+                        circle(x, y, 5, skin); arc(x, y - 0.4, 5.2, Color(hex: 0x222222))
+                    }
                 case .robot:
                     line([CGPoint(x: x, y: y - 5), CGPoint(x: x, y: y - 8)], Color(hex: 0xadb5bd), 1); circle(x, y - 8.5, 1.2, plate)
                     rect(x - 5, y - 4.6, 10, 9, Color(hex: 0xced4da), 2.5); rect(x - 3.6, y - 2, 7.2, 3, Color(hex: 0x212529), 1.5)
@@ -322,6 +336,10 @@ struct Lifter: View {
                 rect(20 - W / 2, y, W, h, shirt, 5)
                 if c == .panda { ctx.fill(Path(ellipseIn: CGRect(x: 20 - W / 2 + 2.5, y: y + 2, width: W - 5, height: h - 3)), with: .color(.white)) }
                 if c == .robot { rect(17, y + 3, 6, 4, Color(hex: 0x4dd4ff).opacity(0.7), 1) }
+                if c == .blogger {   // 背心：露出肩膀，胸前一行字
+                    rect(20 - W / 2, y, 2.6, 3, arm, 1.2); rect(20 + W / 2 - 2.6, y, 2.6, 3, arm, 1.2)
+                    ctx.draw(Text("FIT").font(.system(size: 3.6, weight: .black)).foregroundColor(Color(hex: 0xff3b5c)), at: CGPoint(x: 20, y: y + h * 0.55))
+                }
             }
             func legs(_ y: CGFloat) {
                 line([CGPoint(x: 17, y: y), CGPoint(x: 15, y: y + 7), CGPoint(x: 15, y: 42)], pants, 4)
@@ -386,6 +404,25 @@ struct Lifter: View {
 // 「我 → 我的打卡小人」：6 个人物选一个
 struct LifterPicker: View {
     @State private var mine = LifterChar.mine
+    @ObservedObject private var av = AvatarCache.shared
+
+    private func charCell(_ c: LifterChar, kind: LiftKind, t: Double) -> some View {
+        let on = c == mine
+        return VStack(spacing: 4) {
+            Lifter(kind: kind, char: c, t: t, size: 62, photo: c == .photo ? av.mine : nil)
+                .overlay { if c == .photo && av.mine == nil { Image(systemName: "plus.circle.fill").font(.title2).foregroundStyle(.white, Brand.pink).offset(y: -22) } }
+                .frame(maxWidth: .infinity).frame(height: 84)
+                .background(RoundedRectangle(cornerRadius: 12).fill(RadialGradient(colors: [Color(hex: 0xeef0ff).opacity(0.8), .clear], center: .bottom, startRadius: 0, endRadius: 70)))
+            Text(c.name).font(.headline).foregroundStyle(.primary)
+            Text(c == .photo && av.mine == nil ? "点这里传照片" : c.desc).font(.caption2).foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 10).padding(.horizontal, 6)
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color(.secondarySystemGroupedBackground)))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(on ? Brand.pink : .clear, lineWidth: 2.5))
+        .overlay(alignment: .topTrailing) {
+            if on { Image(systemName: "checkmark.circle.fill").font(.title3).foregroundStyle(.white, Brand.pink).padding(6) }
+        }
+    }
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
@@ -394,32 +431,36 @@ struct LifterPicker: View {
                     let t = tl.date.timeIntervalSinceReferenceDate
                     VStack(spacing: 14) {
                         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
-                            ForEach(Array(LifterChar.allCases.enumerated()), id: \.element) { i, c in
-                                let on = c == mine
+                            ForEach(Array(LifterChar.allCases.filter { $0 != .photo }.enumerated()), id: \.element) { i, c in
                                 Button { Haptic.tap(); mine = c; LifterChar.mine = c; GymStore.shared.setChar(c) } label: {
-                                    VStack(spacing: 4) {
-                                        Lifter(kind: LiftKind.all[i], char: c, t: t + Double(i) * 0.4, size: 62)
-                                            .frame(maxWidth: .infinity).frame(height: 84)
-                                            .background(RoundedRectangle(cornerRadius: 12).fill(RadialGradient(colors: [Color(hex: 0xeef0ff).opacity(0.8), .clear], center: .bottom, startRadius: 0, endRadius: 70)))
-                                        Text(c.name).font(.headline).foregroundStyle(.primary)
-                                        Text(c.desc).font(.caption2).foregroundStyle(.secondary)
-                                    }
-                                    .padding(.vertical, 10).padding(.horizontal, 6)
-                                    .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color(.secondarySystemGroupedBackground)))
-                                    .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(on ? Brand.pink : .clear, lineWidth: 2.5))
-                                    .overlay(alignment: .topTrailing) {
-                                        if on { Image(systemName: "checkmark.circle.fill").font(.title3).foregroundStyle(.white, Brand.pink).padding(6) }
-                                    }
+                                    charCell(c, kind: LiftKind.all[i % LiftKind.all.count], t: t + Double(i) * 0.4)
                                 }
                                 .buttonStyle(PressScale())
                             }
+                            // 我自己：用自己的照片当头
+                            if av.mine != nil {
+                                Button { Haptic.tap(); mine = .photo; LifterChar.mine = .photo; GymStore.shared.setChar(.photo) } label: {
+                                    charCell(.photo, kind: .squat, t: t + 2.8)
+                                }
+                                .buttonStyle(PressScale())
+                            } else {
+                                AvatarPickCell(onDone: { mine = .photo }) { charCell(.photo, kind: .squat, t: t + 2.8) }
+                            }
+                        }
+                        if av.mine != nil {
+                            AvatarPickCell(onDone: { mine = .photo }) {
+                                Label("换一张照片", systemImage: "photo.on.rectangle").font(.subheadline.weight(.semibold)).foregroundStyle(Brand.pink)
+                                    .frame(maxWidth: .infinity).padding(.vertical, 10)
+                                    .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color(.secondarySystemGroupedBackground)))
+                            }
+                            Text("照片只用作小人的头，审核通过后别人才看得到").font(.caption).foregroundStyle(.secondary)
                         }
                         VStack(alignment: .leading, spacing: 8) {
                             Text("\(mine.name)在地球上会根据你这次练的部位做动作").font(.footnote).foregroundStyle(Color(hex: 0xa5a8c2))
                             HStack {
                                 ForEach(LiftKind.all, id: \.self) { k in
                                     VStack(spacing: 2) {
-                                        Lifter(kind: k, char: mine, t: t, size: 44)
+                                        Lifter(kind: k, char: mine, t: t, size: 44, photo: mine == .photo ? av.mine : nil)
                                         Text(k.name).font(.system(size: 10)).foregroundStyle(Color(hex: 0xc9cbe0))
                                     }
                                     .frame(maxWidth: .infinity)
@@ -524,6 +565,7 @@ struct GlobeScreen: View {
 
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var gs = GymStore.shared
+    @ObservedObject private var av = AvatarCache.shared
     @State private var lon0 = 112.0
     @State private var lat0 = 30.0
     @State private var zoom = 1.0
@@ -776,7 +818,7 @@ struct GlobeScreen: View {
                 let people = Array(g.recent.prefix(g.count(range) >= 6 ? 3 : g.count(range) >= 3 ? 2 : 1))
                 HStack(spacing: -8) {
                     ForEach(Array(people.enumerated()), id: \.offset) { i, p in
-                        Lifter(kind: .of(p.parts.first ?? g.top.first), char: p.uid == gs.uid ? .mine : .from(p.a), t: t + Double(i) * 0.7, size: 34)
+                        Lifter(kind: .of(p.parts.first ?? g.top.first), char: p.uid == gs.uid ? .mine : .from(p.a), t: t + Double(i) * 0.7, size: 34, photo: av.face(p, me: gs.uid))
                     }
                     if people.isEmpty { Lifter(kind: .of(g.top.first), char: .boy, t: t, size: 34) }
                 }
@@ -805,7 +847,7 @@ struct GlobeScreen: View {
             if ppl > 0 && !people.isEmpty {
                 HStack(alignment: .bottom, spacing: -8) {
                     ForEach(Array(people.enumerated()), id: \.offset) { i, x in
-                        Lifter(kind: .of(x.1.parts.first ?? x.0.top.first), char: x.1.uid == gs.uid ? .mine : .from(x.1.a), t: t + Double(i) * 0.7, size: 30)
+                        Lifter(kind: .of(x.1.parts.first ?? x.0.top.first), char: x.1.uid == gs.uid ? .mine : .from(x.1.a), t: t + Double(i) * 0.7, size: 30, photo: av.face(x.1, me: gs.uid))
                     }
                     if ppl > people.count {
                         Text("+\(ppl - people.count)").font(.system(size: 11, weight: .heavy)).foregroundStyle(Color(hex: 0xffd1e6)).padding(.leading, 10).padding(.bottom, 14)
@@ -938,7 +980,7 @@ struct MeLifterRow: View {
             HStack {
                 Label("我的打卡小人", systemImage: "figure.strengthtraining.traditional")
                 Spacer()
-                Lifter(kind: .squat, char: LifterChar.mine, t: 0.6, size: 24).id(tick)
+                Lifter(kind: .squat, char: LifterChar.mine, t: 0.6, size: 24, photo: AvatarCache.shared.mine).id(tick)
                 Text(LifterChar.mine.name).foregroundStyle(.secondary)
             }
         }
