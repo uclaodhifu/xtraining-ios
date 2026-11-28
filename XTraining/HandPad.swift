@@ -100,6 +100,7 @@ struct HandPad: View {
     var nextLabel = "下一格  →"
     var plus = false          // 次数格：多一个「＋」键，写 10+5（组内暂停）
     var padHeight: CGFloat = 230   // 横屏时矮一点
+    var autoNext = false      // 哑铃重量格：认出两位数就自动跳到次数
     var onInk: ((PKDrawing) -> Void)? = nil
     var onNext: () -> Void
     var onClose: () -> Void
@@ -276,6 +277,10 @@ struct HandPad: View {
                     // 后台悄悄认一下数字，只用来算涨跌和统计，界面上不显示
                     if !r.isEmpty { apply(r) }
                     if textMode { onInk?(d) }
+                    if autoNext, !tm, dotAt == nil, value.count == 2, value.allSatisfy(\.isNumber) {
+                        BugLog.add("手写 \(title) 哑铃两位数 \"\(value)\"，自动跳到次数")
+                        onNext()
+                    }
                 }
             }
         }

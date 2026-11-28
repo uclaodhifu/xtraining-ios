@@ -81,7 +81,7 @@ struct EntryView: View {
                             onClose: { withAnimation(.snappy) { addingByHand = false } })
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 } else if let c = writing {
-                    HandPad(value: cellBinding(c), title: cellTitle(c), plus: !c.weight,
+                    HandPad(value: cellBinding(c), title: cellTitle(c), plus: !c.weight, padHeight: 230, autoNext: dumbbellWeight(c),
                             onInk: { saveInk(c, $0) },   // 只要是手写，就留原样笔迹
                             onNext: { nextCell(c) },
                             onClose: { withAnimation(.snappy) { writing = nil } })
@@ -454,7 +454,8 @@ struct EntryView: View {
         return Group {
             if inputMode == 2 {
                 // 用系统数字键盘
-                NumField(value: text, decimal: cell.weight, label: cellTitle(cell), allowPlus: !cell.weight)
+                NumField(value: text, decimal: cell.weight, label: cellTitle(cell), allowPlus: !cell.weight,
+                         nextLabel: dumbbellWeight(cell) ? cellTitle(WriteCell(ex: cell.ex, set: cell.set, weight: false)) : nil)
                     .overlay {
                         if text.wrappedValue.isEmpty {
                             Text(hint).font(unit ? .system(size: 13, weight: .medium) : Paper.hand(22))
@@ -536,6 +537,10 @@ struct EntryView: View {
             if c.weight { workout.exercises[i].sets[k].w = v } else { workout.exercises[i].sets[k].r = v }
             if v.isEmpty && !PadFix.editing { if c.weight { workout.exercises[i].sets[k].inkW = nil } else { workout.exercises[i].sets[k].inkR = nil } }
         })
+    }
+    // 哑铃动作的重量格：两位数写完自动跳到次数
+    private func dumbbellWeight(_ c: WriteCell) -> Bool {
+        c.weight && workout.exercises.first(where: { $0.id == c.ex })?.equip == "哑铃"
     }
     private func cellTitle(_ c: WriteCell) -> String {
         guard let x = workout.exercises.first(where: { $0.id == c.ex }) else { return "" }
@@ -806,9 +811,13 @@ struct NumField: UIViewRepresentable {
     var color: UIColor? = nil
     var align: NSTextAlignment = .center
     var allowPlus = false      // 次数格：可以写 10+5（组内暂停），键盘上面多一个「＋ 再做几次」
+    var nextLabel: String? = nil   // 哑铃重量：打满两位数自动跳到这个格子（次数）
     var onFocus: ((Bool) -> Void)? = nil
 
     @MainActor static var editingLabel: String? = nil
+    // 按格子名找输入框（哑铃重量打完跳到次数用）
+    @MainActor static var all: [String: WeakField] = [:]
+    final class WeakField { weak var f: UITextField?; init(_ f: UITextField) { self.f = f } }
     // 打字中输入框被换掉（页面刷新把它重建了）：记下刚才打到哪，新的输入框接着打，键盘不收
     @MainActor static var lost: (label: String, text: String, at: Date)? = nil
 
@@ -854,6 +863,8 @@ struct NumField: UIViewRepresentable {
         bar.items = items
         context.coordinator.field = f
         f.inputAccessoryView = bar
+        NumField.all = NumField.all.filter { $0.value.f != nil }
+        NumField.all[label] = WeakField(f)
         return f
     }
     func updateUIView(_ f: UITextField, context: Context) {
@@ -946,6 +957,12 @@ struct NumField: UIViewRepresentable {
             if n != (f.text ?? "") { f.text = n }
             BugLog.add("  → 格子 \(parent.label) \"\(n)\"")
             if parent.value != n { parent.value = n }
+            // 哑铃重量打满两位数：跳到这一组的次数
+            if let next = parent.nextLabel, n.count == 2, n.allSatisfy(\.isNumber), f.isFirstResponder,
+               let g = NumField.all[next]?.f, g.window != nil {
+                BugLog.add("  哑铃两位数 \"\(n)\"，自动跳到「\(next)」")
+                DispatchQueue.main.async { g.becomeFirstResponder() }
+            }
         }
         func textFieldDidEndEditing(_ f: UITextField) {
             if dismantled { return }    // 被拆掉引起的收起：交给新的输入框接着打，别把半截数字写回去
@@ -995,7 +1012,7 @@ extension EntryView {
             if inputMode != 2 {
                 Group {
                     if let c = writing {
-                        HandPad(value: cellBinding(c), title: cellTitle(c), plus: !c.weight, padHeight: 150,
+                        HandPad(value: cellBinding(c), title: cellTitle(c), plus: !c.weight, padHeight: 150, autoNext: dumbbellWeight(c),
                                 onInk: { saveInk(c, $0) },
                                 onNext: { nextCell(c) },
                                 onClose: { withAnimation(.snappy) { writing = nil } })
