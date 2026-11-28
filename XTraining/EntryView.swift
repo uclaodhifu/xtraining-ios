@@ -1052,13 +1052,16 @@ extension EntryView {
                 Text("分钟").font(.caption).foregroundStyle(Paper.pencil)
                 Spacer()
             } else {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
+                // 一行放不下就自动换到下一行，不用左右滑
+                WrapLayout(spacing: 6) {
                         ForEach(Array(x.wrappedValue.sets.enumerated()), id: \.element.id) { si, s in
                             landCell(x, si, s, prev, name)
                         }
                         Button {
-                            withAnimation(.snappy) { x.wrappedValue.sets.append(x.wrappedValue.sets.last.map { SetRow(w: $0.w, r: $0.r, p: $0.p) } ?? SetRow()) }
+                            let new = x.wrappedValue.sets.last.map { SetRow(w: $0.w, r: $0.r, p: $0.p) } ?? SetRow()
+                            withAnimation(.snappy) { x.wrappedValue.sets.append(new) }
+                            // 加完一组，手写板直接跳到新的这一组
+                            if inputMode != 2 { withAnimation(.snappy) { writing = WriteCell(ex: x.wrappedValue.id, set: new.id, weight: store.plateCfg[name] == nil) } }
                             Haptic.tap()
                         } label: {
                             Image(systemName: "plus").font(.headline).foregroundStyle(Paper.pencil)
@@ -1066,9 +1069,9 @@ extension EntryView {
                                 .background(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Paper.ink.opacity(0.2), style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
                         }
                         .buttonStyle(.plain)
-                    }
-                    .padding(.vertical, 6)
                 }
+                .padding(.vertical, 6)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .padding(.vertical, 4)
@@ -1124,5 +1127,37 @@ extension EntryView {
     private func focusFirstEmpty() {
         guard wide, inputMode != 2, let x = workout.exercises.last, !x.isCardio, let s = x.sets.first else { return }
         withAnimation(.snappy) { writing = WriteCell(ex: x.id, set: s.id, weight: store.plateCfg[x.name] == nil) }
+    }
+}
+
+// 从左往右排，排满一行自动换行
+struct WrapLayout: Layout {
+    var spacing: CGFloat = 6
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let rows = arrange(proposal.width ?? .infinity, subviews)
+        let w = rows.map { r in r.reduce(0) { $0 + $1.width } + spacing * CGFloat(max(r.count - 1, 0)) }.max() ?? 0
+        let h = rows.map { $0.map(\.height).max() ?? 0 }.reduce(0, +) + spacing * CGFloat(max(rows.count - 1, 0))
+        return CGSize(width: proposal.width ?? w, height: h)
+    }
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var y = bounds.minY, i = 0
+        for r in arrange(bounds.width, subviews) {
+            var x = bounds.minX
+            let h = r.map(\.height).max() ?? 0
+            for sz in r {
+                subviews[i].place(at: CGPoint(x: x, y: y + (h - sz.height) / 2), proposal: ProposedViewSize(sz))
+                x += sz.width + spacing; i += 1
+            }
+            y += h + spacing
+        }
+    }
+    private func arrange(_ maxW: CGFloat, _ subviews: Subviews) -> [[CGSize]] {
+        var rows: [[CGSize]] = [[]], x: CGFloat = 0
+        for v in subviews {
+            let sz = v.sizeThatFits(.unspecified)
+            if x > 0 && x + sz.width > maxW { rows.append([]); x = 0 }
+            rows[rows.count - 1].append(sz); x += sz.width + spacing
+        }
+        return rows
     }
 }
