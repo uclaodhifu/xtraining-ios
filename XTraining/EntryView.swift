@@ -57,6 +57,7 @@ struct EntryView: View {
                     topCard
                     notebook
                     addCard
+                    GymLocationCard(gym: $workout.gym)
                     noteCard
                     if !isNew {
                         Button("删除这次训练", role: .destructive) { confirmDelete = true }
@@ -112,10 +113,19 @@ struct EntryView: View {
             .onAppear {
                 BugLog.add("页面 " + (isNew ? "开始训练" : "修改训练") + "，输入方式 \(inputMode)")
                 prevLock = AppDelegate.lock
+                HeartLive.shared.inEntry = true
+                HeartLive.shared.start()      // 连上打开了的心率来源（耳机/手表/手环）
                 if alwaysLand && UIDevice.current.userInterfaceIdiom == .phone { setLand(true) }
+                // 新训练：人在上次那家健身房附近就自动选上
+                if isNew && workout.gym == nil && GymStore.shared.lastGym != nil { GymStore.shared.locate() }
+            }
+            .onReceive(GymStore.shared.$location) { _ in
+                if isNew && workout.gym == nil, let g = GymStore.shared.suggestion() { workout.gym = g }
             }
             .onDisappear {
                 BugLog.add("关掉 训练页")
+                HeartLive.shared.inEntry = false
+                HeartLive.shared.stopLater()
                 if land { Orientation.set(prevLock) }
                 autoSave()
                 // 新训练没点保存就关掉了：再存一次草稿，首页显示「继续训练」
@@ -750,6 +760,10 @@ struct EntryView: View {
         }
         store.upsert(workout)
         EntryDraft.clear()
+        // 选了健身房：打卡到地球（公开才传，只传当天的）
+        if let g = workout.gym {
+            GymStore.shared.checkin(workoutID: workout.id, gym: g, parts: workout.parts, date: workout.date)
+        }
     }
 
     private func add(_ name: String, sets: Int = 1) {

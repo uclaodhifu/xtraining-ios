@@ -56,14 +56,17 @@ targets:
           - UTTypeIdentifier: com.kaigreen.xtraining.card
             UTTypeDescription: X Training 动作卡片
             UTTypeConformsTo: [public.data]
-        NSPhotoLibraryUsageDescription: 从相册选一段做动作的视频，在手机上分析阻力曲线，视频不会上传。
-        NSCameraUsageDescription: 录一段做动作的视频，在手机上分析阻力曲线，视频不会上传。
+        NSPhotoLibraryUsageDescription: 从相册选一段做动作的视频分析阻力曲线（视频不会上传）；或选一张健身房照片上传到打卡地球。
+        NSLocationWhenInUseUsageDescription: 用来找你附近的健身房、给新健身房定位。只上传你选中的健身房，不上传你的个人位置。
+        NSCameraUsageDescription: 录一段做动作的视频分析阻力曲线（视频不会上传）；或拍一张健身房照片上传到打卡地球。
         NSMicrophoneUsageDescription: 录视频时系统会一起录声音，X Training 不会使用也不会上传。
-        NSHealthShareUsageDescription: 读取你在 Apple 健康里的运动、消耗的卡路里和步数，显示在“我”的运动记录日历里。
-        NSHealthUpdateUsageDescription: X Training 目前不会往 Apple 健康里写数据。
+        NSHealthShareUsageDescription: 读取你在 Apple 健康里的运动、消耗的卡路里、步数和心率，显示在“我”的运动记录日历和心率档案里，并在组间休息时看心率恢复。
+        NSHealthUpdateUsageDescription: 训练时用耳机或手表测心率，练完会把这次力量训练（时长、心率、消耗）存进 Apple 健康。
+        NSBluetoothAlwaysUsageDescription: 连接开着“心率广播”的手环或心率带，训练时显示实时心率，心率降下来就提醒你开下一组。
+        UIBackgroundModes: [bluetooth-central]
         LSApplicationCategoryType: public.app-category.healthcare-fitness
         NSSupportsLiveActivities: true
-        LSApplicationQueriesSchemes: [snssdk1128]
+        LSApplicationQueriesSchemes: [snssdk1128, iosamap]
   XTrainingWidgets:
     type: app-extension
     platform: iOS

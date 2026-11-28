@@ -1,0 +1,22 @@
+# 拉 TestFlight 崩溃报告（只打印崩溃线程，不含个人信息）
+name: 崩溃报告
+on:
+  workflow_dispatch:
+  push:
+    paths: ['.github/crash-request.txt']
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 拉崩溃报告
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/k"; printf '%s' "$ASC_KEY_P8" > "$RUNNER_TEMP/k/key.p8"
+          export ASC_KEY_PATH="$RUNNER_TEMP/k/key.p8"
+          pip install --quiet pyjwt cryptography
+          python3 .github/scripts/fetch_crashes.py
+          rm -rf "$RUNNER_TEMP/k"

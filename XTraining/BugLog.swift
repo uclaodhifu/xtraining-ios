@@ -266,8 +266,12 @@ struct BugReportView: View {
 
 // 上传到服务器（香港机房）；传不上（国内有时连不上）就退回系统分享
 enum BugUpload {
-    static let url = URL(string: "https://xt-bugs.vercel.app/api/upload")!
+    static let urls = [URL(string: "https://api.linshan.cloud/api/upload")!, URL(string: "https://xt-bugs.vercel.app/api/upload")!]
     static func send(_ text: String) async -> String? {
+        for u in urls { if let id = await send(text, to: u) { return id } }
+        return nil
+    }
+    private static func send(_ text: String, to url: URL) async -> String? {
         var r = URLRequest(url: url, timeoutInterval: 15)
         r.httpMethod = "POST"
         r.setValue("text/plain; charset=utf-8", forHTTPHeaderField: "Content-Type")

@@ -27,7 +27,7 @@ struct HomeView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 14) {
-                    header.rise(0)
+                    header.rise(0).zIndex(1)   // 顶部按钮永远在最上层，不会被下面卡片的背景图挡住
                     planCard.rise(1)
                     RaceAlert().rise(2)
                     DataWall { showWeight = true }.rise(3)
@@ -61,6 +61,7 @@ struct HomeView: View {
             }
             .buttonStyle(.plain)
             Spacer()
+            GlobeButton(size: 38)
             AvatarView(size: 38)
             Button { Haptic.tap(.medium); editing = newWorkout(chosen.wrappedValue) } label: {
                 Image(systemName: "plus").font(.title3.bold()).foregroundStyle(Brand.ink)
