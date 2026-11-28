@@ -108,7 +108,10 @@ extension Array {
 struct HeartCard: View {
     @EnvironmentObject var store: Store
     @ObservedObject private var health = Health.shared
-    @ObservedObject private var hr = HeartLive.shared
+    // 不观察 HeartLive：它在训练时和训练后 10 分钟内每秒都在更新心率，
+    // 这张卡在「我」页的列表里，每秒重算会让列表反复重新排版，保存训练/切页时 iOS 判定排版死循环直接闪退（第 49 版）
+    @AppStorage("xt.hrBLE") private var bleOn = false
+    @AppStorage("xt.hrSession2") private var sessionWanted = true
     @State private var weeks: [(Int, Double)] = []          // (几周前, 平均掉多少)
     @State private var weekLoad: [(String, Double)] = []    // 本周每天
     @State private var baseline = 0.0                       // 前 4 周平均每周负荷
@@ -223,7 +226,7 @@ struct HeartCard: View {
     }
 
     private var sourceRow: some View {
-        let on = sources.union(hr.bleOn ? ["手环"] : []).union(hr.sessionWanted ? ["耳机"] : [])
+        let on = sources.union(bleOn ? ["手环"] : []).union(sessionWanted ? ["耳机"] : [])
         return HStack(spacing: 8) {
             ForEach([("手表", "applewatch"), ("耳机", "airpodspro"), ("手环", "dot.radiowaves.left.and.right")], id: \.0) { s in
                 Label(s.0, systemImage: s.1).font(.caption.bold())
@@ -266,8 +269,6 @@ struct HeartCard: View {
     private func reload() async {
         // 以前连过 Apple 健康的，补一次心率权限
         if health.connected && !UserDefaults.standard.bool(forKey: "xt.health2") { _ = await health.connect() }
-        loading = true
-        defer { loading = false }
         let today = Day.today
         // 组间恢复：最近 8 周有休息记录的日子
         var byWeek: [Int: [Int]] = [:]
@@ -277,7 +278,7 @@ struct HeartCard: View {
                 if !ds.isEmpty { byWeek[Day.between(d, today) / 7, default: []] += ds }
             }
         }
-        weeks = byWeek.map { ($0.key, Double($0.value.reduce(0, +)) / Double($0.value.count)) }.sorted { $0.0 > $1.0 }
+        let newWeeks = byWeek.map { ($0.key, Double($0.value.reduce(0, +)) / Double($0.value.count)) }.sorted { $0.0 > $1.0 }
         // 每天的负荷：最近 35 天里有训练的日子
         let trainDays = Set(store.workouts.map(\.date)).union(HRLog.restDays())
         var loads: [String: Double] = [:]
@@ -288,12 +289,16 @@ struct HeartCard: View {
             guard trainDays.contains(d) || hkDays.contains(d) else { continue }
             if let h = await DayHR.load(d) { loads[d] = HRMath.load(h.pts) }
         }
+        let newRest = await health.resting(days: 30)
+        let newSources = await health.heartSources()
+        // 全部算完再一次性更新，卡片高度只变一次（以前每读完一项就改一次，列表跟着反复重排）
+        weeks = newWeeks
         weekLoad = (0..<7).reversed().map { i in let d = Day.add(today, -i); return (d, loads[d] ?? 0) }
-        let prev = (7..<35).map { loads[Day.add(today, -$0)] ?? 0 }.reduce(0, +) / 4
-        baseline = prev
+        baseline = (7..<35).map { loads[Day.add(today, -$0)] ?? 0 }.reduce(0, +) / 4
         lastDay = (0..<35).map { Day.add(today, -$0) }.first { loads[$0] != nil }
-        resting = await health.resting(days: 30)
-        sources = await health.heartSources()
+        resting = newRest
+        sources = newSources
+        loading = false
     }
 }
 
