@@ -273,6 +273,7 @@ struct CreatorEditor: View {
     @State private var qrPick: PhotosPickerItem? = nil
     @State private var qrMsg = ""
     @State private var avatar: Data? = nil
+    @State private var avatarPick: PhotosPickerItem? = nil
 
     var body: some View {
         NavigationStack {
@@ -290,10 +291,26 @@ struct CreatorEditor: View {
                 } footer: { Text("会自动取出里面的链接。有链接点“抖音看”直接进主页；只填抖音号会打开抖音搜索。主页二维码：博主主页右上角“…”里找二维码，截图后点上面识别。") }
                 Section {
                     HStack(spacing: 12) {
-                        if let a = avatar, let ui = UIImage(data: a) {
-                            Image(uiImage: ui).resizable().scaledToFill().frame(width: 44, height: 44).clipShape(Circle())
+                        // 点头像从相册选一张当博主头像（只存本机）
+                        PhotosPicker(selection: $avatarPick, matching: .images) {
+                            ZStack(alignment: .bottomTrailing) {
+                                if let a = avatar, let ui = UIImage(data: a) {
+                                    Image(uiImage: ui).resizable().scaledToFill().frame(width: 52, height: 52).clipShape(Circle())
+                                } else {
+                                    Text(name.isEmpty ? "头像" : String(name.prefix(1)))
+                                        .font(name.isEmpty ? .caption.bold() : .title3.bold()).foregroundStyle(.white)
+                                        .frame(width: 52, height: 52).background(Brand.gradient, in: Circle())
+                                }
+                                Image(systemName: "camera.fill").font(.system(size: 10, weight: .bold)).foregroundStyle(.white)
+                                    .frame(width: 20, height: 20).background(Circle().fill(Color.black.opacity(0.75)))
+                                    .overlay(Circle().strokeBorder(Color(.secondarySystemGroupedBackground), lineWidth: 2))
+                            }
                         }
+                        .buttonStyle(.plain)
                         TextField("名字", text: $name)
+                    }
+                    if avatar != nil {
+                        Button("删掉头像", role: .destructive) { withAnimation { avatar = nil } }.font(.footnote)
                     }
                     TextField("备注，比如：练背、备赛", text: $note)
                     TextField("主页链接（直达主页）或 抖音号（打开搜索）", text: $link).textInputAutocapitalization(.never).autocorrectionDisabled()
@@ -308,7 +325,7 @@ struct CreatorEditor: View {
                     Button("保存") {
                         let n = name.trimmingCharacters(in: .whitespaces)
                         if var old = c, let i = cs.list.firstIndex(where: { $0.id == old.id }) {
-                            old.name = n; old.note = note; old.link = link; if let avatar { old.avatar = avatar }; cs.list[i] = old
+                            old.name = n; old.note = note; old.link = link; old.avatar = avatar; cs.list[i] = old
                         } else {
                             var new = Creator(name: n, note: note, link: link); new.avatar = avatar; cs.list.append(new)
                         }
@@ -334,11 +351,31 @@ struct CreatorEditor: View {
                     qrPick = nil
                 }
             }
+            .onChange(of: avatarPick) { _, p in
+                Task {
+                    guard let d = try? await p?.loadTransferable(type: Data.self), let ui = UIImage(data: d) else { return }
+                    avatar = CreatorEditor.squareAvatar(ui)
+                    avatarPick = nil
+                }
+            }
             .onAppear {
-                if let c { name = c.name; note = c.note; link = c.link }
+                if let c { name = c.name; note = c.note; link = c.link; avatar = c.avatar }
                 else if let t = UIPasteboard.general.string, t.contains("douyin.com") { raw = t }
             }
         }
+    }
+
+    // 裁成正方形、缩到 256，存得小一点
+    static func squareAvatar(_ img: UIImage) -> Data? {
+        let side = min(img.size.width, img.size.height)
+        let out: CGFloat = 256
+        let scale = out / side
+        let r = UIGraphicsImageRenderer(size: CGSize(width: out, height: out))
+        let pic = r.image { _ in
+            img.draw(in: CGRect(x: (side - img.size.width) / 2 * scale, y: (side - img.size.height) / 2 * scale,
+                                width: img.size.width * scale, height: img.size.height * scale))
+        }
+        return pic.jpegData(compressionQuality: 0.85)
     }
 
     private func apply(_ t: String) {
