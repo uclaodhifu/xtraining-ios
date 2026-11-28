@@ -30,6 +30,69 @@ struct GlobeProj {
     }
 }
 
+// 地球上标的城市名：1 = 默认就显示，2 = 双指放大后才显示（坐标用国内地图坐标，和健身房一致）
+enum GlobeCities {
+    static let all: [(name: String, lon: Double, lat: Double, tier: Int)] = [
+        ("北京", 116.40, 39.90, 1), ("上海", 121.47, 31.23, 1), ("广州", 113.26, 23.13, 1), ("深圳", 114.06, 22.54, 2),
+        ("成都", 104.07, 30.67, 1), ("重庆", 106.55, 29.56, 2), ("西安", 108.94, 34.34, 1), ("武汉", 114.31, 30.59, 1),
+        ("哈尔滨", 126.63, 45.75, 1), ("沈阳", 123.43, 41.80, 2), ("长春", 125.32, 43.82, 2), ("乌鲁木齐", 87.62, 43.83, 1),
+        ("拉萨", 91.11, 29.65, 1), ("昆明", 102.83, 24.88, 1), ("大理", 100.23, 25.61, 2), ("南宁", 108.37, 22.82, 2),
+        ("贵阳", 106.63, 26.65, 2), ("长沙", 112.94, 28.23, 2), ("南昌", 115.86, 28.68, 2), ("杭州", 120.16, 30.27, 2),
+        ("南京", 118.80, 32.06, 2), ("合肥", 117.23, 31.82, 2), ("福州", 119.30, 26.08, 2), ("厦门", 118.09, 24.48, 2),
+        ("郑州", 113.63, 34.75, 2), ("济南", 117.00, 36.67, 2), ("青岛", 120.38, 36.07, 2), ("天津", 117.20, 39.13, 2),
+        ("石家庄", 114.51, 38.04, 2), ("太原", 112.55, 37.87, 2), ("呼和浩特", 111.75, 40.84, 2), ("兰州", 103.83, 36.06, 2),
+        ("西宁", 101.78, 36.62, 2), ("银川", 106.23, 38.49, 2), ("海口", 110.35, 20.02, 2), ("三亚", 109.51, 18.25, 2),
+        ("台北", 121.56, 25.04, 1), ("香港", 114.17, 22.32, 1), ("澳门", 113.54, 22.19, 2), ("大连", 121.61, 38.91, 2),
+        ("苏州", 120.59, 31.30, 2), ("宁波", 121.55, 29.87, 2), ("东莞", 113.75, 23.02, 2), ("佛山", 113.12, 23.02, 2),
+        ("东京", 139.69, 35.69, 1), ("首尔", 126.98, 37.57, 1), ("新加坡", 103.82, 1.35, 1), ("曼谷", 100.50, 13.76, 1),
+        ("乌兰巴托", 106.91, 47.92, 1), ("大阪", 135.50, 34.69, 2), ("河内", 105.85, 21.03, 2), ("马尼拉", 120.98, 14.60, 2),
+        ("吉隆坡", 101.69, 3.14, 2), ("新德里", 77.21, 28.61, 1), ("迪拜", 55.27, 25.20, 1), ("莫斯科", 37.62, 55.75, 1),
+        ("伦敦", -0.13, 51.51, 1), ("巴黎", 2.35, 48.86, 1), ("柏林", 13.40, 52.52, 2), ("罗马", 12.50, 41.90, 2),
+        ("纽约", -74.01, 40.71, 1), ("洛杉矶", -118.24, 34.05, 1), ("旧金山", -122.42, 37.77, 2), ("温哥华", -123.12, 49.28, 2),
+        ("多伦多", -79.38, 43.65, 2), ("悉尼", 151.21, -33.87, 1), ("墨尔本", 144.96, -37.81, 2), ("圣保罗", -46.63, -23.55, 1),
+    ]
+    // 健身房名字下面显示的城市：优先用表里的城市名，没有就去掉“市/自治州”等后缀
+    static func short(_ g: GymInfo) -> String {
+        if let c = all.first(where: { !g.city.isEmpty && g.city.hasPrefix($0.name) }) { return c.name }
+        if let c = all.min(by: { hypot($0.lon - g.lon, $0.lat - g.lat) < hypot($1.lon - g.lon, $1.lat - g.lat) }),
+           hypot(c.lon - g.lon, c.lat - g.lat) < 0.6 { return c.name }
+        var s = g.city
+        for suf in ["白族自治州", "自治州", "地区", "盟", "市"] where s.hasSuffix(suf) && s.count > suf.count + 1 { s = String(s.dropLast(suf.count)); break }
+        return s
+    }
+}
+
+// 城市名图层：白色小字，转到边缘淡出，和健身房、其他城市名挤在一起时自动让开
+struct GlobeCityLabels: View {
+    var proj: GlobeProj
+    var zoom: Double
+    var avoid: [CGRect]              // 健身房头像和名字占的地方
+    var skip: [(Double, Double)]     // 有健身房的地方（城市名已写在健身房名字下面）
+    var body: some View {
+        Canvas { ctx, _ in
+            var used = avoid
+            for c in GlobeCities.all where c.tier == 1 || zoom > 1.8 {
+                if skip.contains(where: { hypot($0.0 - c.lon, $0.1 - c.lat) < 0.6 }) { continue }
+                let dep = proj.depth(c.lon, c.lat)
+                if dep < 0.2 { continue }
+                let pt = proj.p(c.lon, c.lat).0
+                let fs: CGFloat = c.tier == 1 ? 11 : 10
+                let box = CGRect(x: pt.x - 2, y: pt.y - fs / 2 - 2, width: CGFloat(c.name.count) * fs + 10, height: fs + 4)
+                if used.contains(where: { $0.intersects(box) }) { continue }
+                used.append(box)
+                var l = ctx
+                l.opacity = min(1, (dep - 0.2) * 3)
+                l.fill(Path(ellipseIn: CGRect(x: pt.x - 1.8, y: pt.y - 1.8, width: 3.6, height: 3.6)), with: .color(Color(hex: 0xe8ebff)))
+                let txt = Text(c.name).font(.system(size: fs, weight: .semibold)).foregroundColor(Color(hex: 0xdfe3ff).opacity(0.85))
+                var sh = l
+                sh.addFilter(.shadow(color: Color(hex: 0x0b0f33).opacity(0.9), radius: 1.5))
+                sh.draw(txt, at: CGPoint(x: pt.x + 5, y: pt.y), anchor: .leading)
+            }
+        }
+        .allowsHitTesting(false)
+    }
+}
+
 // 地球本体（海 + 陆地 + 经纬线 + 大气光）
 struct GlobeBall: View {
     var proj: GlobeProj
@@ -330,6 +393,14 @@ struct GlobeScreen: View {
                     let faces = Set(ranked.prefix(zoom > 1.8 ? 40 : 18).map(\.id))
                     ZStack {
                         GlobeBall(proj: proj, dots: gyms.filter { !faces.contains($0.id) }.map { ($0.lon, $0.lat) })
+                        let shown = ranked.filter { faces.contains($0.id) && proj.depth($0.lon, $0.lat) > 0.15 }
+                        GlobeCityLabels(proj: proj, zoom: zoom,
+                                        avoid: shown.map { (g: GymInfo) -> CGRect in
+                                            let pt = proj.p(g.lon, g.lat).0
+                                            let hgt: CGFloat = figures.contains(g.id) ? 120 : 76
+                                            return CGRect(x: pt.x - 50, y: pt.y - 30 - hgt / 2, width: 100, height: hgt)
+                                        },
+                                        skip: shown.map { ($0.lon, $0.lat) })
                         ForEach(ranked.filter { faces.contains($0.id) }.sorted { proj.depth($0.lon, $0.lat) < proj.depth($1.lon, $1.lat) }) { g in
                             let pv = proj.p(g.lon, g.lat)
                             let dep = proj.depth(g.lon, g.lat)
@@ -436,6 +507,11 @@ struct GlobeScreen: View {
             GymAvatar(url: g.cover, seed: g.id, size: 30, ring: true)
             Text(g.name).font(.system(size: 10, weight: .bold)).lineLimit(1).frame(maxWidth: 90)
                 .padding(.horizontal, 6).padding(.vertical, 1).background(Capsule().fill(.black.opacity(0.55)))
+            let city = GlobeCities.short(g)
+            if !city.isEmpty {
+                Text(city).font(.system(size: 12, weight: .heavy)).foregroundStyle(Color(hex: 0xffd1e6))
+                    .shadow(color: Color(hex: 0x0b0f33).opacity(0.9), radius: 1.5)
+            }
         }
         .foregroundStyle(.white)
         .onTapGesture { Haptic.tap(); lastTouch = Date(); withAnimation(.snappy) { selected = g } }
