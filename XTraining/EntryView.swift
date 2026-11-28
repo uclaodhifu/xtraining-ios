@@ -369,8 +369,7 @@ struct EntryView: View {
                     }
                 }
                 Button {
-                    withAnimation(.snappy) { x.wrappedValue.sets.append(x.wrappedValue.sets.last.map { SetRow(w: $0.w, r: $0.r, p: $0.p) } ?? SetRow()) }
-                    Haptic.tap()
+                    addSet(x)
                 } label: {
                     Label("加一组", systemImage: "plus").font(.caption.bold()).foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, minHeight: 32)
@@ -536,6 +535,16 @@ struct EntryView: View {
             if c.weight { workout.exercises[i].sets[k].w = v } else { workout.exercises[i].sets[k].r = v }
             if v.isEmpty && !PadFix.editing { if c.weight { workout.exercises[i].sets[k].inkW = nil } else { workout.exercises[i].sets[k].inkR = nil } }
         })
+    }
+    // 加一组：照着上一组抄一行，输入直接跳到新这组的重量（挂片的动作跳到次数）
+    private func addSet(_ x: Binding<Exercise>) {
+        let new = x.wrappedValue.sets.last.map { SetRow(w: $0.w, r: $0.r, p: $0.p) } ?? SetRow()
+        withAnimation(.snappy) { x.wrappedValue.sets.append(new) }
+        Haptic.tap()
+        let c = WriteCell(ex: x.wrappedValue.id, set: new.id, weight: store.plateCfg[x.wrappedValue.name] == nil)
+        BugLog.add("加一组，跳到 \(cellTitle(c))")
+        if inputMode == 2 { NumField.focus(cellTitle(c)) }
+        else { hideKeyboard(); withAnimation(.snappy) { addingByHand = false; writing = c } }
     }
     private func cellTitle(_ c: WriteCell) -> String {
         guard let x = workout.exercises.first(where: { $0.id == c.ex }) else { return "" }
@@ -809,6 +818,17 @@ struct NumField: UIViewRepresentable {
     var onFocus: ((Bool) -> Void)? = nil
 
     @MainActor static var editingLabel: String? = nil
+    // 按格子名找输入框（加一组后跳到新的重量格用）
+    @MainActor static var all: [String: WeakField] = [:]
+    final class WeakField { weak var f: UITextField?; init(_ f: UITextField) { self.f = f } }
+    @MainActor static func focus(_ label: String, tries: Int = 6) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+            if let f = all[label]?.f, f.window != nil {
+                f.becomeFirstResponder()
+                f.selectAll(nil)      // 抄来的数字整个选中，直接打就替换掉
+            } else if tries > 0 { focus(label, tries: tries - 1) }
+        }
+    }
     // 打字中输入框被换掉（页面刷新把它重建了）：记下刚才打到哪，新的输入框接着打，键盘不收
     @MainActor static var lost: (label: String, text: String, at: Date)? = nil
 
@@ -854,6 +874,8 @@ struct NumField: UIViewRepresentable {
         bar.items = items
         context.coordinator.field = f
         f.inputAccessoryView = bar
+        NumField.all = NumField.all.filter { $0.value.f != nil }
+        NumField.all[label] = WeakField(f)
         return f
     }
     func updateUIView(_ f: UITextField, context: Context) {
@@ -1058,8 +1080,7 @@ extension EntryView {
                             landCell(x, si, s, prev, name)
                         }
                         Button {
-                            withAnimation(.snappy) { x.wrappedValue.sets.append(x.wrappedValue.sets.last.map { SetRow(w: $0.w, r: $0.r, p: $0.p) } ?? SetRow()) }
-                            Haptic.tap()
+                            addSet(x)
                         } label: {
                             Image(systemName: "plus").font(.headline).foregroundStyle(Paper.pencil)
                                 .frame(width: 40, height: 52)
