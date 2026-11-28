@@ -439,33 +439,67 @@ struct LifterPicker: View {
     }
 }
 
-// 放大到城市后的背景：满屏小圆点，健身房附近（练的人越多范围越大）点变亮变粉
-struct CityDots: View {
+// 放大到城市后的背景：夜景街道（装饰纹理，不是真实地图），街道和江钉在经纬度上，跟着地图走；健身房周围有人气光晕
+struct CityStreets: View {
     var proj: GlobeProj
     var heat: [(CGPoint, Double)]   // 健身房屏幕位置 + 人数
+    private static func hash(_ a: Int, _ b: Int) -> Double {
+        var x = UInt64(bitPattern: Int64(a &* 73856093 ^ b &* 19349663))
+        x = (x ^ (x >> 33)) &* 0xff51afd7ed558ccd; x ^= x >> 33
+        return Double(x % 10000) / 10000
+    }
     var body: some View {
         Canvas { ctx, size in
-            ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(hex: 0x0b0d24)))
-            let step: CGFloat = 13
-            // 点阵跟着地图走：以一个固定经纬度为锚点对齐
-            let a = proj.p(112, 28).0
-            let ox = a.x.truncatingRemainder(dividingBy: step), oy = a.y.truncatingRemainder(dividingBy: step)
-            var y = oy - step
-            while y < size.height + step {
-                var x = ox - step
-                while x < size.width + step {
-                    var h = 0.0
-                    for (p, c) in heat {
-                        let d = Double(hypot(p.x - x, p.y - y))
-                        h += max(0, 1 - d / (70 + c * 30)) * (0.6 + c * 0.3)
-                    }
-                    h = min(1, h)
-                    let r = 1.1 + h * 1.6
-                    let col = h > 0.05 ? Color(red: (90 + 165 * h) / 255, green: 100 / 255, blue: (200 - 40 * h) / 255) : Color(hex: 0x2a2f66)
-                    ctx.fill(Path(ellipseIn: CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2)), with: .color(col.opacity(0.55 + h * 0.45)))
-                    x += step
+            ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(hex: 0x0d1030)))
+            let dpp = 180 / (.pi * proj.r)                       // 每个点多少度
+            let m = max(0.2, cos(proj.lat0 * .pi / 180))
+            let halfLat = Double(size.height) * 0.6 * dpp, halfLon = Double(size.width) * 0.6 * dpp / m
+            let lat0 = proj.lat0, lon0 = proj.lon0
+            // 街道间距：屏幕上大约 30 点一条，按 2 的倍数取，缩放时线条不乱跳
+            let s = 0.0005 * pow(2, (log2(30 * dpp / 0.0005)).rounded())
+            let street = Color(hex: 0x2b3170)
+            func seg(_ a: (Double, Double), _ b: (Double, Double), _ w: CGFloat, _ col: Color) {
+                var p = Path(); p.move(to: proj.p(a.0, a.1).0); p.addLine(to: proj.p(b.0, b.1).0)
+                ctx.stroke(p, with: .color(col), lineWidth: w)
+            }
+            let li = Int(((lat0 - halfLat) / s).rounded(.down)), lj = Int(((lat0 + halfLat) / s).rounded(.up))
+            for k in li...max(li, lj) {
+                let h = Self.hash(k, 1), sc = Int((s * 1e5).rounded())
+                if Self.hash(k, sc) < 0.3 { continue }
+                let y = Double(k) * s + (h - 0.5) * s * 0.4, tilt = (Self.hash(k, 2) - 0.5) * s * 1.2
+                seg((lon0 - halfLon, y - tilt), (lon0 + halfLon, y + tilt), h > 0.85 ? 2.2 : 0.8, street)
+            }
+            let ki = Int(((lon0 - halfLon) / (s / m)).rounded(.down)), kj = Int(((lon0 + halfLon) / (s / m)).rounded(.up))
+            for k in ki...max(ki, kj) {
+                let h = Self.hash(k, 3), sc = Int((s * 1e5).rounded())
+                if Self.hash(k, sc + 7) < 0.3 { continue }
+                let x = Double(k) * s / m + (h - 0.5) * s * 0.4, tilt = (Self.hash(k, 4) - 0.5) * s * 1.2
+                seg((x - tilt, lat0 - halfLat), (x + tilt, lat0 + halfLat), h > 0.85 ? 2.2 : 0.8, street)
+            }
+            // 江：每个经度格子里有一条弯弯的江（装饰）
+            for cell in Int((lon0 - halfLon).rounded(.down))...Int((lon0 + halfLon).rounded(.up)) {
+                let base = Double(cell) + 0.25 + 0.5 * Self.hash(cell, 9)
+                var p = Path(); var first = true
+                var lat = lat0 - halfLat
+                let stepLat = max(s / 2, halfLat / 40)
+                while lat <= lat0 + halfLat {
+                    let lon = base + 0.035 * sin(lat * 40 + Double(cell)) + 0.015 * sin(lat * 97)
+                    let pt = proj.p(lon, lat).0
+                    if first { p.move(to: pt); first = false } else { p.addLine(to: pt) }
+                    lat += stepLat
                 }
-                y += step
+                let w = CGFloat(min(26, max(8, 0.004 / dpp)))
+                ctx.stroke(p, with: .color(Color(hex: 0x1d3f8f).opacity(0.9)), style: StrokeStyle(lineWidth: w, lineCap: .round, lineJoin: .round))
+                ctx.stroke(p, with: .color(Color(hex: 0x3a63c9).opacity(0.5)), lineWidth: 1.5)
+            }
+            // 人气光晕：练的人越多光越大越亮
+            for (pt, c) in heat {
+                let r = 50 + c * 28
+                ctx.fill(Path(ellipseIn: CGRect(x: pt.x - r, y: pt.y - r, width: r * 2, height: r * 2)),
+                         with: .radialGradient(Gradient(stops: [.init(color: Color(hex: 0xff5fa2).opacity(0.5 + min(0.4, c * 0.1)), location: 0),
+                                                                .init(color: Color(hex: 0xff5fa2).opacity(0.15), location: 0.5),
+                                                                .init(color: .clear, location: 1)]),
+                                               center: pt, startRadius: 0, endRadius: r))
             }
         }
         .allowsHitTesting(false)
@@ -540,7 +574,7 @@ struct GlobeScreen: View {
                     ZStack {
                         GlobeBall(proj: proj, flat: z > Self.flatZoom)
                         if z > Self.flatZoom {
-                            CityDots(proj: proj, heat: clusters.flatMap { c in c.gyms.map { (proj.p($0.lon, $0.lat).0, Double(min(6, $0.count(range)))) } })
+                            CityStreets(proj: proj, heat: clusters.flatMap { c in c.gyms.map { (proj.p($0.lon, $0.lat).0, Double(min(6, $0.count(range)))) } })
                                 .opacity(min(1, (z - Self.flatZoom) / 15))
                         }
                         GlobeCityLabels(proj: proj, zoom: z,
