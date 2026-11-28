@@ -34,6 +34,19 @@ final class Health: ObservableObject {
         } catch { return false }
     }
 
+    // 心率需要的权限：没问过就问一次（已经问过不会再弹）
+    func ensureHeart() async -> Bool {
+        guard available else { return false }
+        let share: Set<HKSampleType> = [HKObjectType.workoutType(), HKQuantityType(.heartRate), HKQuantityType(.activeEnergyBurned)]
+        let read: Set<HKObjectType> = [HKObjectType.workoutType(), HKQuantityType(.activeEnergyBurned), HKQuantityType(.stepCount),
+                                       HKQuantityType(.heartRate), HKQuantityType(.restingHeartRate)]
+        if let st = try? await hk.statusForAuthorizationRequest(toShare: share, read: read), st == .unnecessary {
+            if !connected { connected = true; UserDefaults.standard.set(true, forKey: "xt.health") }
+            return true
+        }
+        return await connect()
+    }
+
     func load(month: Date) async {
         guard connected, available else { days = [:]; return }
         loading = true

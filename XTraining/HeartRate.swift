@@ -104,7 +104,8 @@ final class HeartLive: ObservableObject {
     @AppStorage("xt.hrLine") var line = 115            // 恢复线：心率降到这里就提醒开下一组（自己设）
     @AppStorage("xt.hrAlert") var alertOn = true
     @AppStorage("xt.hrBLE") var bleOn = false
-    @AppStorage("xt.hrSession") var sessionWanted = false
+    @AppStorage("xt.hrSession2") var sessionWanted = true   // 默认打开：戴着 AirPods Pro 3 / 手表就直接有心率
+    @Published var sessionStatus = "未开始"
 
     private let ble = HRBLE()
     private var session: AnyObject?                     // iOS 26 的 HRSession
@@ -132,13 +133,13 @@ final class HeartLive: ObservableObject {
     }
 
     // 打开记录页时调用：把打开了的心率来源都连上
+    // 每个打开了的来源都确保连上（重复调用没关系）
     func start() {
         stopTask?.cancel(); stopTask = nil
-        if running { return }
+        if !running { started = Date() }
         running = true
-        started = Date()
         if bleOn { ble.start() }
-        if sessionWanted { startSession() }
+        if sessionWanted { Task { _ = await Health.shared.ensureHeart(); startSession() } }
         startHealthWatch()
     }
 
@@ -173,15 +174,31 @@ final class HeartLive: ObservableObject {
     func setSession(_ on: Bool) {
         sessionWanted = on
         // 只在记录页里才真的开始训练；在「我」页打开只是记住，下次进记录页自动开始
-        if on { Task { _ = await Health.shared.connect(); if inEntry { startSession(); running = true } } } else { stopSession() }
+        if on { Task { _ = await Health.shared.ensureHeart(); if inEntry { startSession(); running = true } else { sessionStatus = "进记录页时自动开始" } } } else { stopSession(); sessionStatus = "已关闭" }
     }
 
     private func startSession() {
         guard session == nil else { return }
         if #available(iOS 26.0, *) {
             let s = HRSession(store: Health.shared.hk)
-            s.onBPM = { v in MainActor.assumeIsolated { HeartLive.shared.receive(v, from: "耳机/手表") } }
-            do { try s.start(); session = s; sessionOn = true } catch { sessionOn = false }
+            s.onBPM = { v in MainActor.assumeIsolated { HeartLive.shared.receive(v, from: "耳机/手表"); HeartLive.shared.sessionStatus = "正在读耳机/手表心率" } }
+            s.onStatus = { t in MainActor.assumeIsolated { HeartLive.shared.sessionStatus = t; BugLog.add("心率训练：" + t) } }
+            do {
+                try s.start(); session = s; sessionOn = true
+                sessionStatus = "已开始训练，等耳机心率…"
+                // 25 秒还没收到心率：提示检查耳机
+                Task { [weak self] in
+                    try? await Task.sleep(for: .seconds(25))
+                    guard let self, self.sessionOn, self.source != "耳机/手表" || self.fresh == nil else { return }
+                    self.sessionStatus = "训练已开始，但还没收到心率。确认 AirPods 两只都戴好，并在「设置 → 你的 AirPods → 心率」打开"
+                }
+            } catch {
+                sessionOn = false
+                sessionStatus = "开始训练失败：\(error.localizedDescription)"
+                BugLog.add("心率训练失败：\(error)")
+            }
+        } else {
+            sessionStatus = "需要 iOS 26 以上"
         }
     }
     private func stopSession() {
@@ -232,6 +249,7 @@ final class HRBLE: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     var onStatus: (String, String?) -> Void = { _, _ in }
 
     func start() {
+        if wanted, device != nil { return }
         wanted = true
         if central == nil { central = CBCentralManager(delegate: self, queue: nil) } else { go() }
     }
@@ -312,7 +330,9 @@ final class HRSession: NSObject, HKWorkoutSessionDelegate, HKLiveWorkoutBuilderD
     private var builder: HKLiveWorkoutBuilder?
     var began = Date()
     var onBPM: (Int) -> Void = { _ in }
+    var onStatus: (String) -> Void = { _ in }
     init(store: HKHealthStore) { self.store = store }
+    private func status(_ t: String) { DispatchQueue.main.async { self.onStatus(t) } }
 
     func start() throws {
         let c = HKWorkoutConfiguration()
@@ -320,13 +340,17 @@ final class HRSession: NSObject, HKWorkoutSessionDelegate, HKLiveWorkoutBuilderD
         c.locationType = .indoor
         let s = try HKWorkoutSession(healthStore: store, configuration: c)
         let b = s.associatedWorkoutBuilder()
-        b.dataSource = HKLiveWorkoutDataSource(healthStore: store, workoutConfiguration: c)
+        let src = HKLiveWorkoutDataSource(healthStore: store, workoutConfiguration: c)
+        src.enableCollection(for: HKQuantityType(.heartRate), predicate: nil)   // 明确要心率
+        b.dataSource = src
         s.delegate = self
         b.delegate = self
         session = s; builder = b
         began = Date()
         s.startActivity(with: began)
-        b.beginCollection(withStart: began) { _, _ in }
+        b.beginCollection(withStart: began) { [weak self] ok, err in
+            if !ok { self?.status("开始记录失败：\(err?.localizedDescription ?? "未知原因")") }
+        }
     }
 
     func stop(save: Bool) {
@@ -345,8 +369,12 @@ final class HRSession: NSObject, HKWorkoutSessionDelegate, HKLiveWorkoutBuilderD
         DispatchQueue.main.async { self.onBPM(v) }
     }
     func workoutBuilderDidCollectEvent(_ b: HKLiveWorkoutBuilder) {}
-    func workoutSession(_ s: HKWorkoutSession, didChangeTo toState: HKWorkoutSessionState, from fromState: HKWorkoutSessionState, date: Date) {}
-    func workoutSession(_ s: HKWorkoutSession, didFailWithError error: Error) {}
+    func workoutSession(_ s: HKWorkoutSession, didChangeTo toState: HKWorkoutSessionState, from fromState: HKWorkoutSessionState, date: Date) {
+        if toState == .stopped || toState == .ended { status("训练已结束") }
+    }
+    func workoutSession(_ s: HKWorkoutSession, didFailWithError error: Error) {
+        status("训练出错：\(error.localizedDescription)")
+    }
 }
 
 // MARK: - 心率设置（休息条上点心形打开）
@@ -376,6 +404,9 @@ struct HeartSheet: View {
                     if HeartLive.canSession {
                         Toggle(isOn: Binding(get: { hr.sessionWanted }, set: { hr.setSession($0) })) {
                             Label("耳机 / Apple Watch", systemImage: "airpodspro")
+                        }
+                        if hr.sessionWanted {
+                            Text(hr.sessionStatus).font(.caption).foregroundStyle(.secondary)
                         }
                     }
                     Toggle(isOn: Binding(get: { hr.bleOn }, set: { hr.setBLE($0) })) {
