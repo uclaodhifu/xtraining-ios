@@ -52,8 +52,11 @@ struct HeroBanner<Trailing: View>: View {
                 HeroBG.image(bg, photo: photo).resizable().scaledToFill()
                 LinearGradient(colors: [.clear, .black.opacity(0.6)], startPoint: .center, endPoint: .bottom)
             }
+            // 背景图铺满时会超出卡片（clipped 只裁画面不裁点击），不让它挡住上面的按钮（比如首页右上角的地球）
+            .allowsHitTesting(false)
         }
         .clipped()
+        .contentShape(Rectangle())
         .overlay(alignment: .topTrailing) {
             HStack(spacing: 8) {
                 trailing()

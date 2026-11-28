@@ -27,7 +27,7 @@ struct HomeView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 14) {
-                    header.rise(0)
+                    header.rise(0).zIndex(1)   // 顶部按钮永远在最上层，不会被下面卡片的背景图挡住
                     planCard.rise(1)
                     RaceAlert().rise(2)
                     DataWall { showWeight = true }.rise(3)
