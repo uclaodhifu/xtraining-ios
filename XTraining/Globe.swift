@@ -62,6 +62,65 @@ enum GlobeCities {
     }
 }
 
+// 放大到城市后显示的区县名（大致中心点，国内地图坐标）
+enum GlobeDistricts {
+    static let all: [(name: String, lon: Double, lat: Double)] = [
+        // 北京
+        ("东城区", 116.42, 39.93), ("西城区", 116.37, 39.91), ("朝阳区", 116.49, 39.95), ("海淀区", 116.30, 39.96), ("丰台区", 116.29, 39.86),
+        ("石景山区", 116.22, 39.91), ("通州区", 116.66, 39.91), ("顺义区", 116.65, 40.13), ("昌平区", 116.23, 40.22), ("大兴区", 116.34, 39.73),
+        ("房山区", 116.14, 39.75), ("门头沟区", 116.10, 39.94), ("怀柔区", 116.63, 40.32), ("平谷区", 117.12, 40.14), ("密云区", 116.84, 40.38), ("延庆区", 115.97, 40.46),
+        // 上海
+        ("黄浦区", 121.49, 31.23), ("徐汇区", 121.44, 31.19), ("长宁区", 121.42, 31.22), ("静安区", 121.45, 31.24), ("普陀区", 121.40, 31.25),
+        ("虹口区", 121.50, 31.26), ("杨浦区", 121.53, 31.26), ("浦东新区", 121.57, 31.22), ("闵行区", 121.38, 31.11), ("宝山区", 121.49, 31.40),
+        ("嘉定区", 121.27, 31.38), ("松江区", 121.23, 31.03), ("青浦区", 121.12, 31.15), ("奉贤区", 121.47, 30.92), ("金山区", 121.34, 30.74),
+        // 广州
+        ("越秀区", 113.27, 23.13), ("天河区", 113.36, 23.12), ("海珠区", 113.32, 23.08), ("荔湾区", 113.24, 23.11), ("白云区", 113.27, 23.18),
+        ("番禺区", 113.38, 22.94), ("黄埔区", 113.46, 23.11), ("花都区", 113.22, 23.40), ("南沙区", 113.53, 22.80), ("增城区", 113.81, 23.26),
+        // 深圳
+        ("福田区", 114.05, 22.54), ("罗湖区", 114.13, 22.55), ("南山区", 113.93, 22.53), ("宝安区", 113.88, 22.56), ("龙岗区", 114.25, 22.72),
+        ("龙华区", 114.04, 22.69), ("盐田区", 114.24, 22.56), ("光明区", 113.94, 22.75), ("坪山区", 114.35, 22.69),
+        // 长沙
+        ("岳麓区", 112.93, 28.23), ("芙蓉区", 113.03, 28.19), ("天心区", 112.99, 28.11), ("开福区", 112.99, 28.26), ("雨花区", 113.04, 28.13),
+        ("望城区", 112.82, 28.35), ("长沙县", 113.08, 28.25),
+        // 厦门
+        ("思明区", 118.08, 24.45), ("湖里区", 118.15, 24.51), ("集美区", 118.10, 24.58), ("海沧区", 118.03, 24.48), ("同安区", 118.15, 24.72), ("翔安区", 118.25, 24.62),
+        // 成都
+        ("锦江区", 104.08, 30.66), ("青羊区", 104.06, 30.67), ("金牛区", 104.05, 30.69), ("武侯区", 104.04, 30.64), ("成华区", 104.10, 30.66),
+        ("双流区", 103.92, 30.57), ("郫都区", 103.90, 30.80), ("温江区", 103.84, 30.69), ("龙泉驿区", 104.27, 30.56), ("新都区", 104.16, 30.82),
+        // 杭州
+        ("上城区", 120.17, 30.25), ("拱墅区", 120.14, 30.32), ("西湖区", 120.13, 30.26), ("滨江区", 120.21, 30.21), ("萧山区", 120.26, 30.18),
+        ("余杭区", 120.30, 30.42), ("钱塘区", 120.49, 30.30),
+        // 武汉
+        ("江岸区", 114.31, 30.60), ("江汉区", 114.27, 30.60), ("硚口区", 114.21, 30.58), ("汉阳区", 114.22, 30.55), ("武昌区", 114.32, 30.55),
+        ("洪山区", 114.34, 30.50), ("青山区", 114.39, 30.63), ("东西湖区", 114.14, 30.62), ("江夏区", 114.32, 30.38), ("黄陂区", 114.38, 30.88),
+        // 南京
+        ("玄武区", 118.80, 32.05), ("秦淮区", 118.79, 32.03), ("鼓楼区", 118.77, 32.07), ("建邺区", 118.73, 32.00), ("栖霞区", 118.88, 32.10),
+        ("雨花台区", 118.78, 31.99), ("江宁区", 118.84, 31.95), ("浦口区", 118.63, 32.06),
+        // 西安
+        ("新城区", 108.96, 34.27), ("碑林区", 108.94, 34.25), ("莲湖区", 108.93, 34.27), ("雁塔区", 108.95, 34.22), ("未央区", 108.95, 34.31),
+        ("灞桥区", 109.06, 34.27), ("长安区", 108.91, 34.16),
+        // 重庆
+        ("渝中区", 106.57, 29.55), ("江北区", 106.57, 29.61), ("南岸区", 106.56, 29.52), ("沙坪坝区", 106.46, 29.54), ("九龙坡区", 106.51, 29.50),
+        ("渝北区", 106.63, 29.72), ("大渡口区", 106.48, 29.48), ("巴南区", 106.54, 29.40), ("北碚区", 106.40, 29.81),
+        // 天津
+        ("和平区", 117.20, 39.12), ("河西区", 117.22, 39.10), ("南开区", 117.15, 39.14), ("河东区", 117.25, 39.13), ("河北区", 117.20, 39.15),
+        ("红桥区", 117.15, 39.17), ("滨海新区", 117.70, 39.03), ("西青区", 117.01, 39.14), ("津南区", 117.36, 38.94), ("东丽区", 117.31, 39.09), ("北辰区", 117.13, 39.22),
+        // 郑州
+        ("金水区", 113.66, 34.80), ("中原区", 113.61, 34.75), ("二七区", 113.64, 34.73), ("管城区", 113.68, 34.75), ("惠济区", 113.62, 34.87), ("郑东新区", 113.73, 34.77),
+        // 苏州
+        ("姑苏区", 120.62, 31.31), ("工业园区", 120.72, 31.32), ("虎丘区", 120.57, 31.30), ("吴中区", 120.63, 31.26), ("相城区", 120.64, 31.37), ("吴江区", 120.64, 31.16),
+        // 青岛
+        ("市南区", 120.41, 36.07), ("市北区", 120.37, 36.09), ("李沧区", 120.43, 36.15), ("崂山区", 120.47, 36.11), ("黄岛区", 120.20, 35.96), ("城阳区", 120.40, 36.31),
+        // 哈尔滨
+        ("道里区", 126.62, 45.76), ("南岗区", 126.67, 45.76), ("道外区", 126.65, 45.79), ("香坊区", 126.68, 45.71), ("松北区", 126.56, 45.81),
+        ("平房区", 126.64, 45.60), ("呼兰区", 126.59, 45.89),
+        // 大理、衢州、濮阳
+        ("下关", 100.24, 25.59), ("大理古城", 100.16, 25.69),
+        ("柯城区", 118.87, 28.94), ("衢江区", 118.96, 28.98), ("常山县", 118.51, 28.90), ("江山市", 118.63, 28.74), ("龙游县", 119.17, 29.03),
+        ("华龙区", 115.07, 35.78), ("濮阳县", 115.03, 35.71),
+    ]
+}
+
 // 城市名图层：白色小字，转到边缘淡出，和健身房、其他城市名挤在一起时自动让开
 struct GlobeCityLabels: View {
     var proj: GlobeProj
@@ -69,7 +128,7 @@ struct GlobeCityLabels: View {
     var avoid: [CGRect]              // 健身房头像和名字占的地方
     var skip: [(Double, Double)]     // 有健身房的地方（城市名已写在健身房名字下面）
     var body: some View {
-        Canvas { ctx, _ in
+        Canvas { ctx, size in
             var used = avoid
             for c in GlobeCities.all where c.tier == 1 || zoom > 1.8 {
                 if skip.contains(where: { hypot($0.0 - c.lon, $0.1 - c.lat) < 0.6 }) { continue }
@@ -88,6 +147,23 @@ struct GlobeCityLabels: View {
                 sh.addFilter(.shadow(color: Color(hex: 0x0b0f33).opacity(0.9), radius: 1.5))
                 sh.draw(txt, at: CGPoint(x: pt.x + 5, y: pt.y), anchor: .leading)
             }
+            // 放大到城市：标出各个区
+            guard zoom > GlobeScreen.districtZoom else { return }
+            for d in GlobeDistricts.all {
+                let dep = proj.depth(d.lon, d.lat)
+                if dep < 0.5 { continue }
+                let pt = proj.p(d.lon, d.lat).0
+                if pt.x < -60 || pt.y < -20 || pt.x > size.width + 20 || pt.y > size.height + 20 { continue }
+                let fs: CGFloat = 11
+                let w = CGFloat(d.name.count) * fs + 8
+                let box = CGRect(x: pt.x - w / 2, y: pt.y - fs / 2 - 2, width: w, height: fs + 4)
+                if used.contains(where: { $0.intersects(box) }) { continue }
+                used.append(box)
+                var l = ctx
+                l.opacity = min(1, (zoom - GlobeScreen.districtZoom) / 20)
+                l.addFilter(.shadow(color: Color(hex: 0x0b0f33).opacity(0.9), radius: 1.5))
+                l.draw(Text(d.name).font(.system(size: fs, weight: .medium)).foregroundColor(Color(hex: 0xc9cffc).opacity(0.75)), at: pt, anchor: .center)
+            }
         }
         .allowsHitTesting(false)
     }
@@ -98,6 +174,7 @@ struct GlobeBall: View {
     var proj: GlobeProj
     var dots: [(Double, Double)] = []
     var small = false
+    var flat = false      // 放大到城市时：粗略的海岸线会画歪，干脆整块当陆地
     var body: some View {
         Canvas { ctx, _ in
             let c = proj.c, r = proj.r
@@ -110,6 +187,11 @@ struct GlobeBall: View {
             ctx.fill(disk, with: .radialGradient(Gradient(colors: [Color(hex: 0x3a4a9a), Color(hex: 0x1a2160), Color(hex: 0x0b0f33)]),
                                                  center: CGPoint(x: c.x - r * 0.3, y: c.y - r * 0.35), startRadius: 0, endRadius: r * 1.4))
             ctx.clip(to: disk)
+            if flat {
+                ctx.fill(disk, with: .color(Color(hex: 0x4f5fb8)))
+                ctx.fill(disk, with: .radialGradient(Gradient(colors: [.clear, .clear, .black.opacity(0.35)]), center: c, startRadius: 0, endRadius: r))
+                return
+            }
             // 经纬线
             if !small {
                 var g = Path()
@@ -358,7 +440,21 @@ struct LifterPicker: View {
 }
 
 // MARK: - 打卡地球页面
+// 挤在一起的健身房合成一个泡泡（圈里是练过人最多那家的照片），点泡泡或点城市名就转过去放大
+struct GymCluster: Identifiable {
+    var gyms: [GymInfo]
+    var pt: CGPoint
+    var lon: Double
+    var lat: Double
+    var dep: Double
+    var id: String { gyms.map(\.id).sorted().joined(separator: ",") }
+}
+
 struct GlobeScreen: View {
+    static let maxZoom = 400.0
+    static let districtZoom = 40.0
+    static let flatZoom = 20.0
+
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var gs = GymStore.shared
     @State private var lon0 = 112.0
@@ -371,45 +467,63 @@ struct GlobeScreen: View {
     @State private var range = 0
     @State private var selected: GymInfo? = nil
     @State private var open: GymInfo? = nil
+    @State private var fly: Fly? = nil
+    @State private var focus: (name: String, lon: Double, lat: Double)? = nil
+    @State private var stack: [GymInfo]? = nil        // 放到最大还叠在一起的（同一个位置），列出来选
+    @State private var size = CGSize(width: 390, height: 700)
+
+    struct Fly { var from: (Double, Double, Double); var to: (Double, Double, Double); var start: Date; var dur: Double }
 
     // 所有健身房都上地球（后台新建、还没人打卡的也显示头像），有人打卡的才站小人
     private var gyms: [GymInfo] { gs.world?.gyms ?? [] }
+    private var baseR: Double { min(size.width * 0.6, size.height * 0.5) }
+    private var center: CGPoint { CGPoint(x: size.width / 2, y: size.height * 0.52) }
+
+    // 现在实际看到的角度和缩放（飞行动画中途用插值）
+    private func cam(at now: Date) -> (Double, Double, Double) {
+        guard let f = fly, !Motion.calm else { return (lon0, lat0, zoom) }
+        let p = min(1, max(0, now.timeIntervalSince(f.start) / f.dur))
+        let e = p < 0.5 ? 4 * p * p * p : 1 - pow(-2 * p + 2, 3) / 2
+        return (f.from.0 + (f.to.0 - f.from.0) * e, f.from.1 + (f.to.1 - f.from.1) * e, exp(log(f.from.2) + (log(f.to.2) - log(f.from.2)) * e))
+    }
+    private func spinning(_ now: Date) -> Bool { now.timeIntervalSince(lastTouch) > 4 && selected == nil && !Motion.calm && zoom < 1.5 && fly == nil }
+    private func projection(_ now: Date) -> GlobeProj {
+        let v = cam(at: now)
+        let spin = spinning(now) ? now.timeIntervalSince(max(spinBase, lastTouch.addingTimeInterval(4))) * 2.5 : 0
+        return GlobeProj(lon0: v.0 - spin, lat0: v.1, r: baseR * v.2, c: center)
+    }
 
     var body: some View {
         NavigationStack {
             GeometryReader { geo in
-                let w = geo.size.width, h = geo.size.height
-                let r = min(w * 0.6, h * 0.5) * zoom
-                let center = CGPoint(x: w / 2, y: h * 0.52)
                 TimelineView(.animation(minimumInterval: 1 / 30, paused: Motion.calm)) { tl in
                     let now = tl.date
-                    // 不碰它的时候慢慢自己转
-                    let idle = now.timeIntervalSince(lastTouch) > 4 && selected == nil && !Motion.calm
-                    let spin = idle ? now.timeIntervalSince(max(spinBase, lastTouch.addingTimeInterval(4))) * 2.5 : 0
-                    let proj = GlobeProj(lon0: lon0 - spin, lat0: lat0, r: r, c: center)
+                    let proj = projection(now)
+                    let z = proj.r / baseR
                     let t = now.timeIntervalSinceReferenceDate
-                    let ranked = gyms.sorted { $0.count(range) > $1.count(range) }
-                    let figures = Set(ranked.filter { $0.count(range) > 0 }.prefix(zoom > 1.8 ? 16 : 8).map(\.id))
-                    let faces = Set(ranked.prefix(zoom > 1.8 ? 40 : 18).map(\.id))
+                    let clusters = Self.cluster(gyms, proj: proj)
+                    let singles = clusters.filter { $0.gyms.count == 1 }.map { $0.gyms[0] }
+                    let figures = Set(singles.filter { $0.count(range) > 0 }.sorted { $0.count(range) > $1.count(range) }.prefix(z > 1.8 ? 16 : 8).map(\.id))
                     ZStack {
-                        GlobeBall(proj: proj, dots: gyms.filter { !faces.contains($0.id) }.map { ($0.lon, $0.lat) })
-                        let shown = ranked.filter { faces.contains($0.id) && proj.depth($0.lon, $0.lat) > 0.15 }
-                        GlobeCityLabels(proj: proj, zoom: zoom,
-                                        avoid: shown.map { (g: GymInfo) -> CGRect in
-                                            let pt = proj.p(g.lon, g.lat).0
-                                            let hgt: CGFloat = figures.contains(g.id) ? 120 : 76
-                                            return CGRect(x: pt.x - 50, y: pt.y - 30 - hgt / 2, width: 100, height: hgt)
+                        GlobeBall(proj: proj, flat: z > Self.flatZoom)
+                        GlobeCityLabels(proj: proj, zoom: z,
+                                        avoid: clusters.map { c -> CGRect in
+                                            let tall = c.gyms.count > 1 || figures.contains(c.gyms[0].id)
+                                            let hgt: CGFloat = tall ? 124 : 80
+                                            return CGRect(x: c.pt.x - 52, y: c.pt.y - 30 - hgt / 2, width: 104, height: hgt)
                                         },
-                                        skip: shown.map { ($0.lon, $0.lat) })
-                        ForEach(ranked.filter { faces.contains($0.id) }.sorted { proj.depth($0.lon, $0.lat) < proj.depth($1.lon, $1.lat) }) { g in
-                            let pv = proj.p(g.lon, g.lat)
-                            let dep = proj.depth(g.lon, g.lat)
-                            if pv.1 && dep > 0.15 {
-                                pin(g, figure: figures.contains(g.id), t: t + Double(abs(g.id.hashValue % 100)) / 10)
-                                    .scaleEffect(0.7 + 0.3 * dep, anchor: .bottom)
-                                    .opacity(min(1, (dep - 0.15) * 4))
-                                    .position(x: pv.0.x, y: pv.0.y - 30)
+                                        skip: clusters.map { ($0.lon, $0.lat) })
+                        ForEach(clusters.sorted { $0.dep < $1.dep }) { c in
+                            Group {
+                                if c.gyms.count == 1 {
+                                    pin(c.gyms[0], figure: figures.contains(c.gyms[0].id), t: t + Double(abs(c.gyms[0].id.hashValue % 100)) / 10)
+                                } else {
+                                    bubble(c, t: t)
+                                }
                             }
+                            .scaleEffect(0.7 + 0.3 * c.dep, anchor: .bottom)
+                            .opacity(min(1, (c.dep - 0.15) * 4))
+                            .position(x: c.pt.x, y: c.pt.y - 30)
                         }
                     }
                 }
@@ -417,8 +531,8 @@ struct GlobeScreen: View {
                 .gesture(
                     DragGesture(minimumDistance: 2)
                         .onChanged { v in
-                            if dragStart == nil { freeze(); dragStart = (lon0, lat0) }
-                            let k = 180 / (.pi * r)
+                            if dragStart == nil { grab(); dragStart = (lon0, lat0) }
+                            let k = 180 / (.pi * baseR * zoom)
                             lon0 = dragStart!.0 - v.translation.width * k
                             lat0 = min(80, max(-80, dragStart!.1 + v.translation.height * k))
                             lastTouch = Date()
@@ -426,12 +540,15 @@ struct GlobeScreen: View {
                         .onEnded { _ in dragStart = nil; lastTouch = Date() }
                         .simultaneously(with: MagnificationGesture()
                             .onChanged { m in
-                                if zoomStart == nil { freeze(); zoomStart = zoom }
-                                zoom = min(4, max(0.7, zoomStart! * m)); lastTouch = Date()
+                                if zoomStart == nil { grab(); zoomStart = zoom }
+                                zoom = min(Self.maxZoom, max(0.7, zoomStart! * m)); lastTouch = Date()
+                                if zoom < 1.3 { focus = nil }
                             }
                             .onEnded { _ in zoomStart = nil; lastTouch = Date() })
                 )
-                .onTapGesture { withAnimation(.snappy) { selected = nil } }
+                .onTapGesture(coordinateSpace: .local) { loc in tapMap(loc) }
+                .onAppear { size = geo.size }
+                .onChange(of: geo.size) { _, s in size = s }
             }
             .ignoresSafeArea(edges: .bottom)
             .background(
@@ -441,7 +558,20 @@ struct GlobeScreen: View {
                 }.ignoresSafeArea()
             )
             .safeAreaInset(edge: .top) { header }
-            .overlay(alignment: .bottom) { if let g = selected { card(g).padding(.horizontal, 14).padding(.bottom, 20).transition(.move(edge: .bottom).combined(with: .opacity)) } }
+            .overlay(alignment: .bottom) {
+                if let list = stack { stackCard(list).padding(.horizontal, 14).padding(.bottom, 20).transition(.move(edge: .bottom).combined(with: .opacity)) }
+                else if let g = selected { card(g).padding(.horizontal, 14).padding(.bottom, 20).transition(.move(edge: .bottom).combined(with: .opacity)) }
+            }
+            .overlay(alignment: .bottomLeading) {
+                if zoom > 1.5 {
+                    Button { Haptic.tap(); flyTo(lon: lon0, lat: lat0, zoom: 1); focus = nil } label: {
+                        Label("回到整个地球", systemImage: "arrow.counterclockwise").font(.footnote.bold()).foregroundStyle(.white)
+                            .padding(.horizontal, 14).padding(.vertical, 9).background(.ultraThinMaterial, in: Capsule())
+                    }
+                    .padding(.leading, 18).padding(.bottom, selected != nil || stack != nil ? 110 : 24)
+                    .transition(.opacity)
+                }
+            }
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(item: $open) { g in GymPage(gymID: g.id) }
             .task {
@@ -453,13 +583,85 @@ struct GlobeScreen: View {
         .preferredColorScheme(.dark)
     }
 
-    // 停下自动旋转时把当前角度存下来，不会跳
-    private func freeze() {
-        let now = Date()
-        if now.timeIntervalSince(lastTouch) > 4 && selected == nil && !Motion.calm {
-            lon0 -= now.timeIntervalSince(max(spinBase, lastTouch.addingTimeInterval(4))) * 2.5
+    // 屏幕上离得近（会叠在一起）的健身房连成一组
+    static func cluster(_ gyms: [GymInfo], proj: GlobeProj) -> [GymCluster] {
+        let vis = gyms.compactMap { g -> (GymInfo, CGPoint, Double)? in
+            let d = proj.depth(g.lon, g.lat)
+            guard d > 0.15 else { return nil }
+            return (g, proj.p(g.lon, g.lat).0, d)
         }
+        let n = vis.count
+        var parent = Array(0..<n)
+        func find(_ i: Int) -> Int { var i = i; while parent[i] != i { parent[i] = parent[parent[i]]; i = parent[i] }; return i }
+        for i in 0..<n { for j in (i + 1)..<max(i + 1, n) where hypot(vis[i].1.x - vis[j].1.x, vis[i].1.y - vis[j].1.y) < 70 { parent[find(i)] = find(j) } }
+        var groups: [Int: [Int]] = [:]
+        for i in 0..<n { groups[find(i), default: []].append(i) }
+        return groups.values.map { idx in
+            let k = Double(idx.count)
+            return GymCluster(gyms: idx.map { vis[$0].0 },
+                              pt: CGPoint(x: idx.reduce(0) { $0 + vis[$1].1.x } / k, y: idx.reduce(0) { $0 + vis[$1].1.y } / k),
+                              lon: idx.reduce(0) { $0 + vis[$1].0.lon } / k, lat: idx.reduce(0) { $0 + vis[$1].0.lat } / k,
+                              dep: idx.map { vis[$0].2 }.max() ?? 1)
+        }
+    }
+
+    // 手一碰就停下自动旋转/飞行，把当前看到的角度存下来，不会跳
+    private func grab() {
+        let now = Date()
+        if fly != nil { let v = cam(at: now); lon0 = v.0; lat0 = v.1; zoom = v.2; fly = nil }
+        else if spinning(now) { lon0 -= now.timeIntervalSince(max(spinBase, lastTouch.addingTimeInterval(4))) * 2.5 }
         spinBase = now
+        lastTouch = now
+    }
+
+    private func flyTo(lon: Double, lat: Double, zoom z: Double) {
+        grab()
+        var tl = lon
+        while tl - lon0 > 180 { tl -= 360 }
+        while tl - lon0 < -180 { tl += 360 }
+        let to = (tl, max(-80, min(80, lat)), min(Self.maxZoom, max(0.7, z)))
+        fly = Fly(from: (lon0, lat0, zoom), to: to, start: Date(), dur: 0.9)
+        lon0 = to.0; lat0 = to.1; zoom = to.2
+        lastTouch = Date()
+    }
+
+    // 点空白处：点到城市名就飞过去，否则收起卡片
+    private func tapMap(_ loc: CGPoint) {
+        let proj = projection(Date()), z = proj.r / baseR
+        var best: (name: String, lon: Double, lat: Double, d: CGFloat)? = nil
+        for c in GlobeCities.all where (c.tier == 1 || z > 1.8) && proj.depth(c.lon, c.lat) > 0.2 {
+            let pt = proj.p(c.lon, c.lat).0
+            let box = CGRect(x: pt.x - 14, y: pt.y - 16, width: CGFloat(c.name.count) * 11 + 28, height: 32)
+            guard box.contains(loc) else { continue }
+            let d = hypot(loc.x - pt.x, loc.y - pt.y)
+            if best == nil || d < best!.d { best = (c.name, c.lon, c.lat, d) }
+        }
+        if let b = best {
+            Haptic.tap()
+            withAnimation(.snappy) { selected = nil; stack = nil }
+            focus = (b.name, b.lon, b.lat)
+            flyTo(lon: b.lon, lat: b.lat, zoom: max(zoom * 1.5, 110))
+        } else {
+            withAnimation(.snappy) { selected = nil; stack = nil }
+        }
+    }
+
+    // 点泡泡：放大到这几家刚好分得开；已经放到最大还分不开（同一个位置）就列出来选
+    private func tapCluster(_ c: GymCluster) {
+        Haptic.tap()
+        let m = cos(c.lat * .pi / 180)
+        var spread = 0.0
+        for a in c.gyms { for b in c.gyms { spread = max(spread, hypot((a.lon - b.lon) * m, a.lat - b.lat)) } }
+        let need = spread > 0 ? 150 / (spread * .pi / 180) / baseR : .infinity
+        if need > Self.maxZoom * 0.98 && zoom > Self.maxZoom * 0.5 || spread < 0.0005 {
+            withAnimation(.snappy) { selected = nil; stack = c.gyms.sorted { $0.count(range) > $1.count(range) } }
+            if spread < 0.0005 && zoom < 60 { flyTo(lon: c.lon, lat: c.lat, zoom: max(zoom * 1.5, 110)) }
+            return
+        }
+        withAnimation(.snappy) { selected = nil; stack = nil }
+        let cities = Set(c.gyms.map { GlobeCities.short($0) }).filter { !$0.isEmpty }
+        if cities.count == 1, let name = cities.first { focus = (name, c.lon, c.lat) }
+        flyTo(lon: c.lon, lat: c.lat, zoom: max(zoom * 1.8, min(need, Self.maxZoom)))
     }
 
     private var header: some View {
@@ -484,6 +686,10 @@ struct GlobeScreen: View {
     private var sub: String {
         guard let w = gs.world else { return gs.failed ? "连不上服务器，稍后再试" : "正在加载…" }
         if w.gyms.isEmpty { return "还没有人打卡，练完去训练页选健身房吧" }
+        if let f = focus, zoom > 1.5 {
+            let n = w.gyms.filter { hypot($0.lon - f.lon, $0.lat - f.lat) < 0.8 }.count
+            return n > 0 ? "\(f.name) · \(n) 家健身房" : "\(f.name) · 还没有健身房"
+        }
         switch range {
         case 0: return "本周 \(w.weekPeople) 人在 \(w.weekGyms) 家健身房练过"
         case 1: return "本月 \(w.monthPeople) 人在 \(w.monthGyms) 家健身房练过"
@@ -508,13 +714,52 @@ struct GlobeScreen: View {
             Text(g.name).font(.system(size: 10, weight: .bold)).lineLimit(1).frame(maxWidth: 90)
                 .padding(.horizontal, 6).padding(.vertical, 1).background(Capsule().fill(.black.opacity(0.55)))
             let city = GlobeCities.short(g)
-            if !city.isEmpty {
+            if !city.isEmpty && zoom < Self.districtZoom {
                 Text(city).font(.system(size: 12, weight: .heavy)).foregroundStyle(Color(hex: 0xffd1e6))
                     .shadow(color: Color(hex: 0x0b0f33).opacity(0.9), radius: 1.5)
             }
         }
         .foregroundStyle(.white)
-        .onTapGesture { Haptic.tap(); lastTouch = Date(); withAnimation(.snappy) { selected = g } }
+        .onTapGesture { Haptic.tap(); lastTouch = Date(); withAnimation(.snappy) { stack = nil; selected = g } }
+    }
+
+    // 泡泡：圈里是这一片练过人最多那家的照片，角上写几家，头顶站最近打卡的 3 个小人
+    private func bubble(_ c: GymCluster, t: Double) -> some View {
+        let top = c.gyms.max { ($0.count(range), $0.checkins) < ($1.count(range), $1.checkins) } ?? c.gyms[0]
+        let ppl = c.gyms.reduce(0) { $0 + $1.count(range) }
+        var seen = Set<String>()
+        let people = c.gyms.flatMap { g in g.recent.map { (g, $0) } }.sorted { $0.1.t > $1.1.t }.filter { seen.insert($0.1.uid).inserted }.prefix(3)
+        let cities = Array(Set(c.gyms.map { GlobeCities.short($0) }).filter { !$0.isEmpty }).sorted()
+        return VStack(spacing: 2) {
+            if ppl > 0 && !people.isEmpty {
+                HStack(alignment: .bottom, spacing: -8) {
+                    ForEach(Array(people.enumerated()), id: \.offset) { i, x in
+                        Lifter(kind: .of(x.1.parts.first ?? x.0.top.first), char: x.1.uid == gs.uid ? .mine : .from(x.1.a), t: t + Double(i) * 0.7, size: 30)
+                    }
+                    if ppl > people.count {
+                        Text("+\(ppl - people.count)").font(.system(size: 11, weight: .heavy)).foregroundStyle(Color(hex: 0xffd1e6)).padding(.leading, 10).padding(.bottom, 14)
+                    }
+                }
+            }
+            ZStack(alignment: .topTrailing) {
+                Circle().fill(Color(hex: 0xdd2a7b).opacity(0.22)).frame(width: 56, height: 56)
+                GymAvatar(url: top.cover, seed: top.id, size: 44, ring: true).frame(width: 56, height: 56)
+                Text("\(c.gyms.count)").font(.system(size: 12, weight: .heavy)).foregroundStyle(.white)
+                    .padding(.horizontal, 5).frame(minWidth: 22, minHeight: 22)
+                    .background(Capsule().fill(Color(hex: 0xdd2a7b))).overlay(Capsule().strokeBorder(.white, lineWidth: 1.5))
+                    .offset(x: 6, y: -4)
+            }
+            Text("\(c.gyms.count) 家 · \(ppl) 人练过").font(.system(size: 10, weight: .bold)).lineLimit(1)
+                .padding(.horizontal, 7).padding(.vertical, 2).background(Capsule().fill(.black.opacity(0.55)))
+            if !cities.isEmpty && zoom < Self.districtZoom {
+                Text(cities.count > 2 ? cities.prefix(2).joined(separator: "·") + " 等" : cities.joined(separator: "·"))
+                    .font(.system(size: 12, weight: .heavy)).foregroundStyle(Color(hex: 0xffd1e6)).lineLimit(1)
+                    .shadow(color: Color(hex: 0x0b0f33).opacity(0.9), radius: 1.5)
+            }
+        }
+        .foregroundStyle(.white)
+        .contentShape(Rectangle())
+        .onTapGesture { tapCluster(c) }
     }
 
     private func card(_ g: GymInfo) -> some View {
@@ -536,6 +781,37 @@ struct GlobeScreen: View {
             .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(.white.opacity(0.12)))
         }
         .buttonStyle(PressScale())
+    }
+
+    // 同一个位置的几家健身房：列出来点
+    private func stackCard(_ list: [GymInfo]) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("这里有 \(list.count) 家健身房").font(.subheadline.bold()).foregroundStyle(Color(hex: 0xa5a8c2)).padding(.horizontal, 14).padding(.top, 12).padding(.bottom, 4)
+            ScrollView {
+                VStack(spacing: 0) {
+                    ForEach(list) { g in
+                        Button { open = g } label: {
+                            HStack(spacing: 10) {
+                                GymAvatar(url: g.cover, seed: g.id, size: 36, ring: true)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(g.name).font(.subheadline.bold()).lineLimit(1)
+                                    Text("\(["本周", "本月", "一共"][range]) \(g.count(range)) 人练过").font(.caption).foregroundStyle(Color(hex: 0xa5a8c2))
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right").font(.caption.bold()).foregroundStyle(.secondary)
+                            }
+                            .foregroundStyle(.white).padding(.horizontal, 14).padding(.vertical, 8).contentShape(Rectangle())
+                        }
+                        .buttonStyle(PressScale())
+                    }
+                }
+            }
+            .frame(maxHeight: 220)
+        }
+        .padding(.bottom, 6)
+        .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(.ultraThinMaterial))
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(.white.opacity(0.12)))
+        .fixedSize(horizontal: false, vertical: true)
     }
 }
 
