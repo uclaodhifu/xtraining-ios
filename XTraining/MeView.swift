@@ -34,26 +34,23 @@ struct MeView: View {
                     }
                     MeLifterRow()
                 }
+                // 组间心率和几个入口合成一张卡片。列表里只放固定高度的一行，图表在点进去的页面里
+                // （图表直接放在列表里会让「我」页排版死循环闪退，第 49–52 版）
                 Section {
+                    NavigationLink { HeartPage() } label: { HeartRow() }
                     NavigationLink { ExerciseLibView() } label: {
-                        Label("动作库 · 要领和练哪块肌肉", systemImage: "books.vertical.fill")
+                        MeLinkLabel(system: "books.vertical.fill", colors: [Color(hex: 0xffb340), Color(hex: 0xff9500)], title: "动作库", sub: "要领和练哪块肌肉")
                     }
                     NavigationLink { AnchorView() } label: {
-                        Label("阶段对比 · 增肌减脂期按锚点看升降", systemImage: "scope")
+                        MeLinkLabel(system: "scope", colors: [Color(hex: 0x7d7aff), Color(hex: 0x5e5ce6)], title: "阶段对比", sub: "增肌减脂期按锚点看升降")
                     }
                     NavigationLink { CreatorsView() } label: {
-                        Label("健身博主 · 我关注的抖音主页", systemImage: "person.2.fill")
+                        MeLinkLabel(system: "person.2.fill", colors: [Color(hex: 0x40a0ff), Color(hex: 0x0a84ff)], title: "健身博主", sub: "我关注的抖音主页")
                     }
                 }
                 Section {
                     ActivityCard()
                         .padding(.vertical, 6)
-                }
-                // 组间心率卡片里有图表、内容高度会变，直接放在列表里会让「我」页排版死循环闪退（第 49–52 版），改成点进去看
-                Section {
-                    NavigationLink { HeartPage() } label: {
-                        Label("组间心率 · 恢复能力、每周负荷、静息心率", systemImage: "heart.text.square.fill")
-                    }
                 }
                 CloudSection()
                 Section {

@@ -396,8 +396,9 @@ struct HeartSheet: View {
                                 .contentTransition(.numericText())
                             Text("次/分").foregroundStyle(.secondary)
                             Spacer()
-                            Text(hr.fresh != nil ? hr.source : "还没有实时心率").font(.caption).foregroundStyle(.secondary)
+                            Text(hr.fresh != nil ? hr.source : "还没有实时心率").font(.caption).foregroundStyle(.secondary).lineLimit(1)
                         }
+                        .frame(height: 60)
                     }
                 }
                 Section {
@@ -406,7 +407,9 @@ struct HeartSheet: View {
                             Label("耳机 / Apple Watch", systemImage: "airpodspro")
                         }
                         if hr.sessionWanted {
+                            // 固定 3 行高：文字变了行高也不变（列表行高反复变会让排版死循环）
                             Text(hr.sessionStatus).font(.caption).foregroundStyle(.secondary)
+                                .lineLimit(3, reservesSpace: true)
                         }
                     }
                     Toggle(isOn: Binding(get: { hr.bleOn }, set: { hr.setBLE($0) })) {
@@ -416,7 +419,7 @@ struct HeartSheet: View {
                         HStack {
                             Text(hr.bleName ?? "手环").foregroundStyle(.secondary)
                             Spacer()
-                            Text(hr.bleStatus).font(.caption).foregroundStyle(.secondary)
+                            Text(hr.bleStatus).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                         }
                         if hr.bleName != nil { Button("换一个手环") { hr.forgetBLE() } }
                     }

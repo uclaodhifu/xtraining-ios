@@ -103,180 +103,328 @@ extension Array {
     func ifEmpty(_ other: [Element]) -> [Element] { isEmpty ? other : self }
 }
 
-// MARK: - 「我」页：心率档案
+// MARK: - 「我」页里的一行（放在列表里：固定高度、只读存好的摘要，不观察实时心率）
 
-// 「我」→ 组间心率：单独一页（用 ScrollView，不放进列表）
-struct HeartPage: View {
+struct HeartRow: View {
+    @AppStorage("xt.hrSummary") private var summary = ""      // "恢复|本周负荷|静息"，组间心率页算完存的
     var body: some View {
-        ScrollView {
-            HeartCard()
-                .padding(16)
-                .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color(.secondarySystemGroupedBackground)))
-                .padding(16)
+        let p = summary.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+        let v = { (i: Int) -> String in i < p.count && !p[i].isEmpty ? p[i] : "--" }
+        HStack(spacing: 12) {
+            MeIcon(system: "heart.fill", colors: [Color(hex: 0xff5f6d), Color(hex: 0xe0245e)])
+            VStack(alignment: .leading, spacing: 3) {
+                Text("组间心率").font(.body.bold())
+                Text("恢复能力 · 每周负荷 · 每组回放").font(.caption).foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    chip("恢复 " + (v(0) == "--" ? "--" : "−" + v(0)))
+                    chip("本周负荷 " + v(1))
+                    chip("静息 " + v(2))
+                }
+                .padding(.top, 2)
+            }
         }
-        .background(Color(.systemGroupedBackground))
-        .navigationTitle("组间心率")
-        .navigationBarTitleDisplayMode(.inline)
+        .padding(.vertical, 4)
+    }
+    private func chip(_ t: String) -> some View {
+        Text(t).font(.system(size: 11, weight: .semibold)).lineLimit(1)
+            .foregroundStyle(Color(hex: 0xe0284f))
+            .padding(.horizontal, 7).padding(.vertical, 3)
+            .background(RoundedRectangle(cornerRadius: 7).fill(Color(hex: 0xe0284f).opacity(0.1)))
     }
 }
 
-struct HeartCard: View {
+// 「我」页列表前面的彩色小图标
+struct MeIcon: View {
+    var system: String
+    var colors: [Color]
+    var body: some View {
+        Image(systemName: system).font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
+            .frame(width: 30, height: 30)
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing)))
+    }
+}
+
+struct MeLinkLabel: View {
+    var system: String
+    var colors: [Color]
+    var title: String
+    var sub: String
+    var body: some View {
+        HStack(spacing: 12) {
+            MeIcon(system: system, colors: colors)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                Text(sub).font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+// MARK: - 组间心率页（单独一页，用 ScrollView，不放进列表）
+
+struct HeartPage: View {
     @EnvironmentObject var store: Store
     @ObservedObject private var health = Health.shared
-    // 不观察 HeartLive：它在训练时和训练后 10 分钟内每秒都在更新心率，
-    // 这张卡在「我」页的列表里，每秒重算会让列表反复重新排版，保存训练/切页时 iOS 判定排版死循环直接闪退（第 49 版）
+    // 不观察 HeartLive（训练时每秒更新），这页只看历史
     @AppStorage("xt.hrBLE") private var bleOn = false
     @AppStorage("xt.hrSession2") private var sessionWanted = true
-    @State private var weeks: [(Int, Double)] = []          // (几周前, 平均掉多少)
+    @AppStorage("xt.hrLine") private var line = 115
+    @AppStorage("xt.hrSummary") private var summary = ""
+    @State private var weeks: [(Int, Double)] = []          // (几周前, 平均掉多少)，从远到近
     @State private var weekLoad: [(String, Double)] = []    // 本周每天
     @State private var baseline = 0.0                       // 前 4 周平均每周负荷
     @State private var resting: [(String, Double)] = []
     @State private var sources: Set<String> = []
-    @State private var lastDay: String?
+    @State private var recent: [DaySum] = []
     @State private var loading = true
     @State private var sheet = false
 
+    struct DaySum: Identifiable {
+        var id: String { day }
+        var day: String
+        var sets: Int
+        var avg: Int
+        var bad: Int
+    }
+
+    private static let pink = Color(hex: 0xe0245e)
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                Label("组间心率", systemImage: "heart.text.square.fill").font(.headline).foregroundStyle(.red)
-                Spacer()
-                Button { sheet = true } label: { Image(systemName: "gearshape").foregroundStyle(.secondary) }
-                    .buttonStyle(.plain)
-            }
-            if !health.connected && HRLog.restDays().isEmpty {
-                Text("连接 Apple 健康，或者在记录页休息条上点 ♡ 连耳机/手环，练几次后这里会出现你的组间恢复能力、每周心率负荷和静息心率。")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            recovery
-            loadView
-            restingView
-            if let d = lastDay {
-                NavigationLink { HeartDays() } label: {
-                    HStack {
-                        Image(systemName: "waveform.path.ecg").foregroundStyle(.red)
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text("组间心率回放").font(.subheadline.bold())
-                            Text("最近一次：\(Day.label(d)) · 每组心率、歇够没有").font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
+        ScrollView {
+            VStack(spacing: 12) {
+                hero
+                tiles
+                loadCard
+                replayCard
+                sourceRow
+                if !health.connected && HRLog.restDays().isEmpty {
+                    Text("连接 Apple 健康，或者在记录页休息条上点 ♡ 连耳机/手环，练几次后这里会出现你的组间恢复能力、每周心率负荷和每组心率。")
+                        .font(.caption).foregroundStyle(.secondary).padding(.horizontal, 4)
                 }
             }
-            sourceRow
+            .padding(16)
+        }
+        .background(Color(.systemGroupedBackground))
+        .navigationTitle("组间心率")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { sheet = true } label: { Image(systemName: "gearshape") }
+            }
         }
         .sheet(isPresented: $sheet) { HeartSheet().presentationDetents([.medium, .large]) }
         .task(id: health.connected) { await reload() }
     }
 
-    // 组间恢复能力：每周平均
-    @ViewBuilder private var recovery: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text("组间恢复能力").font(.subheadline.bold())
-                Spacer()
-                if let f = weeks.first(where: { $0.1 > 0 }), let l = weeks.last(where: { $0.1 > 0 }), f.0 != l.0, f.1 > 0 {
-                    let pct = Int(((l.1 - f.1) / f.1 * 100).rounded())
-                    Text(pct >= 0 ? "比 \(f.0) 周前快 \(pct)%" : "比 \(f.0) 周前慢 \(-pct)%")
-                        .font(.caption.bold()).padding(.horizontal, 8).padding(.vertical, 3)
-                        .foregroundStyle(pct >= 0 ? Color.green : Color.orange)
-                        .background(Capsule().fill((pct >= 0 ? Color.green : .orange).opacity(0.14)))
+    // 顶部：组间恢复能力
+    private var hero: some View {
+        let last = weeks.last?.1
+        return VStack(alignment: .leading, spacing: 6) {
+            Text("组间恢复能力 · 每组练完 1 分钟心率掉多少").font(.caption).opacity(0.88)
+            HStack(alignment: .bottom) {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        Text(last.map { "−\(Int($0.rounded()))" } ?? "--")
+                            .font(.system(size: 52, weight: .heavy, design: .rounded)).monospacedDigit()
+                        Text("次/分").font(.subheadline.bold()).opacity(0.9)
+                    }
+                    Text(badge ?? (loading ? "正在读取…" : "练的时候连上心率、用休息计时，几次后就有"))
+                        .font(.caption.bold()).padding(.horizontal, 10).padding(.vertical, 4)
+                        .background(Capsule().fill(.white.opacity(0.22)))
                 }
+                Spacer(minLength: 8)
+                spark.frame(width: 130, height: 64)
             }
-            Text("每组练完 1 分钟内心率掉多少，掉得越快体能越好").font(.caption2).foregroundStyle(.secondary)
-            if weeks.isEmpty {
-                empty(loading ? "正在读取…" : "练的时候连上心率并用休息计时，几次后就有")
-            } else {
-                Chart(weeks, id: \.0) { w in
-                    BarMark(x: .value("周", w.0 == 0 ? "本周" : "\(w.0)周前"), y: .value("掉", w.1))
-                        .foregroundStyle(w.0 == weeks.last?.0 ? Color.red.gradient : Color.red.opacity(0.25).gradient)
-                        .cornerRadius(4)
-                        .annotation(position: .top) {
-                            if w.0 == weeks.last?.0 { Text("−\(Int(w.1))").font(.caption2.bold()).foregroundStyle(.red) }
-                        }
+        }
+        .foregroundStyle(.white)
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 24, style: .continuous)
+            .fill(LinearGradient(colors: [Color(hex: 0xff5f6d), Self.pink, Color(hex: 0x9b1fb5)], startPoint: .topLeading, endPoint: .bottomTrailing)))
+    }
+
+    private var badge: String? {
+        guard let f = weeks.first, let l = weeks.last, f.0 != l.0, f.1 > 0 else { return nil }
+        let pct = Int(((l.1 - f.1) / f.1 * 100).rounded())
+        return pct >= 0 ? "比 \(f.0) 周前快 \(pct)%" : "比 \(f.0) 周前慢 \(-pct)%"
+    }
+
+    // 恢复能力每周的小折线
+    private var spark: some View {
+        GeometryReader { g in
+            let vs = weeks.map(\.1)
+            if vs.count >= 2, let lo = vs.min(), let hi = vs.max() {
+                let pts = vs.enumerated().map { i, v in
+                    CGPoint(x: g.size.width * CGFloat(i) / CGFloat(vs.count - 1),
+                            y: g.size.height - 6 - (g.size.height - 12) * CGFloat(hi > lo ? (v - lo) / (hi - lo) : 0.5))
                 }
-                .chartYAxis(.hidden)
-                .frame(height: 110)
+                Path { p in p.addLines(pts) }
+                    .stroke(.white, style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
+                if let e = pts.last { Circle().fill(.white).frame(width: 10, height: 10).position(e) }
             }
         }
     }
 
-    // 本周心率负荷
-    @ViewBuilder private var loadView: some View {
-        let total = weekLoad.reduce(0) { $0 + $1.1 }
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text("本周心率负荷").font(.subheadline.bold())
+    private var weekTotal: Double { weekLoad.reduce(0) { $0 + $1.1 } }
+
+    private var tiles: some View {
+        let total = weekTotal
+        let pct = baseline > 0 && total > 0 ? Int(((total - baseline) / baseline * 100).rounded()) : nil
+        let avgRest = resting.isEmpty ? nil : resting.map(\.1).reduce(0, +) / Double(resting.count)
+        return HStack(spacing: 10) {
+            tile("本周负荷", total > 0 ? "\(Int(total))" : "--",
+                 pct.map { $0 >= 0 ? "比平时 +\($0)%" : "比平时 \($0)%" } ?? "按心率算", pct.map { $0 >= 20 ? Color.orange : Color.green } ?? Color.secondary)
+            tile("静息心率", resting.last.map { "\(Int($0.1.rounded()))" } ?? "--",
+                 avgRest.map { "平时 \(Int($0.rounded()))" } ?? "Apple 健康", .green)
+            Button { sheet = true } label: { tile("恢复线", "\(line)", "点这里改", .secondary) }
+                .buttonStyle(.plain)
+        }
+    }
+
+    private func tile(_ t: String, _ v: String, _ note: String, _ c: Color) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(t).font(.caption2).foregroundStyle(.secondary)
+            Text(v).font(.system(size: 22, weight: .heavy, design: .rounded)).monospacedDigit().foregroundStyle(.primary)
+            Text(note).font(.system(size: 11, weight: .bold)).foregroundStyle(c).lineLimit(1).minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12).padding(.vertical, 11)
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color(.secondarySystemGroupedBackground)))
+    }
+
+    private func card<C: View>(_ title: String, _ note: String, @ViewBuilder _ c: () -> C) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(title).font(.headline)
                 Spacer()
-                Text(total > 0 ? "\(Int(total))" : "--").font(.subheadline.bold()).monospacedDigit()
+                Text(note).font(.caption).foregroundStyle(.secondary)
             }
-            if total == 0 {
+            c()
+        }
+        .padding(15)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Color(.secondarySystemGroupedBackground)))
+    }
+
+    private var loadCard: some View {
+        card("本周心率负荷", "按心率算每天练得多累") {
+            if weekTotal == 0 {
                 empty(loading ? "正在读取…" : "这周还没有带心率的训练")
             } else {
-                Chart(weekLoad, id: \.0) { d in
-                    BarMark(x: .value("天", weekday(d.0)), y: .value("负荷", d.1))
-                        .foregroundStyle(color(d.1).gradient)
-                        .cornerRadius(5)
+                let mx = max(1, weekLoad.map(\.1).max() ?? 1)
+                HStack(alignment: .bottom, spacing: 9) {
+                    ForEach(weekLoad, id: \.0) { d in
+                        VStack(spacing: 5) {
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .fill(d.1 > 0 ? barColor(d.1 / mx) : Color(.tertiarySystemFill))
+                                .frame(height: max(4, 76 * d.1 / mx))
+                            Text(weekday(d.0)).font(.system(size: 10.5)).foregroundStyle(d.0 == Day.today ? Self.pink : .secondary)
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
                 }
-                .chartYAxis(.hidden)
-                .frame(height: 90)
+                .frame(height: 96, alignment: .bottom)
             }
-            if let t = tip(total) {
-                Text(t).font(.caption).foregroundStyle(Color(hex: 0x7a2aa5))
+            if let t = tip {
+                Text(t).font(.caption).foregroundStyle(Color(hex: 0x8a2a52))
                     .padding(10).frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: 12).fill(LinearGradient(colors: [Color(hex: 0xfff1f6), Color(hex: 0xf6efff)], startPoint: .leading, endPoint: .trailing)))
+                    .background(RoundedRectangle(cornerRadius: 12).fill(Self.pink.opacity(0.08)))
             }
         }
     }
 
-    @ViewBuilder private var restingView: some View {
-        if let last = resting.last {
-            let avg = resting.map(\.1).reduce(0, +) / Double(resting.count)
-            HStack {
-                Text("静息心率").font(.subheadline.bold())
+    private var replayCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("每组心率回放").font(.headline)
                 Spacer()
-                Text("\(Int(last.1.rounded()))").font(.title3.bold()).monospacedDigit()
-                Text("平时 \(Int(avg.rounded()))").font(.caption).foregroundStyle(.secondary)
+                NavigationLink { HeartDays() } label: { Text("全部 ›").font(.caption) }
+            }
+            if recent.isEmpty {
+                empty(loading ? "正在读取…" : "练的时候戴手表 / AirPods Pro 3 或连手环，每组做完点一下休息计时")
+            }
+            ForEach(Array(recent.enumerated()), id: \.1.id) { i, r in
+                if i > 0 { Divider() }
+                NavigationLink { HeartReplay(day: r.day) } label: { replayRow(r) }
+                    .buttonStyle(.plain)
             }
         }
+        .padding(15)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Color(.secondarySystemGroupedBackground)))
+    }
+
+    private func replayRow(_ r: DaySum) -> some View {
+        let p = r.day.split(separator: "-")
+        let md = p.count == 3 ? "\(Int(p[1]) ?? 0)/\(Int(p[2]) ?? 0)" : r.day
+        let title = store.workouts.filter { $0.date == r.day }.map(\.displayTitle).joined(separator: "、").ifEmpty("训练")
+        return HStack(spacing: 10) {
+            Text(md).font(.system(size: 13, weight: .heavy, design: .rounded)).foregroundStyle(Self.pink)
+                .frame(width: 44, height: 40)
+                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Self.pink.opacity(0.1)))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.subheadline.bold()).lineLimit(1)
+                Text((r.sets > 0 ? "\(r.sets) 组 · " : "") + "平均 \(r.avg)" + (r.sets > 0 ? (r.bad > 0 ? " · \(r.bad) 组没歇够" : " · 都歇够了") : ""))
+                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            }
+            Spacer(minLength: 4)
+            if r.sets > 0 {
+                Text(r.bad > 0 ? "\(r.bad) 组" : "歇够").font(.caption2.bold())
+                    .padding(.horizontal, 8).padding(.vertical, 3)
+                    .foregroundStyle(r.bad > 0 ? Color.orange : Color.green)
+                    .background(Capsule().fill((r.bad > 0 ? Color.orange : Color.green).opacity(0.13)))
+            }
+            Image(systemName: "chevron.right").font(.caption.bold()).foregroundStyle(.tertiary)
+        }
+        .contentShape(Rectangle())
     }
 
     private var sourceRow: some View {
         let on = sources.union(bleOn ? ["手环"] : []).union(sessionWanted ? ["耳机"] : [])
         return HStack(spacing: 8) {
             ForEach([("手表", "applewatch"), ("耳机", "airpodspro"), ("手环", "dot.radiowaves.left.and.right")], id: \.0) { s in
-                Label(s.0, systemImage: s.1).font(.caption.bold())
-                    .frame(maxWidth: .infinity).padding(.vertical, 8)
-                    .foregroundStyle(on.contains(s.0) ? Color.red : Color.secondary)
-                    .background(RoundedRectangle(cornerRadius: 10).fill(on.contains(s.0) ? Color.red.opacity(0.12) : Color(.tertiarySystemFill)))
+                Button { sheet = true } label: {
+                    Label(s.0, systemImage: s.1).font(.caption.bold())
+                        .frame(maxWidth: .infinity).padding(.vertical, 9)
+                        .foregroundStyle(on.contains(s.0) ? Self.pink : Color.secondary)
+                        .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(on.contains(s.0) ? Self.pink.opacity(0.1) : Color(.secondarySystemGroupedBackground)))
+                }
+                .buttonStyle(.plain)
             }
         }
     }
 
     private func empty(_ s: String) -> some View {
-        Text(s).font(.caption).foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, minHeight: 50)
+        Text(s).font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
+            .padding(.horizontal, 10)
+            .frame(maxWidth: .infinity, minHeight: 56)
             .background(RoundedRectangle(cornerRadius: 12).fill(Color(.tertiarySystemFill)))
     }
     private func weekday(_ d: String) -> String {
+        if d == Day.today { return "今" }
         let w = Calendar.current.component(.weekday, from: Day.date(d))
-        return ["日", "一", "二", "三", "四", "五", "六"][w - 1] + (d == Day.today ? "·今" : "")
+        return ["日", "一", "二", "三", "四", "五", "六"][w - 1]
     }
-    private func color(_ v: Double) -> Color {
-        v > 120 ? .red : v > 70 ? .orange : Color(hex: 0xffc078)
+    private func barColor(_ f: Double) -> Color {
+        f > 0.85 ? Self.pink : f > 0.5 ? Color(hex: 0xff6b88) : Color(hex: 0xffb3c1)
     }
-    private func tip(_ total: Double) -> String? {
+    private var tip: String? {
+        let total = weekTotal
         var parts: [String] = []
-        if baseline > 0, total > 0 {
-            let pct = Int(((total - baseline) / baseline * 100).rounded())
-            if pct >= 20 { parts.append("本周负荷 \(Int(total))，比平时高 \(pct)%。") }
-            else if pct <= -30 { parts.append("本周负荷 \(Int(total))，比平时低 \(-pct)%。") }
-        }
+        var restHigh = false
         if resting.count >= 10 {
             let base = resting.dropLast(3).map(\.1).reduce(0, +) / Double(resting.count - 3)
             let last3 = resting.suffix(3).map(\.1)
-            if last3.allSatisfy({ $0 >= base + 3 }) {
-                parts.append("静息心率连续 3 天偏高（\(Int(last3.last!.rounded()))，平时 \(Int(base.rounded()))），可能还没恢复好，可以安排减量或多睡一会儿。")
+            if last3.allSatisfy({ $0 >= base + 3 }), let l = last3.last {
+                restHigh = true
+                parts.append("静息心率连续 3 天偏高（\(Int(l.rounded()))，平时 \(Int(base.rounded()))），可能还没恢复好，可以安排减量或多睡一会儿。")
             }
+        }
+        if baseline > 0, total > 0 {
+            let pct = Int(((total - baseline) / baseline * 100).rounded())
+            if pct >= 20 { parts.insert("本周比平时练得累 \(pct)%" + (restHigh ? "。" : "，静息心率也正常，状态不错。"), at: 0) }
+            else if pct <= -30 { parts.insert("本周比平时练得少 \(-pct)%。", at: 0) }
         }
         return parts.isEmpty ? nil : parts.joined()
     }
@@ -285,6 +433,7 @@ struct HeartCard: View {
         // 以前连过 Apple 健康的，补一次心率权限
         if health.connected && !UserDefaults.standard.bool(forKey: "xt.health2") { _ = await health.connect() }
         let today = Day.today
+        let lineNow = line
         // 组间恢复：最近 8 周有休息记录的日子
         var byWeek: [Int: [Int]] = [:]
         for d in HRLog.restDays() where Day.between(d, today) < 56 {
@@ -294,26 +443,39 @@ struct HeartCard: View {
             }
         }
         let newWeeks = byWeek.map { ($0.key, Double($0.value.reduce(0, +)) / Double($0.value.count)) }.sorted { $0.0 > $1.0 }
-        // 每天的负荷：最近 35 天里有训练的日子
+        // 每天的负荷 + 最近几次的摘要：最近 35 天里有训练的日子
         let trainDays = Set(store.workouts.map(\.date)).union(HRLog.restDays())
         var loads: [String: Double] = [:]
+        var sums: [DaySum] = []
         let d0 = Calendar.current.startOfDay(for: Date().addingTimeInterval(-34 * 86400))
         let hkDays = Set(await health.workoutSpans(d0, Date()).map { Day.str($0.0) })
         for i in 0..<35 {
             let d = Day.add(today, -i)
             guard trainDays.contains(d) || hkDays.contains(d) else { continue }
-            if let h = await DayHR.load(d) { loads[d] = HRMath.load(h.pts) }
+            guard let h = await DayHR.load(d) else { continue }
+            loads[d] = HRMath.load(h.pts)
+            if sums.count < 3 {
+                let vs = h.pts.map(\.v)
+                let bad = h.rests.filter { r in (HRMath.at(h.pts, r.end ?? r.t + 90, within: 15) ?? 0) > lineNow }.count
+                sums.append(DaySum(day: d, sets: h.rests.count, avg: vs.isEmpty ? 0 : vs.reduce(0, +) / vs.count, bad: bad))
+            }
         }
         let newRest = await health.resting(days: 30)
         let newSources = await health.heartSources()
-        // 全部算完再一次性更新，卡片高度只变一次（以前每读完一项就改一次，列表跟着反复重排）
+        // 全部算完再一次性更新
         weeks = newWeeks
         weekLoad = (0..<7).reversed().map { i in let d = Day.add(today, -i); return (d, loads[d] ?? 0) }
         baseline = (7..<35).map { loads[Day.add(today, -$0)] ?? 0 }.reduce(0, +) / 4
-        lastDay = (0..<35).map { Day.add(today, -$0) }.first { loads[$0] != nil }
         resting = newRest
         sources = newSources
+        recent = sums
         loading = false
+        // 「我」页那一行显示的摘要
+        let rec = newWeeks.last.map { String(Int($0.1.rounded())) } ?? ""
+        let total = weekLoad.reduce(0) { $0 + $1.1 }
+        let rest = newRest.last.map { String(Int($0.1.rounded())) } ?? ""
+        let s = "\(rec)|\(total > 0 ? String(Int(total)) : "")|\(rest)"
+        if s != summary { summary = s }
     }
 }
 
