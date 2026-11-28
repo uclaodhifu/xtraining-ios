@@ -159,13 +159,6 @@ struct Exercise: Codable, Identifiable, Hashable {
         if let inkName { try c.encode(inkName, forKey: .inkName) }
     }
     var isCardio: Bool { Parts.of(name) == "有氧" }
-    var equip: String? { Exercise.equip(name) }
-    // 从动作名认器械：哑铃 / 杠铃（哑铃重量两位数写完自动跳到次数）
-    static func equip(_ n: String) -> String? {
-        if n.contains("哑铃") || n.lowercased().contains("db ") || n.lowercased().contains("dumbbell") { return "哑铃" }
-        if n.contains("杠铃") || n.lowercased().contains("barbell") || n.contains("硬拉") || n.contains("深蹲") || n == "卧推" { return "杠铃" }
-        return nil
-    }
     var isRP: Bool { sets.contains(where: \.isRP) }   // 有一组用了 10+5，名字后面标（组内暂停）
     var best: Double { sets.map(\.weight).max() ?? 0 }
 }
