@@ -183,7 +183,9 @@ struct ActivityCard: View {
 
     var body: some View {
         let days = monthDays
-        let stats = summary(days)
+        // 先按日期分好组：以前每个日历格子都把全部训练筛一遍，记录多了「我」页滑动会掉帧
+        let byDay = Dictionary(grouping: store.workouts, by: \.date)
+        let stats = summary(days, byDay)
         VStack(spacing: 14) {
             HStack {
                 Button { shift(-1) } label: { Image(systemName: "chevron.left") }
@@ -245,7 +247,7 @@ struct ActivityCard: View {
                 }
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 3), count: 7), spacing: 8) {
                     ForEach(0..<lead, id: \.self) { _ in Color.clear.frame(height: 1) }
-                    ForEach(days, id: \.self) { d in dayCell(d) }
+                    ForEach(days, id: \.self) { d in dayCell(d, byDay) }
                 }
             }
             .padding(10)
@@ -286,11 +288,11 @@ struct ActivityCard: View {
         .frame(maxWidth: .infinity)
     }
 
-    private func summary(_ days: [String]) -> (days: Int, count: Int, minutes: Double, kcal: Double) {
+    private func summary(_ days: [String], _ byDay: [String: [Workout]]) -> (days: Int, count: Int, minutes: Double, kcal: Double) {
         var d = 0, c = 0, m = 0.0, k = 0.0
         for day in days {
             let h = health.days[day]
-            let app = store.workouts.filter { $0.date == day }
+            let app = byDay[day] ?? []
             let hc = h?.count ?? 0
             if hc > 0 || !app.isEmpty { d += 1 }
             c += hc > 0 ? hc : app.count
@@ -300,9 +302,9 @@ struct ActivityCard: View {
         return (d, c, m, k)
     }
 
-    @ViewBuilder private func dayCell(_ d: String) -> some View {
+    @ViewBuilder private func dayCell(_ d: String, _ byDay: [String: [Workout]]) -> some View {
         let h = health.days[d]
-        let app = store.workouts.filter { $0.date == d }
+        let app = byDay[d] ?? []
         let active = (h?.count ?? 0) > 0 || !app.isEmpty
         let isToday = d == Day.today
         VStack(spacing: 3) {

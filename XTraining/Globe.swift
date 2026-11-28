@@ -585,7 +585,7 @@ struct MeLifterRow: View {
     @ObservedObject private var gs = GymStore.shared
     @State private var tick = 0
     var body: some View {
-        NavigationLink {
+        MeNav {
             LifterPicker().onDisappear { tick += 1 }
         } label: {
             HStack {
@@ -595,9 +595,11 @@ struct MeLifterRow: View {
                 Text(LifterChar.mine.name).foregroundStyle(.secondary)
             }
         }
+        MeDivider()
         Toggle(isOn: Binding(get: { gs.isPublic }, set: { gs.isPublic = $0 })) {
             Label("公开到打卡地球", systemImage: "globe.asia.australia.fill")
         }
         .tint(.green)
+        .meRow()
     }
 }

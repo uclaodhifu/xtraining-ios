@@ -125,21 +125,22 @@ final class CloudSync: ObservableObject {
 struct CloudSection: View {
     @ObservedObject private var sync = CloudSync.shared
     var body: some View {
-        Section {
+        MeGroup(footer: "训练、体重、饮食和设置会同步到登录同一个 Apple ID 的 iPhone、iPad。体态照片、头像和手写笔迹只留在这台手机上。要在 iPhone 设置里打开 iCloud。") {
             Toggle(isOn: Binding(get: { sync.on }, set: { sync.on = $0 })) {
                 Label("iCloud 同步", systemImage: "icloud")
             }
+            .meRow()
             if sync.on {
+                MeDivider()
                 HStack {
                     Text(sync.lastSync.map { "上次同步 " + $0.formatted(date: .abbreviated, time: .shortened) } ?? "还没同步过")
                         .font(.footnote).foregroundStyle(.secondary)
                     Spacer()
                     Button("立即同步") { Haptic.tap(); sync.syncNow() }.font(.footnote.bold())
                 }
-                if !sync.note.isEmpty { Text(sync.note).font(.footnote).foregroundStyle(.orange) }
+                .meRow()
+                if !sync.note.isEmpty { Text(sync.note).font(.footnote).foregroundStyle(.orange).meRow(vertical: 6) }
             }
-        } footer: {
-            Text("训练、体重、饮食和设置会同步到登录同一个 Apple ID 的 iPhone、iPad。体态照片、头像和手写笔迹只留在这台手机上。要在 iPhone 设置里打开 iCloud。")
         }
     }
 }
