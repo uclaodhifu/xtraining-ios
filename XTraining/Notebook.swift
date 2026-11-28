@@ -17,6 +17,18 @@ enum Paper {
 
 enum Tone {
     static let up = Color(hex: 0x2f9e44), down = Color(hex: 0xe03131), gold = Color(hex: 0xf5a700)
+    static let first = Color(hex: 0x339af0)   // 首次：蓝
+    // 记录页今天的数字：涨绿跌红，夜间用亮一点的颜色
+    static func num(_ t: Trend) -> Color {
+        Color(UIColor { tc in
+            let dark = tc.userInterfaceStyle == .dark
+            switch t {
+            case .up: return UIColor(Color(hex: dark ? 0x8ce99a : 0x2f9e44))
+            case .down: return UIColor(Color(hex: dark ? 0xffa8a8 : 0xe03131))
+            default: return UIColor(Paper.ink)
+            }
+        })
+    }
     static func fill(_ t: Trend, pr: Bool = false) -> Color {
         if pr { return gold.opacity(0.22) }
         switch t {
@@ -61,9 +73,9 @@ struct DeltaTag: View {
     var body: some View {
         Text(pr ? "★ 新纪录" : (t == .same ? "= " + text : text))
             .font(.system(size: 11, weight: .heavy, design: .rounded)).lineLimit(1).fixedSize()
-            .foregroundStyle(Tone.text(t, pr: pr))
+            .foregroundStyle(text == "首次" && !pr ? Tone.first : Tone.text(t, pr: pr))
             .padding(.horizontal, 6).padding(.vertical, 3)
-            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(pr ? Tone.gold.opacity(0.25) : (t == .same ? Color.primary.opacity(0.07) : Tone.fill(t))))
+            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(pr ? Tone.gold.opacity(0.25) : text == "首次" ? Tone.first.opacity(0.14) : (t == .same ? Color.primary.opacity(0.07) : Tone.fill(t))))
     }
 }
 

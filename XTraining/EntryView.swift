@@ -447,13 +447,13 @@ struct EntryView: View {
         return a > b ? .up : a < b ? .down : .same
     }
 
-    private func cellField(_ hint: String, _ text: Binding<String>, _ cell: WriteCell, ink: String?) -> some View {
+    private func cellField(_ hint: String, _ text: Binding<String>, _ cell: WriteCell, ink: String?, tint: Color? = nil) -> some View {
         let unit = hint == WU.s || hint == "次"
         let on = writing == cell
         return Group {
             if inputMode == 2 {
                 // 用系统数字键盘
-                NumField(value: text, decimal: cell.weight, label: cellTitle(cell), allowPlus: !cell.weight)
+                NumField(value: text, decimal: cell.weight, label: cellTitle(cell), color: tint.map { UIColor($0) }, allowPlus: !cell.weight)
                     .overlay {
                         if text.wrappedValue.isEmpty {
                             Text(hint).font(unit ? .system(size: 13, weight: .medium) : Paper.hand(22))
@@ -484,7 +484,7 @@ struct EntryView: View {
                                 .font(unit ? .system(size: 13, weight: .medium) : Paper.hand(22))
                                 .foregroundStyle(Paper.pencil.opacity(unit ? 0.6 : 0.55))
                         } else {
-                            Text(text.wrappedValue).font(Paper.hand(24)).monospacedDigit().foregroundStyle(Paper.ink)
+                            Text(text.wrappedValue).font(Paper.hand(24)).monospacedDigit().foregroundStyle(tint ?? Paper.ink)
                                 .lineLimit(1).minimumScaleFactor(0.6)
                         }
                     }
@@ -572,6 +572,10 @@ struct EntryView: View {
     private func setLine(_ x: Binding<Exercise>, _ si: Int, _ s: SetRow, _ ps: SetRow?, _ prev: Exercise?, _ t: Trend, _ name: String) -> some View {
         let d = setDelta(s, ps)
         let isPR = (Double(s.w) ?? 0) > 0 && allBest(name).map { (Double(s.w) ?? 0) > $0 } == true
+        // 涨跌色条：绿=比上次多，灰=持平，红=少了，蓝=首次；今天的数字跟着变色
+        let first = d?.0 == "首次"
+        let bar: Color? = d.map { first ? Tone.first : ($0.1 == .up ? Tone.up : $0.1 == .down ? Tone.down : Color(.systemGray)) }
+        let tint: Color? = (d == nil || first || d?.1 == .same) ? nil : Tone.num(d!.1)
         return HStack(spacing: 0) {
                     Text("\(si + 1)").font(.system(size: 13, weight: .bold, design: .rounded)).foregroundStyle(Paper.pencil).frame(width: labelW)
                     // 上次：铅笔灰
@@ -581,6 +585,7 @@ struct EntryView: View {
                     }
                         .monospacedDigit()
                         .foregroundStyle(Paper.pencil)
+                        .opacity(bar == nil ? 1 : 0.7)   // 有对比时上次的淡一点，今天的更显眼
                         .lineLimit(1).minimumScaleFactor(0.6)
                         .frame(width: histW + 10)
                     // 今天：钢笔蓝手写
@@ -588,10 +593,10 @@ struct EntryView: View {
                         if let cfg = store.plateCfg[name] {
                             plateSteppers(x, s, cfg, t)
                         } else {
-                            cellField(prevHint(prev, si, \.w, WU.s), setBinding(x, s.id, \.w), WriteCell(ex: x.wrappedValue.id, set: s.id, weight: true), ink: InkStore.has(s.inkW))
+                            cellField(prevHint(prev, si, \.w, WU.s), setBinding(x, s.id, \.w), WriteCell(ex: x.wrappedValue.id, set: s.id, weight: true), ink: InkStore.has(s.inkW), tint: tint)
                         }
                         Text("×").font(Paper.hand(18)).foregroundStyle(Paper.ink.opacity(0.6))
-                        cellField(prevHint(prev, si, \.r, "次"), setBinding(x, s.id, \.r), WriteCell(ex: x.wrappedValue.id, set: s.id, weight: false), ink: InkStore.has(s.inkR))
+                        cellField(prevHint(prev, si, \.r, "次"), setBinding(x, s.id, \.r), WriteCell(ex: x.wrappedValue.id, set: s.id, weight: false), ink: InkStore.has(s.inkR), tint: tint)
                             .frame(maxWidth: store.plateCfg[name] != nil ? 50 : .infinity)
                     }
                     .frame(maxWidth: .infinity)
@@ -604,6 +609,15 @@ struct EntryView: View {
                 }
                 .padding(.leading, 6).padding(.trailing, 8)
                 .frame(minHeight: 48)
+                .background {
+                    if let bar, first || d?.1 != .same {
+                        LinearGradient(colors: [bar.opacity(first ? 0.10 : 0.14), bar.opacity(0)], startPoint: .leading, endPoint: UnitPoint(x: 0.6, y: 0.5))
+                    }
+                }
+                .overlay(alignment: .leading) {
+                    if let bar { Capsule().fill(bar).frame(width: 4).padding(.vertical, 7) }
+                }
+                .animation(.snappy, value: d?.0)
                 .overlay(alignment: .bottom) { Rectangle().fill(Paper.rule).frame(height: 1) }
                 .overlay(alignment: .leading) { Rectangle().fill(Paper.margin).frame(width: 1.5).padding(.leading, labelW + 6) }
     }
