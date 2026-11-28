@@ -49,9 +49,11 @@ struct MeView: View {
                     ActivityCard()
                         .padding(.vertical, 6)
                 }
+                // 组间心率卡片里有图表、内容高度会变，直接放在列表里会让「我」页排版死循环闪退（第 49–52 版），改成点进去看
                 Section {
-                    HeartCard()
-                        .padding(.vertical, 6)
+                    NavigationLink { HeartPage() } label: {
+                        Label("组间心率 · 恢复能力、每周负荷、静息心率", systemImage: "heart.text.square.fill")
+                    }
                 }
                 CloudSection()
                 Section {

@@ -105,6 +105,21 @@ extension Array {
 
 // MARK: - 「我」页：心率档案
 
+// 「我」→ 组间心率：单独一页（用 ScrollView，不放进列表）
+struct HeartPage: View {
+    var body: some View {
+        ScrollView {
+            HeartCard()
+                .padding(16)
+                .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color(.secondarySystemGroupedBackground)))
+                .padding(16)
+        }
+        .background(Color(.systemGroupedBackground))
+        .navigationTitle("组间心率")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
 struct HeartCard: View {
     @EnvironmentObject var store: Store
     @ObservedObject private var health = Health.shared
