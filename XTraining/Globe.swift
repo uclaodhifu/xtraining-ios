@@ -282,119 +282,30 @@ struct Lifter: View {
     var photo: UIImage? = nil   // 「我自己」：照片当头
     var body: some View {
         Canvas { ctx, sz in
-            let k = sz.width / 40
-            ctx.scaleBy(x: k, y: k)
-            let s = (1 - cos(t * 2.6)) / 2          // 0~1 循环
-            let skin = Color(hex: 0xffd8b5), plate = Color(hex: 0xff5c8a)
-            let c = char, shirt = c.shirt, pants = c.pants, arm = c.arm, W = c.width
-            func line(_ pts: [CGPoint], _ col: Color, _ w: CGFloat) {
-                var p = Path(); p.addLines(pts); ctx.stroke(p, with: .color(col), style: StrokeStyle(lineWidth: w, lineCap: .round, lineJoin: .round))
+            // 像素风：动作两帧，一格一格跳（每秒约 3 下，跑步快一点）
+            let fps: Double = kind == .run ? 6 : 3
+            let f = Int(floor(t * fps)) & 1
+            let gw = Double(PixelArt.maxX - PixelArt.minX), gh = Double(PixelArt.maxY - PixelArt.minY)
+            let k = min(sz.width / gw, sz.height / gh)
+            let ox = (sz.width - gw * k) / 2 - Double(PixelArt.minX) * k
+            let oy = (sz.height - gh * k) - Double(PixelArt.minY) * k
+            // 地上的影子（跳起来时变小）
+            let sw = (kind == .jump && f == 1) ? 9.0 : 13.0
+            ctx.fill(Path(CGRect(x: ox + (16 - sw / 2) * k, y: oy + 28 * k, width: sw * k, height: k)), with: .color(.black.opacity(0.18)))
+            var groups: [UInt32: Path] = [:]
+            let e = k * 0.04   // 稍微盖一点，避免格子缝
+            for p in PixelArt.sprite(char, kind, f) {
+                groups[p.c, default: Path()].addRect(CGRect(x: ox + Double(p.x) * k, y: oy + Double(p.y) * k, width: k + e, height: k + e))
             }
-            func circle(_ x: CGFloat, _ y: CGFloat, _ r: CGFloat, _ col: Color) { ctx.fill(Path(ellipseIn: CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2)), with: .color(col)) }
-            func rect(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat, _ col: Color, _ rr: CGFloat = 2) { ctx.fill(Path(roundedRect: CGRect(x: x, y: y, width: w, height: h), cornerRadius: rr), with: .color(col)) }
-            func arc(_ x: CGFloat, _ y: CGFloat, _ r: CGFloat, _ col: Color) {
-                var h = Path(); h.addArc(center: CGPoint(x: x, y: y), radius: r, startAngle: .degrees(180), endAngle: .degrees(360), clockwise: false); h.closeSubpath(); ctx.fill(h, with: .color(col))
-            }
-            func head(_ x: CGFloat, _ y: CGFloat) {
-                switch c {
-                case .boy:
-                    circle(x, y, 5, skin); arc(x, y - 0.4, 5.2, Color(hex: 0x222222))
-                case .girl:
-                    var tail = Path(); tail.move(to: CGPoint(x: x + 4, y: y - 3)); tail.addQuadCurve(to: CGPoint(x: x + 5, y: y + 6), control: CGPoint(x: x + 10, y: y - 2)); tail.addLine(to: CGPoint(x: x + 3, y: y)); ctx.fill(tail, with: .color(Color(hex: 0x6b3a1e)))
-                    circle(x, y, 5, skin); arc(x, y, 5.3, Color(hex: 0x6b3a1e)); circle(x + 4.6, y - 3, 1.3, plate)
-                case .bald:
-                    circle(x, y, 5.4, Color(hex: 0xf2c39b))
-                    var beard = Path(); beard.addArc(center: CGPoint(x: x, y: y + 1.5), radius: 4.2, startAngle: .degrees(20), endAngle: .degrees(160), clockwise: false); ctx.stroke(beard, with: .color(Color(hex: 0x5a3a22)), lineWidth: 2)
-                    ctx.fill(Path(ellipseIn: CGRect(x: x - 3.4, y: y - 3.8, width: 3.2, height: 1.6)), with: .color(.white.opacity(0.5)))
-                case .cap:
-                    circle(x, y, 5, skin); arc(x, y - 0.8, 5.3, Color(hex: 0x1c7ed6)); rect(x - 8.5, y - 1.6, 5, 1.8, Color(hex: 0x1c7ed6), 0.9)
-                case .panda:
-                    circle(x - 4.2, y - 4.2, 2.2, Color(hex: 0x222222)); circle(x + 4.2, y - 4.2, 2.2, Color(hex: 0x222222))
-                    circle(x, y, 5.4, .white)
-                    ctx.fill(Path(ellipseIn: CGRect(x: x - 3.5, y: y - 1.9, width: 3, height: 3.8)), with: .color(Color(hex: 0x222222)))
-                    ctx.fill(Path(ellipseIn: CGRect(x: x + 0.5, y: y - 1.9, width: 3, height: 3.8)), with: .color(Color(hex: 0x222222)))
-                    circle(x, y + 2.4, 0.8, Color(hex: 0x222222))
-                case .blogger:
-                    circle(x, y, 5.2, Color(hex: 0xe9b48a)); arc(x, y - 0.6, 5.2, Color(hex: 0x1a1a1a))
-                    rect(x - 5.4, y - 2.6, 10.8, 1.8, Color(hex: 0xff3b5c), 0.9)
-                    rect(x - 4.4, y - 0.2, 3.8, 1.9, Color(hex: 0x111111), 0.9); rect(x + 0.6, y - 0.2, 3.8, 1.9, Color(hex: 0x111111), 0.9); rect(x - 0.8, y + 0.3, 1.6, 0.6, Color(hex: 0x111111), 0)
-                case .photo:
-                    if let photo {
-                        let r: CGFloat = 6.6, box = CGRect(x: x - r, y: y - r - 0.6, width: r * 2, height: r * 2)
-                        var c2 = ctx; c2.clip(to: Path(ellipseIn: box)); c2.draw(Image(uiImage: photo), in: box)
-                        ctx.stroke(Path(ellipseIn: box), with: .color(.white), lineWidth: 1)
-                    } else {
-                        circle(x, y, 5, skin); arc(x, y - 0.4, 5.2, Color(hex: 0x222222))
-                    }
-                case .robot:
-                    line([CGPoint(x: x, y: y - 5), CGPoint(x: x, y: y - 8)], Color(hex: 0xadb5bd), 1); circle(x, y - 8.5, 1.2, plate)
-                    rect(x - 5, y - 4.6, 10, 9, Color(hex: 0xced4da), 2.5); rect(x - 3.6, y - 2, 7.2, 3, Color(hex: 0x212529), 1.5)
-                    circle(x - 1.6, y - 0.5, 0.8, Color(hex: 0x4dd4ff)); circle(x + 1.6, y - 0.5, 0.8, Color(hex: 0x4dd4ff))
-                }
-            }
-            func torso(_ y: CGFloat, _ h: CGFloat) {
-                rect(20 - W / 2, y, W, h, shirt, 5)
-                if c == .panda { ctx.fill(Path(ellipseIn: CGRect(x: 20 - W / 2 + 2.5, y: y + 2, width: W - 5, height: h - 3)), with: .color(.white)) }
-                if c == .robot { rect(17, y + 3, 6, 4, Color(hex: 0x4dd4ff).opacity(0.7), 1) }
-                if c == .blogger {   // 背心：露出肩膀，胸前一行字
-                    rect(20 - W / 2, y, 2.6, 3, arm, 1.2); rect(20 + W / 2 - 2.6, y, 2.6, 3, arm, 1.2)
-                    ctx.draw(Text("FIT").font(.system(size: 3.6, weight: .black)).foregroundColor(Color(hex: 0xff3b5c)), at: CGPoint(x: 20, y: y + h * 0.55))
-                }
-            }
-            func legs(_ y: CGFloat) {
-                line([CGPoint(x: 17, y: y), CGPoint(x: 15, y: y + 7), CGPoint(x: 15, y: 42)], pants, 4)
-                line([CGPoint(x: 23, y: y), CGPoint(x: 25, y: y + 7), CGPoint(x: 25, y: 42)], pants, 4)
-            }
-            let S = CGFloat(s)
-            switch kind {
-            case .squat:   // 徒手深蹲：手往前伸
-                let d = 8 * S
-                head(20, 10 + d)
-                torso(16 + d, 11 - 2 * S)
-                line([CGPoint(x: 15, y: 19 + d), CGPoint(x: 6, y: 20 + d)], arm, 3.2)
-                line([CGPoint(x: 25, y: 19 + d), CGPoint(x: 34, y: 20 + d)], arm, 3.2)
-                line([CGPoint(x: 16, y: 26 + d * 0.8), CGPoint(x: 10 - 2 * S, y: 33 + d * 0.3), CGPoint(x: 14, y: 42)], pants, 4)
-                line([CGPoint(x: 24, y: 26 + d * 0.8), CGPoint(x: 30 + 2 * S, y: 33 + d * 0.3), CGPoint(x: 26, y: 42)], pants, 4)
-            case .jack:    // 开合跳
-                let u = S
-                head(20, 10 - 2 * u)
-                torso(16 - 2 * u, 13)
-                line([CGPoint(x: 15, y: 18 - 2 * u), CGPoint(x: 9 - 3 * u, y: 24 - 14 * u), CGPoint(x: 10 - 2 * u, y: 30 - 24 * u)], arm, 3.2)
-                line([CGPoint(x: 25, y: 18 - 2 * u), CGPoint(x: 31 + 3 * u, y: 24 - 14 * u), CGPoint(x: 30 + 2 * u, y: 30 - 24 * u)], arm, 3.2)
-                line([CGPoint(x: 17, y: 28 - 2 * u), CGPoint(x: 14 - 6 * u, y: 42)], pants, 4)
-                line([CGPoint(x: 23, y: 28 - 2 * u), CGPoint(x: 26 + 6 * u, y: 42)], pants, 4)
-            case .flex:    // 秀肌肉：二头一鼓一鼓
-                head(20, 10)
-                torso(16, 13)
-                line([CGPoint(x: 15, y: 18), CGPoint(x: 8, y: 19), CGPoint(x: 8, y: 12 - S)], arm, 3.4)
-                line([CGPoint(x: 25, y: 18), CGPoint(x: 32, y: 19), CGPoint(x: 32, y: 12 - S)], arm, 3.4)
-                circle(8.6, 16 - S * 0.5, 2 + 1.4 * S, arm); circle(31.4, 16 - S * 0.5, 2 + 1.4 * S, arm)
-                legs(28)
-            case .wave:    // 挥手
-                let w = CGFloat(sin(t * 6))
-                head(20, 10)
-                torso(16, 13)
-                line([CGPoint(x: 15, y: 18), CGPoint(x: 12, y: 25), CGPoint(x: 13, y: 30)], arm, 3.2)
-                line([CGPoint(x: 25, y: 18), CGPoint(x: 30, y: 12), CGPoint(x: 30 + 4 * w, y: 5)], arm, 3.2)
-                legs(28)
-            case .jump:    // 跳一下
-                let j = -6 * S
-                ctx.fill(Path(ellipseIn: CGRect(x: 20 - (8 - 3 * S), y: 42, width: 2 * (8 - 3 * S), height: 2.4)), with: .color(.black.opacity(0.12)))
-                head(20, 10 + j)
-                torso(16 + j, 12)
-                line([CGPoint(x: 15, y: 18 + j), CGPoint(x: 9, y: 12 + j), CGPoint(x: 8, y: 6 + j)], arm, 3.2)
-                line([CGPoint(x: 25, y: 18 + j), CGPoint(x: 31, y: 12 + j), CGPoint(x: 32, y: 6 + j)], arm, 3.2)
-                line([CGPoint(x: 17, y: 27 + j), CGPoint(x: 14, y: 33 + j), CGPoint(x: 16, y: 39 + j)], pants, 4)
-                line([CGPoint(x: 23, y: 27 + j), CGPoint(x: 26, y: 33 + j), CGPoint(x: 24, y: 39 + j)], pants, 4)
-            case .run:
-                let a = sin(t * 7), bob = CGFloat(abs(a)) * -1.5
-                head(21, 8 + bob)
-                torso(14 + bob, 13)
-                let A = CGFloat(a)
-                line([CGPoint(x: 16, y: 17 + bob), CGPoint(x: 11 + 5 * A, y: 23 + bob)], arm, 3.2)
-                line([CGPoint(x: 25, y: 17 + bob), CGPoint(x: 29 - 5 * A, y: 22 + bob)], arm, 3.2)
-                line([CGPoint(x: 18, y: 27 + bob), CGPoint(x: 15 + 7 * A, y: 34), CGPoint(x: 12 + 9 * A, y: 41)], pants, 4)
-                line([CGPoint(x: 22, y: 27 + bob), CGPoint(x: 25 - 7 * A, y: 34), CGPoint(x: 28 - 9 * A, y: 41)], pants, 4)
+            for (c, path) in groups { ctx.fill(path, with: .color(Color(hex: c))) }
+            if char == .photo, let photo {
+                // 照片像素化后盖在白圈里面
+                let lift: Double = (kind == .squat && f == 1) ? 3 : (kind == .jump && f == 1) ? -3 : (kind == .run && f == 0) ? -1 : 0
+                let c = PixelArt.photoC, r = c.r
+                let box = CGRect(x: ox + (c.x + 0.5 - r) * k, y: oy + (c.y + 0.5 - r + lift) * k, width: 2 * r * k, height: 2 * r * k)
+                var c2 = ctx
+                c2.clip(to: Path(ellipseIn: box))
+                c2.draw(Image(uiImage: PixelPhoto.small(photo)).interpolation(.none), in: box)
             }
         }
         .frame(width: size, height: size * 1.1)
@@ -981,7 +892,7 @@ struct MeLifterRow: View {
             HStack {
                 Label("我的打卡小人", systemImage: "figure.strengthtraining.traditional")
                 Spacer()
-                Lifter(kind: .squat, char: LifterChar.mine, t: 0.6, size: 24, photo: AvatarCache.shared.mine).id(tick)
+                Lifter(kind: .wave, char: LifterChar.mine, t: 0, size: 24, photo: AvatarCache.shared.mine).id(tick)
                 Text(LifterChar.mine.name).foregroundStyle(.secondary)
             }
         }
