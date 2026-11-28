@@ -260,6 +260,7 @@ struct HomeLog: View {
                 ForEach(Parts.strength, id: \.self) { Text($0).tag($0) }
             }
             .pickerStyle(.segmented)
+            .overlay(alignment: .bottom) { TodayPartDots() }
             TrainingLogTable(part: p, onOpen: onOpen, onExpand: { Haptic.tap(); full = true })
                 .id("\(p)-\(store.rev)")   // 改完训练回来马上刷新（不用切部位）
                 .transition(.opacity)
@@ -295,6 +296,7 @@ struct LogFullScreen: View {
                     ForEach(Parts.strength, id: \.self) { Text($0).tag($0) }
                 }
                 .pickerStyle(.segmented)
+                .overlay(alignment: .bottom) { TodayPartDots() }
                 if landscape {
                     MonthLogTable(part: part, month: month) { w in editing = w }
                         .id(part + month)   // 不要跟着数据刷新重建，不然横着滑会被弹回去
@@ -342,5 +344,30 @@ struct LogFullScreen: View {
         // 不强制横屏：竖着看，把手机转横就自动变横屏
         .onAppear { Orientation.allow(.allButUpsideDown) }
         .onDisappear { Orientation.set(.portrait) }
+    }
+}
+
+// 部位标签下面的小红点：今天练了哪个部位就点亮
+struct TodayPartDots: View {
+    @EnvironmentObject var store: Store
+    private var done: Set<String> {
+        var d = Set<String>()
+        for w in store.workouts where w.date == Day.today {
+            d.formUnion(w.parts)
+            for x in w.exercises where !x.sets.isEmpty { if let p = Parts.of(x.name) { d.insert(p) } }
+        }
+        return d
+    }
+    var body: some View {
+        let done = self.done
+        HStack(spacing: 0) {
+            ForEach(Parts.strength, id: \.self) { p in
+                Circle().fill(Color(hex: 0xff3b30)).frame(width: 5, height: 5)
+                    .opacity(done.contains(p) ? 1 : 0)
+                    .frame(maxWidth: .infinity)
+            }
+        }
+        .padding(.bottom, 3)
+        .allowsHitTesting(false)
     }
 }
