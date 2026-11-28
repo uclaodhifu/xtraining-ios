@@ -8,6 +8,7 @@ import UserNotifications
 struct RaceFlipCard: View {
     @EnvironmentObject var store: Store
     @Environment(\.openURL) private var openURL
+    @ObservedObject private var feed = RaceFeed.shared
     let e: Race
     var compact = false          // 下面列表里点开的：小一号，按钮一样有
     @State private var addCal = false
@@ -16,6 +17,7 @@ struct RaceFlipCard: View {
 
     var body: some View {
         let followed = store.follow.contains(e.id)
+        let live = e.isLive, ended = e.isEnded
         let n = left
         let m = n / 30, w = (n % 30) / 7, d = (n % 30) % 7
         VStack(alignment: .leading, spacing: 0) {
@@ -26,14 +28,43 @@ struct RaceFlipCard: View {
                     .background(RoundedRectangle(cornerRadius: 5).fill(Color(hex: 0xe03131).opacity(0.18)))
                 Text(e.level + (followed ? " · 已追" : "")).font(.caption).foregroundStyle(.white.opacity(0.6))
                 Spacer()
+                if live { LivePill() } else if ended { EndedPill() }
             }
-            Text(e.name).font(.system(size: compact ? 16 : 19, weight: .heavy)).foregroundStyle(.white)
+            Text(e.name).font(.system(size: compact ? 16 : 19, weight: .heavy)).foregroundStyle(ended ? Color(hex: 0x8e8e93) : .white)
                 .lineLimit(2).padding(.top, 8)
-            Text(dateLine).font(.footnote).foregroundStyle(.white.opacity(0.7)).padding(.top, 4)
-            if let dv = e.divs { Text(dv).font(.footnote).foregroundStyle(.white.opacity(0.85)).lineLimit(1).padding(.top, 4) }
-            Text(e.timeText).font(.caption).foregroundStyle(.white.opacity(0.5)).padding(.top, 3)
+            Text(dateLine).font(.footnote).foregroundStyle(.white.opacity(ended ? 0.45 : 0.7)).padding(.top, 4)
+            if let dv = e.divs { Text(dv).font(.footnote).foregroundStyle(.white.opacity(ended ? 0.45 : 0.85)).lineLimit(1).padding(.top, 4) }
+            if !ended { Text(e.timeText).font(.caption).foregroundStyle(.white.opacity(0.5)).padding(.top, 3) }
 
-            if n == 0 {
+            if live {
+                VStack(spacing: 8) {
+                    HStack(spacing: 10) {
+                        LiveDot(size: 14)
+                        Text("正在直播").font(.system(size: compact ? 24 : 30, weight: .heavy, design: .rounded)).foregroundStyle(.white)
+                    }
+                    if let note = e.liveNote { Text(note).font(.footnote).foregroundStyle(Color(hex: 0xff8a80)).lineLimit(1) }
+                }
+                .frame(maxWidth: .infinity).padding(.top, 16).padding(.bottom, 4)
+                if let u = e.liveURL, let url = URL(string: u) {
+                    Button { Haptic.tap(.medium); openURL(url) } label: {
+                        Label("进入直播间", systemImage: "play.fill").font(.system(size: 16, weight: .heavy))
+                            .foregroundStyle(.white).frame(maxWidth: .infinity, minHeight: 46)
+                            .background(Capsule().fill(Color(hex: 0xff3b30)))
+                    }
+                    .buttonStyle(PressScale()).padding(.top, 12)
+                }
+            } else if ended {
+                VStack(spacing: 6) {
+                    Label("比赛已结束", systemImage: "flag.checkered").font(.system(size: compact ? 22 : 28, weight: .heavy, design: .rounded))
+                        .foregroundStyle(Color(hex: 0x8e8e93))
+                    if let note = e.liveNote {
+                        Text(note).font(.caption).foregroundStyle(Color(hex: 0x8e8e93))
+                    } else if !e.isPast {
+                        Text("明天会移到「已结束」").font(.caption).foregroundStyle(Color(hex: 0x636366))
+                    }
+                }
+                .frame(maxWidth: .infinity).padding(.top, 16).padding(.bottom, 4)
+            } else if n == 0 {
                 Text(e.isPast ? "已结束" : "今天开赛")
                     .font(.system(size: 30, weight: .heavy, design: .rounded)).foregroundStyle(.white)
                     .frame(maxWidth: .infinity).padding(.vertical, 18)
@@ -48,15 +79,24 @@ struct RaceFlipCard: View {
             Group {
             Rectangle().fill(.white.opacity(0.08)).frame(height: 1).padding(.vertical, compact ? 10 : 12)
             HStack(spacing: 0) {
-                action(followed ? "已追" : "追赛", followed ? "bell.fill" : "bell", on: followed) {
-                    store.toggleFollow(e); Haptic.tap(.medium)
-                }
-                action("加日历", "calendar.badge.plus") { addCal = true }
-                if let u = e.pageURL, let url = URL(string: u) {
-                    action("赛事主页", "link") { openURL(url) }
-                }
-                if !e.isWorld {
-                    action("抖音观看", "play.rectangle.fill") { douyin() }
+                if ended {
+                    if let u = e.replayURL, let url = URL(string: u) {
+                        action("看回放", "play.fill") { openURL(url) }
+                    }
+                    if let u = e.pageURL, let url = URL(string: u) {
+                        action("赛事主页", "link") { openURL(url) }
+                    }
+                } else {
+                    action(followed ? "已追" : "追赛", followed ? "bell.fill" : "bell", on: followed) {
+                        store.toggleFollow(e); Haptic.tap(.medium)
+                    }
+                    action("加日历", "calendar.badge.plus") { addCal = true }
+                    if let u = e.pageURL, let url = URL(string: u) {
+                        action("赛事主页", "link") { openURL(url) }
+                    }
+                    if !e.isWorld && !live {
+                        action("抖音观看", "play.rectangle.fill") { douyin() }
+                    }
                 }
             }
             }
@@ -65,9 +105,16 @@ struct RaceFlipCard: View {
         .background(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .fill(LinearGradient(colors: [Color(hex: 0x29292b), Color(hex: 0x1a1a1c)], startPoint: .top, endPoint: .bottom))
+                .overlay {
+                    // 直播中：顶上一层红光
+                    if live {
+                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                            .fill(RadialGradient(colors: [Color(hex: 0xff3b30).opacity(0.2), .clear], center: .top, startRadius: 0, endRadius: 260))
+                    }
+                }
         )
-        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(.white.opacity(0.08)))
-        .shadow(color: .black.opacity(0.25), radius: 14, y: 8)
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(live ? Color(hex: 0xff3b30).opacity(0.55) : .white.opacity(0.08)))
+        .shadow(color: live ? Color(hex: 0xff3b30).opacity(0.22) : .black.opacity(0.25), radius: 14, y: 8)
         .environment(\.colorScheme, .dark)
         .sheet(isPresented: $addCal) { CalendarAdd(e: e).ignoresSafeArea() }
     }
@@ -129,29 +176,51 @@ struct FlipDigits: View {
 // 其余比赛：一行小卡片，左边是还有几天
 struct RaceMiniRow: View {
     @EnvironmentObject var store: Store
+    @ObservedObject private var feed = RaceFeed.shared
     let e: Race
     var body: some View {
         let n = e.date.map { Day.between(Day.today, $0) } ?? 0
+        let live = e.isLive, ended = e.isEnded
         HStack(spacing: 12) {
-            VStack(spacing: 0) {
-                Text(e.date == nil ? "—" : n <= 0 ? "今天" : "\(n)").font(.system(size: n <= 0 ? 15 : 20, weight: .black, design: .rounded)).monospacedDigit()
-                Text(n <= 0 ? "TODAY" : "DAYS").font(.system(size: 9, weight: .heavy)).tracking(1.5).foregroundStyle(.secondary)
+            Group {
+                if live {
+                    VStack(spacing: 1) {
+                        Text("LIVE").font(.system(size: 15, weight: .black, design: .rounded))
+                        Text("直播中").font(.system(size: 9, weight: .heavy))
+                    }
+                    .foregroundStyle(.white)
+                    .frame(width: 52, height: 48)
+                    .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color(hex: 0xff3b30)))
+                } else {
+                    VStack(spacing: 0) {
+                        Text(ended ? "已结束" : e.date == nil ? "—" : n <= 0 ? "今天" : "\(n)")
+                            .font(.system(size: ended || n <= 0 ? 15 : 20, weight: .black, design: .rounded)).monospacedDigit()
+                            .foregroundStyle(ended ? Color.secondary : Color.primary)
+                        Text(ended ? "ENDED" : n <= 0 ? "TODAY" : "DAYS").font(.system(size: 9, weight: .heavy)).tracking(1.5).foregroundStyle(.secondary)
+                    }
+                    .frame(width: 52, height: 48)
+                    .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.primary.opacity(0.06)))
+                }
             }
-            .frame(width: 52, height: 48)
-            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.primary.opacity(0.06)))
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 4) {
-                    Text(e.name).font(.subheadline.bold()).lineLimit(1)
+                    Text(e.name).font(.subheadline.bold()).lineLimit(1).foregroundStyle(ended ? Color.secondary : Color.primary)
                     if store.follow.contains(e.id) { Image(systemName: "bell.fill").font(.caption2).foregroundStyle(Brand.pink) }
                 }
                 Text([e.date.map { d in let p = d.split(separator: "-"); return p.count == 3 ? "\(p[1]).\(p[2])" : d }, e.city].compactMap { $0 }.joined(separator: " · "))
                     .font(.caption).foregroundStyle(.secondary).lineLimit(1)
             }
             Spacer(minLength: 4)
-            Text(e.level).font(.system(size: 11, weight: .heavy)).foregroundStyle(Color(hex: 0xe03131))
-                .padding(.horizontal, 6).padding(.vertical, 2)
-                .background(RoundedRectangle(cornerRadius: 5).fill(Color(hex: 0xe03131).opacity(0.12)))
-                .lineLimit(1)
+            if live {
+                Text("● 直播").font(.system(size: 11, weight: .heavy)).foregroundStyle(.white)
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(RoundedRectangle(cornerRadius: 5).fill(Color(hex: 0xff3b30)))
+            } else {
+                Text(e.level).font(.system(size: 11, weight: .heavy)).foregroundStyle(ended ? Color(hex: 0x8e8e93) : Color(hex: 0xe03131))
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(RoundedRectangle(cornerRadius: 5).fill((ended ? Color(hex: 0x8e8e93) : Color(hex: 0xe03131)).opacity(0.12)))
+                    .lineLimit(1)
+            }
         }
         .padding(12)
         .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color(.secondarySystemGroupedBackground)))
@@ -198,6 +267,7 @@ struct CalendarAdd: UIViewControllerRepresentable {
 struct RaceOpenCard: View {
     @EnvironmentObject var store: Store
     @Environment(\.openURL) private var openURL
+    @ObservedObject private var feed = RaceFeed.shared
     let e: Race
     @State private var addCal = false
     @State private var denied = false
@@ -219,8 +289,17 @@ struct RaceOpenCard: View {
                         .padding(.horizontal, 7).padding(.vertical, 2)
                         .background(RoundedRectangle(cornerRadius: 5).fill(.black.opacity(0.2)))
                     Spacer(minLength: 8)
-                    if n == 0 {
-                        Text(e.isPast ? "已结束" : "今天开赛").font(.system(size: 28, weight: .heavy, design: .rounded))
+                    if e.isLive {
+                        HStack(spacing: 8) {
+                            LiveDot(size: 12)
+                            Text("正在直播").font(.system(size: 28, weight: .heavy, design: .rounded)).foregroundStyle(.white)
+                        }
+                        .frame(maxWidth: .infinity)
+                    } else if e.isEnded {
+                        Label("比赛已结束", systemImage: "flag.checkered").font(.system(size: 26, weight: .heavy, design: .rounded))
+                            .foregroundStyle(.white).frame(maxWidth: .infinity)
+                    } else if n == 0 {
+                        Text("今天开赛").font(.system(size: 28, weight: .heavy, design: .rounded))
                             .foregroundStyle(.white).frame(maxWidth: .infinity)
                     } else {
                         HStack(spacing: 10) {
@@ -231,16 +310,41 @@ struct RaceOpenCard: View {
                 .padding(12)
             }
             .frame(height: 124)
+            .saturation(e.isEnded ? 0 : 1)
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(alignment: .topTrailing) {
+                if e.isLive { LivePill().padding(10) } else if e.isEnded { EndedPill().padding(10) }
+            }
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(e.name).font(.headline).lineLimit(2)
+                Text(e.name).font(.headline).lineLimit(2).foregroundStyle(e.isEnded ? Color.secondary : Color.primary)
                 Text([e.city, e.level].compactMap { $0 }.joined(separator: " · ")).font(.caption).foregroundStyle(.secondary)
                 if let d = e.divs { Text(d).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
-                Text(e.timeText).font(.caption2.bold()).foregroundStyle(Brand.pink)
+                if e.isLive, let note = e.liveNote {
+                    Text(note).font(.caption2.bold()).foregroundStyle(Color(hex: 0xff3b30))
+                } else if !e.isEnded {
+                    Text(e.timeText).font(.caption2.bold()).foregroundStyle(Brand.pink)
+                }
             }
             .padding(.horizontal, 4)
 
+            if e.isLive, let u = e.liveURL, let url = URL(string: u) {
+                Button { Haptic.tap(.medium); openURL(url) } label: {
+                    Label("进入直播间", systemImage: "play.fill").font(.subheadline.bold()).frame(maxWidth: .infinity, minHeight: 40)
+                        .foregroundStyle(.white).background(Capsule().fill(Color(hex: 0xff3b30)))
+                }
+                .buttonStyle(.plain)
+            }
+            if e.isEnded {
+                HStack(spacing: 8) {
+                    if let u = e.replayURL, let url = URL(string: u) {
+                        small("看回放", "play.fill") { openURL(url) }
+                    }
+                    if let u = e.pageURL, let url = URL(string: u) {
+                        small("赛事主页", "link") { openURL(url) }
+                    }
+                }
+            } else {
             HStack(spacing: 8) {
                 Button {
                     store.toggleFollow(e); Haptic.tap(.medium)
@@ -261,7 +365,7 @@ struct RaceOpenCard: View {
                         }
                         .buttonStyle(.plain)
                     }
-                } else {
+                } else if !e.isLive {
                     Button { douyin() } label: {
                         Label("抖音看", systemImage: "play.rectangle.fill").font(.subheadline.bold()).frame(maxWidth: .infinity, minHeight: 36)
                             .foregroundStyle(.white).background(Capsule().fill(Color.black))
@@ -274,6 +378,7 @@ struct RaceOpenCard: View {
                 if !e.isWorld, let u = e.pageURL, let url = URL(string: u) {
                     small("赛事主页", "link") { openURL(url) }
                 }
+            }
             }
         }
         .card()
@@ -313,4 +418,39 @@ struct RaceOpenCard: View {
     }
 
     private func douyin() { Race.openDouyin(e, openURL) }
+}
+
+
+// 直播 / 已结束 小标签
+struct LiveDot: View {
+    var size: CGFloat = 8
+    @State private var on = false
+    var body: some View {
+        Circle().fill(Color(hex: 0xff3b30)).frame(width: size, height: size)
+            .background(Circle().fill(Color(hex: 0xff3b30).opacity(0.3)).scaleEffect(on ? 2.2 : 1).opacity(on ? 0 : 1))
+            .onAppear { withAnimation(.easeOut(duration: 1.2).repeatForever(autoreverses: false)) { on = true } }
+    }
+}
+
+struct LivePill: View {
+    @State private var on = false
+    var body: some View {
+        HStack(spacing: 5) {
+            Circle().fill(.white).frame(width: 7, height: 7).opacity(on ? 0.35 : 1)
+            Text("直播中").font(.system(size: 11, weight: .heavy))
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 8).padding(.vertical, 3)
+        .background(Capsule().fill(Color(hex: 0xff3b30)))
+        .onAppear { withAnimation(.easeInOut(duration: 0.8).repeatForever()) { on = true } }
+    }
+}
+
+struct EndedPill: View {
+    var text = "已结束"
+    var body: some View {
+        Text(text).font(.system(size: 11, weight: .heavy)).foregroundStyle(Color(hex: 0xbbbbbb))
+            .padding(.horizontal, 8).padding(.vertical, 3)
+            .background(Capsule().fill(Color(hex: 0x3a3a3c)))
+    }
 }

@@ -103,11 +103,21 @@ struct Race: Codable, Identifiable, Hashable {
             .sorted { ($0.date ?? "9") < ($1.date ?? "9") }
     }
     var isPast: Bool { guard let d = date else { return false }; return (end ?? d) < Day.today }
+    // 后台手动设的直播状态（api.linshan.cloud/api/live）
+    var liveInfo: RaceLive? { RaceFeed.shared.live[id] }
+    var isLive: Bool { !isPast && liveInfo?.s == "live" }
+    var isEnded: Bool { isPast || liveInfo?.s == "ended" }
+    var liveNote: String? { liveInfo?.note.flatMap { $0.isEmpty ? nil : $0 } }
+    // 直播间 / 回放链接：后台填的优先，没填就用赛事方抖音主页
+    var liveURL: String? { liveInfo?.url.flatMap { $0.isEmpty ? nil : $0 } ?? (isWorld ? url : douyinHome) }
+    var replayURL: String? { liveInfo?.url.flatMap { $0.isEmpty ? nil : $0 } }
     // 已经比完的，最近的排前面
     static func past() -> [Race] {
         all.filter(\.isPast).sorted { ($0.date ?? "") > ($1.date ?? "") }
     }
 }
+
+struct RaceLive: Codable, Hashable { var s: String; var url: String?; var note: String? }
 
 // MARK: 比赛清单联网更新
 final class RaceFeed: ObservableObject {
@@ -116,6 +126,9 @@ final class RaceFeed: ObservableObject {
     private static let cacheKey = "xt.eventsCache"
     @Published private(set) var list: [Race]
     @Published private(set) var updated: String = ""
+    @Published private(set) var live: [String: RaceLive] = [:]
+    private static let liveURLs = ["https://api.linshan.cloud/api/live", "https://xt-bugs.vercel.app/api/live"]
+    private struct LiveFeed: Codable { var live: [String: RaceLive] }
     private struct Feed: Codable { var updated: String?; var events: [Race] }
 
     private init() {
@@ -127,8 +140,23 @@ final class RaceFeed: ObservableObject {
         }
     }
 
+    // 拉后台设的直播状态（国内先连 api.linshan.cloud）
+    func refreshLive() async {
+        for u in Self.liveURLs {
+            guard let url = URL(string: u) else { continue }
+            let req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 8)
+            if let (data, resp) = try? await URLSession.shared.data(for: req),
+               (resp as? HTTPURLResponse)?.statusCode == 200,
+               let f = try? JSONDecoder().decode(LiveFeed.self, from: data) {
+                await MainActor.run { if self.live != f.live { self.live = f.live } }
+                return
+            }
+        }
+    }
+
     // 拉最新清单；追了的比赛改了时间就重新排提醒，取消了的比赛就撤掉提醒
     func refresh(follow: [String]) async {
+        await refreshLive()
         var req = URLRequest(url: Self.url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15)
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         guard let (data, resp) = try? await URLSession.shared.data(for: req),
@@ -214,6 +242,13 @@ struct RacesView: View {
             }
             .background(Color(.systemGroupedBackground))
             .navigationTitle("赛事")
+            .task {
+                // 停在赛事页时每分钟看一次直播状态
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(60))
+                    await RaceFeed.shared.refreshLive()
+                }
+            }
         }
     }
 }
@@ -250,13 +285,13 @@ struct RaceList: View {
                     // 新样式：最上面一张翻页钟大卡（点下面的比赛就换上来），下面是其余比赛
                     // 最上面固定是追的最近一场（没追就是最近一场）；点下面的比赛就地展开成大卡片，再点收起
                     // 追了才在最上面放大卡；没追就不放，全部是下面的小行
-                    let top = items.first { store.follow.contains($0.id) }
+                    let top = items.first { store.follow.contains($0.id) && $0.isLive } ?? items.first { store.follow.contains($0.id) && !$0.isEnded } ?? items.first { store.follow.contains($0.id) }
                     VStack(alignment: .leading, spacing: 10) {
                         if let top { RaceFlipCard(e: top) }
                         if items.count > (top == nil ? 0 : 1) {
                             Text("接下来").font(.subheadline.bold()).foregroundStyle(.secondary).padding(.top, 8).padding(.leading, 4)
                         }
-                        ForEach(items.filter { $0.id != top?.id }) { e in
+                        ForEach(items.filter { $0.id != top?.id }.sorted { ($0.isLive ? 0 : $0.isEnded ? 2 : 1) < ($1.isLive ? 0 : $1.isEnded ? 2 : 1) }) { e in
                             Group {
                                 if open == e.id {
                                     RaceOpenCard(e: e).transition(.opacity.combined(with: .scale(scale: 0.97, anchor: .top)))
@@ -385,8 +420,15 @@ struct RaceCard: View {
         let followed = store.follow.contains(e.id)
         VStack(alignment: .leading, spacing: 10) {
             RacePoster(e: e)
+                .saturation(e.isPast ? 0.25 : 1)
+                .overlay(alignment: .topTrailing) {
+                    if e.isPast, let d = e.end ?? e.date {
+                        let n = Day.between(d, Day.today)
+                        EndedPill(text: n <= 1 ? "已结束 · 昨天" : "已结束 · \(n) 天前").padding(10)
+                    }
+                }
             VStack(alignment: .leading, spacing: 4) {
-                Text(e.name).font(.headline).lineLimit(2)
+                Text(e.name).font(.headline).lineLimit(2).foregroundStyle(e.isPast ? Color.secondary : Color.primary)
                 Text([e.city, e.level].compactMap { $0 }.joined(separator: " · ")).font(.caption).foregroundStyle(.secondary)
                 if let d = e.divs { Text(d).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
                 Text(e.timeText).font(.caption2.bold()).foregroundStyle(Brand.pink)
