@@ -566,9 +566,11 @@ struct GlobeScreen: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var gs = GymStore.shared
     @ObservedObject private var av = AvatarCache.shared
-    @State private var lon0 = 112.0
-    @State private var lat0 = 30.0
-    @State private var zoom = 1.0
+    // 一打开就是整个中国铺满屏幕（用户 11-28 要求）
+    static let home = (lon: 106.0, lat: 33.0, zoom: 2.2)
+    @State private var lon0 = GlobeScreen.home.lon
+    @State private var lat0 = GlobeScreen.home.lat
+    @State private var zoom = GlobeScreen.home.zoom
     @State private var dragStart: (Double, Double)? = nil
     @State private var zoomStart: Double? = nil
     @State private var lastTouch = Date.distantPast
@@ -655,7 +657,7 @@ struct GlobeScreen: View {
                             .onChanged { m in
                                 if zoomStart == nil { grab(); zoomStart = zoom }
                                 zoom = min(Self.maxZoom, max(0.7, zoomStart! * m)); lastTouch = Date()
-                                if zoom < 1.3 { focus = nil }
+                                if zoom < Self.home.zoom * 1.2 { focus = nil }
                             }
                             .onEnded { _ in zoomStart = nil; lastTouch = Date() })
                 )
@@ -676,9 +678,9 @@ struct GlobeScreen: View {
                 else if let g = selected { card(g).padding(.horizontal, 14).padding(.bottom, 20).transition(.move(edge: .bottom).combined(with: .opacity)) }
             }
             .overlay(alignment: .bottomLeading) {
-                if zoom > 1.5 {
-                    Button { Haptic.tap(); flyTo(lon: lon0, lat: lat0, zoom: 1); focus = nil } label: {
-                        Label("回到整个地球", systemImage: "arrow.counterclockwise").font(.footnote.bold()).foregroundStyle(.white)
+                if zoom > Self.home.zoom * 1.6 || zoom < Self.home.zoom * 0.6 || abs(lon0 - Self.home.lon) > 25 || abs(lat0 - Self.home.lat) > 18 {
+                    Button { Haptic.tap(); flyTo(lon: Self.home.lon, lat: Self.home.lat, zoom: Self.home.zoom); focus = nil } label: {
+                        Label("回到中国", systemImage: "arrow.counterclockwise").font(.footnote.bold()).foregroundStyle(.white)
                             .padding(.horizontal, 14).padding(.vertical, 9).background(.ultraThinMaterial, in: Capsule())
                     }
                     .padding(.leading, 18).padding(.bottom, selected != nil || stack != nil ? 110 : 24)
@@ -688,7 +690,6 @@ struct GlobeScreen: View {
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(item: $open) { g in GymPage(gymID: g.id) }
             .task {
-                if let g = gs.lastGym { lon0 = g.lon; lat0 = max(-60, min(60, g.lat)) }
                 await gs.refresh()
                 gs.seenCount = max(1, gs.myGymWeek)
             }
@@ -799,7 +800,7 @@ struct GlobeScreen: View {
     private var sub: String {
         guard let w = gs.world else { return gs.failed ? "连不上服务器，稍后再试" : "正在加载…" }
         if w.gyms.isEmpty { return "还没有人打卡，练完去训练页选健身房吧" }
-        if let f = focus, zoom > 1.5 {
+        if let f = focus, zoom > Self.home.zoom * 1.2 {
             let n = w.gyms.filter { hypot($0.lon - f.lon, $0.lat - f.lat) < 0.8 }.count
             return n > 0 ? "\(f.name) · \(n) 家健身房" : "\(f.name) · 还没有健身房"
         }
