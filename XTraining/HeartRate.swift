@@ -437,7 +437,7 @@ struct HeartSheet: View {
                     Text("组间休息时，倒计时到了或心率降到这里，先到先响。想多歇就设低一点，练得快就设高一点。")
                 }
             }
-            .navigationTitle("训练心率")
+            .navigationTitle("组间心率")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("好") { dismiss() } } }
         }

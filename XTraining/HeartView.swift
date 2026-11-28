@@ -121,7 +121,7 @@ struct HeartCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Label("心率档案", systemImage: "heart.text.square.fill").font(.headline).foregroundStyle(.red)
+                Label("组间心率", systemImage: "heart.text.square.fill").font(.headline).foregroundStyle(.red)
                 Spacer()
                 Button { sheet = true } label: { Image(systemName: "gearshape").foregroundStyle(.secondary) }
                     .buttonStyle(.plain)
@@ -138,7 +138,7 @@ struct HeartCard: View {
                     HStack {
                         Image(systemName: "waveform.path.ecg").foregroundStyle(.red)
                         VStack(alignment: .leading, spacing: 1) {
-                            Text("训练心率回放").font(.subheadline.bold())
+                            Text("组间心率回放").font(.subheadline.bold())
                             Text("最近一次：\(Day.label(d)) · 每组心率、歇够没有").font(.caption).foregroundStyle(.secondary)
                         }
                     }
@@ -315,7 +315,7 @@ struct HeartDays: View {
                 }
             }
         }
-        .navigationTitle("训练心率回放")
+        .navigationTitle("组间心率回放")
     }
 }
 
