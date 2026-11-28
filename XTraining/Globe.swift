@@ -282,31 +282,7 @@ struct Lifter: View {
     var photo: UIImage? = nil   // 「我自己」：照片当头
     var body: some View {
         Canvas { ctx, sz in
-            // 像素风：动作两帧，一格一格跳（每秒约 3 下，跑步快一点）
-            let fps: Double = kind == .run ? 6 : 3
-            let f = Int(floor(t * fps)) & 1
-            let gw = Double(PixelArt.maxX - PixelArt.minX), gh = Double(PixelArt.maxY - PixelArt.minY)
-            let k = min(sz.width / gw, sz.height / gh)
-            let ox = (sz.width - gw * k) / 2 - Double(PixelArt.minX) * k
-            let oy = (sz.height - gh * k) - Double(PixelArt.minY) * k
-            // 地上的影子（跳起来时变小）
-            let sw = (kind == .jump && f == 1) ? 9.0 : 13.0
-            ctx.fill(Path(CGRect(x: ox + (16 - sw / 2) * k, y: oy + 28 * k, width: sw * k, height: k)), with: .color(.black.opacity(0.18)))
-            var groups: [UInt32: Path] = [:]
-            let e = k * 0.04   // 稍微盖一点，避免格子缝
-            for p in PixelArt.sprite(char, kind, f) {
-                groups[p.c, default: Path()].addRect(CGRect(x: ox + Double(p.x) * k, y: oy + Double(p.y) * k, width: k + e, height: k + e))
-            }
-            for (c, path) in groups { ctx.fill(path, with: .color(Color(hex: c))) }
-            if char == .photo, let photo {
-                // 照片像素化后盖在白圈里面
-                let lift: Double = (kind == .squat && f == 1) ? 3 : (kind == .jump && f == 1) ? -3 : (kind == .run && f == 0) ? -1 : 0
-                let c = PixelArt.photoC, r = c.r
-                let box = CGRect(x: ox + (c.x + 0.5 - r) * k, y: oy + (c.y + 0.5 - r + lift) * k, width: 2 * r * k, height: 2 * r * k)
-                var c2 = ctx
-                c2.clip(to: Path(ellipseIn: box))
-                c2.draw(Image(uiImage: PixelPhoto.small(photo)).interpolation(.none), in: box)
-            }
+            PixelArt.render(&ctx, sz, char: char, kind: kind, t: t, photo: photo)
         }
         .frame(width: size, height: size * 1.1)
     }

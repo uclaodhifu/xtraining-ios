@@ -16,6 +16,38 @@ enum PixelArt {
 
     private static var cache: [String: [Px]] = [:]
 
+    // 画到 Canvas 上
+    static func render(_ ctx: inout GraphicsContext, _ sz: CGSize, char: LifterChar, kind: LiftKind, t: Double, photo: UIImage?) {
+        let fps: Double = kind == .run ? 6 : 3
+        let f: Int = Int(floor(t * fps)) & 1
+        let gw: CGFloat = CGFloat(maxX - minX)
+        let gh: CGFloat = CGFloat(maxY - minY)
+        let k: CGFloat = min(sz.width / gw, sz.height / gh)
+        let ox: CGFloat = (sz.width - gw * k) / 2 - CGFloat(minX) * k
+        let oy: CGFloat = (sz.height - gh * k) - CGFloat(minY) * k
+        // 地上的影子（跳起来时变小）
+        let sw: CGFloat = (kind == .jump && f == 1) ? 9 : 13
+        let shadow = CGRect(x: ox + (16 - sw / 2) * k, y: oy + 28 * k, width: sw * k, height: k)
+        ctx.fill(Path(shadow), with: .color(.black.opacity(0.18)))
+        var groups: [UInt32: Path] = [:]
+        let e: CGFloat = k * 0.04   // 稍微盖一点，避免格子缝
+        for p in sprite(char, kind, f) {
+            let rc = CGRect(x: ox + CGFloat(p.x) * k, y: oy + CGFloat(p.y) * k, width: k + e, height: k + e)
+            groups[p.c, default: Path()].addRect(rc)
+        }
+        for (c, path) in groups { ctx.fill(path, with: .color(Color(hex: c))) }
+        guard char == .photo, let photo else { return }
+        // 照片像素化后盖在白圈里面
+        var lift: CGFloat = 0
+        if kind == .squat && f == 1 { lift = 3 } else if kind == .jump && f == 1 { lift = -3 } else if kind == .run && f == 0 { lift = -1 }
+        let r: CGFloat = CGFloat(photoC.r)
+        let cx: CGFloat = CGFloat(photoC.x) + 0.5, cy: CGFloat = CGFloat(photoC.y) + 0.5 + lift
+        let box = CGRect(x: ox + (cx - r) * k, y: oy + (cy - r) * k, width: 2 * r * k, height: 2 * r * k)
+        var c2 = ctx
+        c2.clip(to: Path(ellipseIn: box))
+        c2.draw(Image(uiImage: PixelPhoto.small(photo)).interpolation(.none), in: box)
+    }
+
     static func sprite(_ c: LifterChar, _ k: LiftKind, _ f: Int) -> [Px] {
         let key = "\(c.rawValue)-\(k)-\(f)"
         if let s = cache[key] { return s }
